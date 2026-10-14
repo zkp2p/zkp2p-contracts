@@ -20,7 +20,7 @@ import {IStakeVault} from "../interfaces/IStakeVault.sol";
  * Intent hashes must embed the originating orchestrator so identities cannot collide. Governance must keep
  * predecessor hooks authorized and orchestrators registered until their snapshotted intents drain, and drain
  * active locks before moving vault control unless the successor explicitly adopts their state.
- * Protection starts on by default for windowed methods. Opt-outs are not carried over; depositors opt out again here.
+ * Protection applies to every settlement whose payment method has a nonzero risk window.
  */
 contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, ReentrancyGuard {
     /* ============ Constants ============ */
@@ -39,13 +39,10 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
     IDisputeVerifier public disputeVerifier;
 
     /// @notice Whether new dispute-protection admissions are paused. Terminal transitions remain available.
-    bool public admissionsPaused;
+    bool public override admissionsPaused;
 
     /// @dev Lifecycle-hook authorization keyed by lifecycle hook address.
     mapping(address => bool) internal isLifecycleHookAuthorizedByHook;
-
-    /// @dev Explicit depositor opt-outs keyed by escrow, deposit, and payment method.
-    mapping(address => mapping(uint256 => mapping(bytes32 => bool))) internal isDisputeProtectionDisabledByPaymentMethod;
 
     /// @dev Minimum collateral lock window for each payment method.
     mapping(bytes32 => uint64) internal paymentMethodRiskWindow;
@@ -90,86 +87,59 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
         _;
     }
 
-    modifier onlyDepositor(address _escrow, uint256 _depositId) {
-        address depositor = IEscrowV2(_escrow).getDeposit(_depositId).depositor;
-        if (msg.sender != depositor) revert NotDepositor(_escrow, _depositId, msg.sender);
-        _;
-    }
-
     /* ============ Lifecycle Functions ============ */
 
-    /**
-     * @inheritdoc IDisputeProtectionPolicyV2
-     */
-    function onIntentSignaled(
-        bytes32 _intentHash,
-        address _escrow,
-        uint256 _depositId,
-        address _taker,
-        bytes32 _paymentMethod,
-        address _recipient
-    ) external override onlyLifecycleHook nonReentrant {
-        uint64 riskWindow = paymentMethodRiskWindow[_paymentMethod];
-        if (riskWindow == 0) return;
-        address depositor = _validateIntentAdmission(_intentHash, _escrow, _depositId, _paymentMethod);
-        DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_intentHash];
-        intent.taker = _taker;
-        intent.recipient = _recipient;
-        intent.depositor = depositor;
-        intent.paymentMethod = _paymentMethod;
-        intent.status = DisputeProtectionIntentStatus.PENDING;
+    /// @inheritdoc IDisputeProtectionPolicyV2
+    function onIntentSettled(SettleParams calldata _params)
+        external override onlyLifecycleHook nonReentrant returns (bool deferred)
+    {
+        uint64 riskWindow = paymentMethodRiskWindow[_params.paymentMethod];
+        if (riskWindow == 0) return false;
+        DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_params.intentHash];
+        if (intent.status != DisputeProtectionIntentStatus.NONE) {
+            revert DisputeProtectionIntentAlreadyExists(_params.intentHash);
+        }
+        IEscrowV2.Deposit memory deposit = IEscrowV2(_params.escrow).getDeposit(_params.depositId);
+        address expectedToken = address(stakeVault.stakeToken());
+        if (address(deposit.token) != expectedToken) {
+            revert IntentTokenMismatch(expectedToken, address(deposit.token));
+        }
+        if (_params.releaseAmount == 0 || _params.netAmount == 0) {
+            revert InvalidSettlementAmount(_params.releaseAmount, _params.netAmount);
+        }
+        intent.taker = _params.taker;
+        intent.recipient = _params.recipient;
+        intent.depositor = deposit.depositor;
+        intent.paymentMethod = _params.paymentMethod;
         intent.riskWindow = riskWindow;
-        emit DisputeProtectionIntentOpened(_intentHash, _taker, depositor, _recipient, _paymentMethod, riskWindow);
-    }
-
-    /// @inheritdoc IDisputeProtectionPolicyV2
-    function onIntentCancelled(bytes32 _intentHash) external override onlyLifecycleHook nonReentrant {
-        DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_intentHash];
-        if (intent.status == DisputeProtectionIntentStatus.NONE) return;
-        if (intent.status != DisputeProtectionIntentStatus.PENDING) revert UnexpectedStatus(_intentHash, intent.status);
-        intent.status = DisputeProtectionIntentStatus.CANCELLED;
-        emit DisputeProtectionIntentCancelled(_intentHash);
-    }
-
-    /// @inheritdoc IDisputeProtectionPolicyV2
-    function onIntentSettled(
-        bytes32 _intentHash,
-        uint256 _releaseAmount,
-        uint256 _netAmount,
-        bool _balanceFunded,
-        bool _isManualRelease
-    ) external override onlyLifecycleHook nonReentrant returns (bool deferred) {
-        DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_intentHash];
-        if (intent.status == DisputeProtectionIntentStatus.NONE) return false;
-        if (intent.status != DisputeProtectionIntentStatus.PENDING) revert UnexpectedStatus(_intentHash, intent.status);
-        if (_releaseAmount == 0 || _netAmount == 0) revert InvalidSettlementAmount(_releaseAmount, _netAmount);
-        intent.releaseAmount = _releaseAmount;
-        intent.releaseEligibleAt = _calculateReleaseEligibleAt(_isManualRelease || _balanceFunded ? 0 : intent.riskWindow);
-        if (_isManualRelease || _balanceFunded) {
-            intent.collateralSource = _isManualRelease ? CollateralSource.MANUAL_RELEASE : CollateralSource.BYPASS;
+        intent.releaseAmount = _params.releaseAmount;
+        intent.releaseEligibleAt = _calculateReleaseEligibleAt(_params.isManualRelease || _params.bypass ? 0 : riskWindow);
+        if (_params.isManualRelease || _params.bypass) {
+            intent.collateralSource = _params.isManualRelease ? CollateralSource.MANUAL_RELEASE : CollateralSource.BYPASS;
             intent.status = DisputeProtectionIntentStatus.RELEASED;
         } else {
-            address owner = stakeVault.stakeOwnerOf(intent.taker);
-            if (stakeVault.freeStake(owner) >= _releaseAmount) {
+            address stakeOwner = stakeVault.stakeOwnerOf(_params.taker);
+            if (stakeVault.freeStake(stakeOwner) >= _params.releaseAmount) {
                 intent.collateralSource = CollateralSource.STAKE;
-                intent.stakeOwner = owner;
-                intent.lockedAmount = _releaseAmount;
+                intent.stakeOwner = stakeOwner;
+                intent.lockedAmount = _params.releaseAmount;
                 intent.status = DisputeProtectionIntentStatus.SETTLED;
-                stakeVault.lockStake(owner, _intentHash, _releaseAmount, intent.releaseEligibleAt);
+                stakeVault.lockStake(stakeOwner, _params.intentHash, _params.releaseAmount, intent.releaseEligibleAt);
             } else {
                 intent.collateralSource = CollateralSource.DEFERRED_PAYOUT;
-                intent.stakeOwner = intent.recipient;
-                intent.lockedAmount = _netAmount;
+                intent.stakeOwner = _params.recipient;
+                intent.lockedAmount = _params.netAmount;
                 intent.status = DisputeProtectionIntentStatus.AWAITING_FUNDING;
                 deferred = true;
             }
         }
         emit DisputeProtectionIntentSettled(
-            _intentHash, intent.collateralSource, intent.stakeOwner, _releaseAmount,
-            intent.lockedAmount, intent.releaseEligibleAt, _isManualRelease
+            _params.intentHash, intent.taker, intent.depositor, intent.recipient, intent.paymentMethod,
+            riskWindow, intent.collateralSource, intent.stakeOwner, _params.releaseAmount,
+            intent.lockedAmount, intent.releaseEligibleAt, _params.isManualRelease
         );
         if (intent.status == DisputeProtectionIntentStatus.RELEASED) {
-            emit DisputeProtectionIntentReleased(_intentHash, address(0), 0);
+            emit DisputeProtectionIntentReleased(_params.intentHash, address(0), 0);
         }
     }
 
@@ -256,35 +226,12 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
         );
     }
 
-    /* ============ Depositor Functions ============ */
-
-    /**
-     * @notice DEPOSITOR ONLY: Updates dispute protection for one deposit payment method.
-     * @dev Protection is enabled by default on every payment method with a nonzero risk window; passing false opts the
-     * tuple out and true undoes the opt-out. The requested value is emitted as-is; the effective state also depends on
-     * the payment method's current risk window. The orchestrator validates Escrow registration before signaling an
-     * intent; this policy only verifies that the caller is the deposit's current depositor.
-     * @param _escrow Escrow containing the deposit.
-     * @param _depositId Deposit whose payment-method-specific configuration is updated.
-     * @param _paymentMethod Payment method whose dispute protection configuration is updated.
-     * @param _isEnabled Whether non-whitelisted takers may use stake-backed dispute protection on this payment method;
-     * false opts out.
-     */
-    function setDisputeProtectionEnabled(address _escrow, uint256 _depositId, bytes32 _paymentMethod, bool _isEnabled)
-        external
-        onlyDepositor(_escrow, _depositId)
-    {
-        isDisputeProtectionDisabledByPaymentMethod[_escrow][_depositId][_paymentMethod] = !_isEnabled;
-        emit DisputeProtectionEnabledUpdated(_escrow, _depositId, _paymentMethod, _isEnabled);
-    }
-
     /* ============ Governance Functions ============ */
 
     /**
-     * @notice GOVERNANCE ONLY: Sets the minimum collateral lock window for future intents of a payment method.
-     * @dev A zero window means the payment method is never routed through dispute protection: the lifecycle hook then
-     * applies the deposit's whitelist (rejecting non-members when it is enabled) or admits openly when it is disabled.
-     * Changing the window affects future admissions only; admitted intents keep their snapshotted window.
+     * @notice GOVERNANCE ONLY: Sets the minimum collateral lock window for future settlements of a payment method.
+     * @dev A zero window disables dispute protection. Each settlement snapshots the current window; later changes
+     * do not affect its collateral lock. The lifecycle hook always applies the deposit whitelist independently.
      * @param _paymentMethod Payment method whose future risk window is updated.
      * @param _riskWindow Minimum seconds collateral remains locked after settlement.
      */
@@ -320,11 +267,8 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
 
     /**
      * @notice GOVERNANCE ONLY: Pauses or resumes new dispute-protection admissions.
-     * @dev It rejects every non-whitelisted taker on every non-opted-out deposit payment method with a nonzero risk
-     * window. Whitelisted takers return from the lifecycle hook before this policy is reached, and payment methods with
-     * a zero risk window return before the pause check. Explicitly opted-out deposit payment methods and zero-window
-     * payment methods never reach this policy and stay gated by the whitelist or open. Cancellation, settlement,
-     * release, and dispute submission remain available while admissions are paused.
+     * @dev The lifecycle hook reads this flag before admitting a protected order, including whitelisted takers.
+     * Settlement, release, and dispute submission remain available while admissions are paused.
      * @param _isPaused Whether new dispute protection admissions should revert.
      */
     function setAdmissionsPaused(bool _isPaused) external onlyOwner {
@@ -360,65 +304,22 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
     }
 
     /**
-     * @notice Returns the effective stake-backed dispute protection state for a deposit payment method.
-     * @dev True when the depositor has not opted the tuple out and the payment method has a nonzero risk window.
-     * Performs no validation: any escrow, any deposit id (including nonexistent ones), and any payment method with a
-     * nonzero window read true unless explicitly opted out.
-     * @param _escrow Escrow containing the deposit.
-     * @param _depositId Deposit whose payment-method-specific configuration is queried.
-     * @param _paymentMethod Payment method whose dispute protection configuration is queried.
-     */
-    function isDisputeProtectionEnabled(address _escrow, uint256 _depositId, bytes32 _paymentMethod)
-        external
-        view
-        override
-        returns (bool)
-    {
-        return !isDisputeProtectionDisabledByPaymentMethod[_escrow][_depositId][_paymentMethod]
-            && paymentMethodRiskWindow[_paymentMethod] != 0;
-    }
-
-    /**
      * @notice Returns whether a lifecycle hook may mutate dispute protection intent state.
      * @param _hook Lifecycle hook whose callback authorization is queried.
      */
-    function isLifecycleHookAuthorized(address _hook) external view returns (bool) {
+    function isLifecycleHookAuthorized(address _hook) external view override returns (bool) {
         return isLifecycleHookAuthorizedByHook[_hook];
     }
 
     /**
-     * @notice Returns the risk window applied to future intents for a payment method.
+     * @notice Returns the risk window applied to future settlements for a payment method.
      * @param _paymentMethod Payment method whose configured risk window is queried.
      */
-    function getRiskWindow(bytes32 _paymentMethod) external view returns (uint64) {
+    function getRiskWindow(bytes32 _paymentMethod) external view override returns (uint64) {
         return paymentMethodRiskWindow[_paymentMethod];
     }
 
     /* ============ Internal Functions ============ */
-
-    /// @dev Validates admission independently of settlement-time collateral availability.
-    function _validateIntentAdmission(
-        bytes32 _intentHash,
-        address _escrow,
-        uint256 _depositId,
-        bytes32 _paymentMethod
-    ) internal view returns (address depositor) {
-        if (admissionsPaused) revert AdmissionsPaused();
-        if (disputeProtectionIntentByIntentHash[_intentHash].status != DisputeProtectionIntentStatus.NONE) {
-            revert DisputeProtectionIntentAlreadyExists(_intentHash);
-        }
-        if (isDisputeProtectionDisabledByPaymentMethod[_escrow][_depositId][_paymentMethod]) {
-            revert DisputeProtectionNotEnabled(_escrow, _depositId, _paymentMethod);
-        }
-
-        IEscrowV2.Deposit memory deposit = IEscrowV2(_escrow).getDeposit(_depositId);
-        address expectedToken = address(stakeVault.stakeToken());
-        if (address(deposit.token) != expectedToken) {
-            revert IntentTokenMismatch(expectedToken, address(deposit.token));
-        }
-
-        depositor = deposit.depositor;
-    }
 
     function _releaseMaturedDisputeProtectionIntent(bytes32 _intentHash) internal {
         DisputeProtectionIntent storage disputeProtectionIntent = disputeProtectionIntentByIntentHash[_intentHash];

@@ -45,10 +45,9 @@ import {
 import { assertPaymentBindingReady } from "./31_deploy_v3_payment_binding_stack";
 import {
   EXPECTED_LIVE,
-  FORBIDDEN_POLICY_LIFECYCLE_EVENTS,
+  EXPECTED_POLICY_GOVERNANCE_EVENTS,
   type FreshStackEvent,
   assertOrchestratorGovernanceState,
-  classifyFreshStackActivity,
   decodeFreshStackLogs,
   ownershipStepState,
 } from "./37_deploy_method_scoped_dispute_lifecycle_stack";
@@ -67,7 +66,9 @@ export const LIVE_FLAGS: Record<BypassNetwork, string> = {
 };
 
 export const BYPASS_POLICY_LIFECYCLE_EVENTS = [
-  ...FORBIDDEN_POLICY_LIFECYCLE_EVENTS,
+  "DisputeProtectionIntentSettled",
+  "DisputeProtectionIntentReleased",
+  "DisputeResolved",
   "DeferredPayoutFunded",
   "DeferredPayoutClaimed",
 ] as const;
@@ -86,9 +87,13 @@ export function classifyBypassPolicyActivity(
         `${event.name} in ${event.transactionHash}`
     );
   }
-  classifyFreshStackActivity({
-    policyEvents: events.filter((event) => !lifecycleEvents.includes(event)),
-  });
+  for (const event of events.filter((event) => !lifecycleEvents.includes(event))) {
+    if (!EXPECTED_POLICY_GOVERNANCE_EVENTS.some((name) => name === event.name)) {
+      throw new Error(
+        `DisputeProtectionPolicyV2 emitted an unclassified event: ${event.name} in ${event.transactionHash}`
+      );
+    }
+  }
 }
 
 function sameAddress(left: string, right: string): boolean {

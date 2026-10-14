@@ -159,7 +159,7 @@ export type BypassLivePins = {
   disputeNullifierRegistry: ContractPin;
   whitelistPolicy: ContractPin;
   predecessorVault: ContractPin;
-  // O3 August stack trust pin only; cascade opt-outs are independent.
+  // O3 August stack trust pin only; the O4 cascade has no deposit opt-outs.
   predecessorPolicy: ContractPin;
   predecessorHook: ContractPin;
   paymentMethods: string[];

@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.18;
 
-import { IPostIntentHookV2 } from "./IPostIntentHookV2.sol";
+import { IRelayerRegistry } from "./IRelayerRegistry.sol";
 import { IReferralFee } from "./IReferralFee.sol";
 import { IIntentLifecycleHookV2 } from "./IIntentLifecycleHookV2.sol";
 import { IPreIntentHook } from "./IPreIntentHook.sol";
@@ -10,7 +10,7 @@ import { IPreIntentHook } from "./IPreIntentHook.sol";
 /**
  * @title IOrchestratorV4
  * @notice Interface for the V4 orchestrator with deferred settlement.
- * @dev Deferred payouts skip post-intent hooks; intent.data is never read by the protocol.
+ * @dev Intent retains the V3 ABI layout; data holds opaque lifecycle hook data and postIntentHook is always zero.
  */
 interface IOrchestratorV4 {
 
@@ -28,8 +28,8 @@ interface IOrchestratorV4 {
         uint256 conversionRate;                     // Conversion rate of deposit token to fiat currency at the time of intent
         bytes32 payeeId;                            // Hashed payee identifier to whom the owner will pay offchain
         IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker
-        IPostIntentHookV2 postIntentHook;            // Address of the post-intent hook that will execute any post-intent actions
-        bytes data;                                 // Additional data to be passed to the post-intent hook contract
+        address postIntentHook;                     // Reserved V3 layout field; always address(0)
+        bytes data;                                 // Opaque lifecycle hook data; empty = none
     }
 
     struct SignalIntentParams {
@@ -43,17 +43,14 @@ interface IOrchestratorV4 {
         IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker
         bytes gatingServiceSignature;               // Signature from the deposit's gating service
         uint256 signatureExpiration;                // Timestamp when the gating service signature expires
-        IPostIntentHookV2 postIntentHook;           // Optional post-intent hook (address(0) for no hook)
         bytes preIntentHookData;                    // Ephemeral data passed only to the pre-intent hook during signalIntent
-        bytes data;                                 // Signal data persisted in Intent and forwarded as post-intent hook signalHookData
-        bytes lifecycleHookData;                    // Opaque lifecycle hook data; empty = none
+        bytes data;                                 // Opaque lifecycle hook data persisted in Intent; empty = none
     }
 
     struct FulfillIntentParams {
         bytes paymentProof;                         // Payment proof. Can be Groth16 Proof, TLSNotary proof, TLSProxy proof, attestation etc.
         bytes32 intentHash;                         // Identifier of intent being fulfilled
         bytes verificationData;                     // Additional data for payment verifier
-        bytes postIntentHookData;                   // Additional data for post intent hook
     }
 
     /* ============ Events ============ */
@@ -130,7 +127,6 @@ interface IOrchestratorV4 {
 
     // Validation errors
     error AccountHasActiveIntent(address account, bytes32 existingIntent);
-    error InvalidPostIntentHook(address hook);
     error InvalidPreIntentHook(address hook);
     error InvalidLifecycleHook(address hook);
     error InvalidSignature();
@@ -163,14 +159,14 @@ interface IOrchestratorV4 {
     /// @notice Returns the hook snapshotted for the intent.
     function getIntentLifecycleHook(bytes32 intentHash) external view returns (IIntentLifecycleHookV2);
 
-    /// @notice Returns opaque lifecycle hook data, or empty bytes for an unset or pruned intent.
-    function getIntentLifecycleHookData(bytes32 intentHash) external view returns (bytes memory);
+    /// @notice Returns the registry used for relayer admission and lifecycle settlement rules.
+    function relayerRegistry() external view returns (IRelayerRegistry);
 
     /* ============ External Functions for Users ============ */
 
     /// @notice Signals an intent and locks its escrow funds, with optional opaque lifecycle hook data.
     /// @dev Non-empty data requires a lifecycle hook and a gating service for the deposit's payment method.
-    /// Its keccak256(lifecycleHookData) is appended to the gating message covered by the service's signature.
+    /// Its keccak256(data) is appended to the gating message covered by the service's signature.
     /// Empty data preserves the plain V3 gating message byte-for-byte. Only the lifecycle hook interprets this data.
     function signalIntent(SignalIntentParams calldata params) external;
 

@@ -103,6 +103,6 @@ abstract contract DisputeProtectionStackV2Fixture is OrchestratorV4Fixture {
     }
 
     function _settle(bytes32 id, uint256 amount, bool balanceFunded) internal {
-        orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(_proof(id, orchestrator.getIntent(id), amount, balanceFunded), id, "", ""));
+        orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(_proof(id, orchestrator.getIntent(id), amount, balanceFunded), id, ""));
     }
 }

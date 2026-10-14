@@ -738,10 +738,14 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
     [
       ["intentHash", "bytes32"],
       ["token", "address"],
+      ["taker", "address"],
       ["recipient", "address"],
+      ["escrow", "address"],
+      ["depositId", "uint256"],
+      ["paymentMethod", "bytes32"],
       ["releaseAmount", "uint256"],
       ["netAmount", "uint256"],
-      ["lifecycleHookData", "bytes"],
+      ["data", "bytes"],
       ["extensionData", "bytes"],
       ["isManualRelease", "bool"],
     ]
@@ -761,7 +765,7 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
     .getFunction("signalIntent").inputs[0].components.map(
       (/** @type {{name: string, type: string}} */ entry) => [entry.name, entry.type]
     );
-  assert.deepEqual(signalFields(o4Abi), [...signalFields(v3Abi), ["lifecycleHookData", "bytes"]]);
+  assert.deepEqual(signalFields(o4Abi), signalFields(v3Abi).filter(([name]) => name !== "postIntentHook"));
   assert.equal(o4Abi.some(
     (/** @type {{name?: string}} */ entry) => /conditions/i.test(entry.name || "")
   ), false);

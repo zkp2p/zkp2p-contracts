@@ -44,7 +44,7 @@ contract LifecycleHookV2Mock is ERC165, IIntentLifecycleHookV2 {
         deferralVault = _vault;
     }
 
-    /// @notice Requires fee balances to be present when settlement is called.
+    /// @notice Requires fee balances to be present before deferred payout funding is acknowledged.
     function expectFeeBalances(
         address _protocol,
         uint256 _protocolBalance,
@@ -75,11 +75,6 @@ contract LifecycleHookV2Mock is ERC165, IIntentLifecycleHookV2 {
     /// @inheritdoc IIntentLifecycleHookV2
     function settleIntent(SettlementContext calldata _context) external override returns (address) {
         if (revertOnCallback) revert("risk settlement failed");
-        for (uint256 i; i < feeRecipients.length; ++i) {
-            if (feeRecipients[i] != address(0)) {
-                require(IERC20(_context.token).balanceOf(feeRecipients[i]) == feeBalances[i], "fees not paid");
-            }
-        }
         lastIntentHash = _context.intentHash;
         lastSettlementContext = _context;
         settlementCalls++;
@@ -89,10 +84,20 @@ contract LifecycleHookV2Mock is ERC165, IIntentLifecycleHookV2 {
     /// @inheritdoc IIntentLifecycleHookV2
     function onDeferredPayoutFunded(bytes32 _intentHash) external override {
         if (revertOnFunding) revert("risk funding failed");
+        for (uint256 i; i < feeRecipients.length; ++i) {
+            if (feeRecipients[i] != address(0)) {
+                require(IERC20(lastSettlementContext.token).balanceOf(feeRecipients[i]) == feeBalances[i], "fees not paid");
+            }
+        }
         balanceAtFunding = IERC20(lastSettlementContext.token).balanceOf(deferralVault);
         require(balanceAtFunding >= lastSettlementContext.netAmount, "payout not funded");
         lastFundedIntentHash = _intentHash;
         fundedCalls++;
+    }
+
+    /// @notice Returns all fields forwarded at settlement.
+    function getLastSettlementContext() external view returns (SettlementContext memory) {
+        return lastSettlementContext;
     }
 
     /// @notice Reports ERC-165 and IIntentLifecycleHookV2 support.

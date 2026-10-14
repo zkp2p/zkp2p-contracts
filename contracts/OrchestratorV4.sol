@@ -20,7 +20,6 @@ import { IEscrow } from "./interfaces/IEscrow.sol";
 import { IEscrowV2 } from "./interfaces/IEscrowV2.sol";
 import { IEscrowRegistry } from "./interfaces/IEscrowRegistry.sol";
 import { IIntentLifecycleHookV2 } from "./interfaces/IIntentLifecycleHookV2.sol";
-import { IPostIntentHookV2 } from "./interfaces/IPostIntentHookV2.sol";
 import { IPreIntentHook } from "./interfaces/IPreIntentHook.sol";
 import { IPaymentVerifierV2 } from "./interfaces/IPaymentVerifierV2.sol";
 import { IPaymentVerifier } from "./interfaces/IPaymentVerifier.sol";
@@ -33,8 +32,7 @@ import { ReferralFeeLib } from "./lib/ReferralFeeLib.sol";
  * @notice Standalone V4 orchestrator for the ZKP2P protocol. Owns the complete intent (order)
  * lifecycle — signal, cancel, fulfill, manual release, prune, orphan cleanup — and extends it
  * with snapshotted governance-selected fail-closed lifecycle callbacks and deferred settlement.
- * @dev Deferred settlement skips the post-intent hook. intent.data is never read by the protocol;
- * it is stored and forwarded only as opaque post-intent hook data.
+ * @dev Intent retains the V3 ABI layout. Its data is opaque lifecycle hook data; postIntentHook is always zero.
  */
 contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
 
@@ -51,6 +49,15 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     uint256 constant MAX_PROTOCOL_FEE = 5e16;      // 5% max protocol fee
     uint256 constant MAX_MANAGER_FEE = 5e16;       // 5% max manager fee
 
+    struct FeePlan {
+        address protocolRecipient;
+        uint256 protocolAmount;
+        address managerRecipient;
+        uint256 managerAmount;
+        uint256[] referralAmounts;
+        uint256 total;
+    }
+
     /* ============ State Variables ============ */
 
     uint256 immutable public chainId;              // chainId of the chain the orchestrator is deployed on
@@ -62,8 +69,6 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     mapping(bytes32 => address) internal intentManagerFeeRecipient;
     mapping(bytes32 => uint256) internal intentManagerFee;
 
-    mapping(bytes32 => bytes) internal intentLifecycleHookData;
-
     // Optional pre-intent hooks configured per escrow + depositId.
     mapping(address => mapping(uint256 => IPreIntentHook)) internal depositPreIntentHooks;
 
@@ -74,7 +79,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     // Contract references
     IEscrowRegistry public escrowRegistry;                              // Registry of escrow contracts
     IPaymentVerifierRegistry public  paymentVerifierRegistry;          // Registry of payment verifiers
-    IRelayerRegistry public relayerRegistry;                           // Registry of relayers
+    IRelayerRegistry public override relayerRegistry;                           // Registry of relayers
 
     // Protocol fee configuration
     uint256 public protocolFee;                                     // Protocol fee taken from taker (in preciseUnits, 1e16 = 1%)
@@ -114,7 +119,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      * service to prove their eligibility to take liquidity. This function captures and stores all values required for fullfilling
      * the intent to give strong guarantees to the buyer. Snapshots the global lifecycle hook and executes fail-closed risk
      * admission before locking liquidity for the corresponding deposit on the escrow contract.
-     * Non-empty lifecycleHookData requires a lifecycle hook and appends its keccak256 hash to the gating message;
+     * Non-empty data requires a lifecycle hook and appends its keccak256 hash to the gating message;
      * empty data preserves the plain V3 gating message byte-for-byte. The data is opaque to this contract.
      *
      * @param _params                   Struct containing all the intent parameters
@@ -140,9 +145,6 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (managerFee > MAX_MANAGER_FEE) revert FeeExceedsMaximum(managerFee, MAX_MANAGER_FEE);  // policy cap (e.g., 5%)
         intentManagerFeeRecipient[intentHash] = managerFeeRecipient;
         intentManagerFee[intentHash] = managerFee;
-        if (_params.lifecycleHookData.length != 0) {
-            intentLifecycleHookData[intentHash] = _params.lifecycleHookData;
-        }
 
         Intent storage storedIntent = intents[intentHash];
         storedIntent.owner = msg.sender;
@@ -155,7 +157,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         storedIntent.conversionRate = _params.conversionRate;
         storedIntent.payeeId = depData.payeeDetails;
         storedIntent.timestamp = block.timestamp;
-        storedIntent.postIntentHook = _params.postIntentHook;
+        storedIntent.postIntentHook = address(0);
         storedIntent.data = _params.data;
 
         for (uint256 i = 0; i < _params.referralFees.length; ++i) {
@@ -192,7 +194,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         intentLifecycleHooks[intentHash] = snapshottedLifecycleHook;
 
         if (address(snapshottedLifecycleHook) != address(0)) {
-            snapshottedLifecycleHook.onIntentSignaled(intentHash, _params.lifecycleHookData);
+            snapshottedLifecycleHook.onIntentSignaled(intentHash, _params.data);
         }
         emit IntentLifecycleHookSnapshotted(intentHash, address(snapshottedLifecycleHook));
 
@@ -240,11 +242,10 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     /**
      * @notice Anyone can submit a fulfill intent transaction, even if caller isn't the intent owner. Upon submission the
      * offchain payment proof is verified, payment details are validated, intent is removed, and escrow state is updated.
-     * Settlement notifies the snapshotted lifecycle hook (fail-closed), then executes the exact fee plan and
-     * transfers the deposit token to the intent.to address (or post-intent hook).
+     * Settlement notifies the snapshotted lifecycle hook before escrow can close the deposit, then unlocks
+     * funds, pays the exact fee plan, and transfers the net payout to intent.to or the deferral vault.
      * @dev Stored lifecycle hook data and raw signed extension bytes are forwarded opaquely to the snapshotted hook.
-     * @dev This function adds a reentrancy guard as it's calling the post intent hook contract which itself might call 
-     * malicious contracts.
+     * @dev Guarded against reentrancy through verifiers, tokens and lifecycle hooks.
      *
      * @param _params               Struct containing all the fulfill intent parameters
      */
@@ -272,24 +273,17 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (!verificationResult.success) revert PaymentVerificationFailed();
         if (verificationResult.intentHash != _params.intentHash) revert HashMismatch(_params.intentHash, verificationResult.intentHash);
 
-        bytes memory lifecycleHookData = intentLifecycleHookData[_params.intentHash];
-
         // Effects
         _pruneIntent(_params.intentHash);
 
-        // Interactions
-        IEscrow(intent.escrow).unlockAndTransferFunds(intent.depositId, _params.intentHash, verificationResult.releaseAmount, address(this));
-
-        _collectFeesTransferFundsAndExecuteAction(
+        _settleAndTransferFunds(
             deposit.token, 
             _params.intentHash, 
             intent, 
             verificationResult.releaseAmount,
-            _params.postIntentHookData,
             managerFeeRecipient,
             managerFee,
             false,
-            lifecycleHookData,
             extensionData
         );
     }
@@ -297,9 +291,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     /**
      * @notice Allows depositor to release funds to the payer in case of a failed fulfill intent or because of some other arrangement
      * between the two parties. Upon submission we check to make sure the msg.sender is the depositor, the intent is removed, and 
-     * escrow state is updated. Manual release routes through the shared post-funds lifecycle-settlement gate, then executes the
-     * configured post-intent hook with empty fulfillment-time data or transfers the deposit token directly to the payer when
-     * no hook is configured.
+     * escrow state is updated. Manual release routes through the shared lifecycle-settlement gate, then executes the
+     * fee plan and transfers the net payout to the recipient or the hook-selected deferral vault.
      *
      * @param _intentHash        Hash of intent to resolve by releasing the funds
      */
@@ -314,24 +307,18 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         // Snapshot manager fee terms before pruning (pruning deletes the mappings).
         address managerFeeRecipient = intentManagerFeeRecipient[_intentHash];
         uint256 managerFee = intentManagerFee[_intentHash];
-        bytes memory lifecycleHookData = intentLifecycleHookData[_intentHash];
         
         // Effects
         _pruneIntent(_intentHash);
 
-        // Interactions
-        IEscrow(intent.escrow).unlockAndTransferFunds(intent.depositId, _intentHash, intent.amount, address(this));
-
-        _collectFeesTransferFundsAndExecuteAction(
+        _settleAndTransferFunds(
             deposit.token,
             _intentHash,
             intent,
             intent.amount,
-            "",
             managerFeeRecipient,
             managerFee,
             true,
-            lifecycleHookData,
             ""
         );
     }
@@ -536,11 +523,6 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         return intentLifecycleHooks[_intentHash];
     }
 
-    /// @notice Returns the opaque lifecycle hook data, or empty bytes for an unset or pruned intent.
-    function getIntentLifecycleHookData(bytes32 _intentHash) external view returns (bytes memory) {
-        return intentLifecycleHookData[_intentHash];
-    }
-
     /* ============ Internal Functions ============ */
 
     /**
@@ -572,12 +554,6 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         
         ReferralFeeLib.validateReferralFees(_intent.referralFees);
 
-        if (address(_intent.postIntentHook) != address(0)) {
-            if (address(_intent.postIntentHook).code.length == 0) {
-                revert InvalidPostIntentHook(address(_intent.postIntentHook));
-            }
-        }
-
         // Validate escrow is whitelisted
         if (!escrowRegistry.isWhitelistedEscrow(_intent.escrow) && !escrowRegistry.isAcceptingAllEscrows()) {
             revert EscrowNotWhitelisted(_intent.escrow);
@@ -599,7 +575,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (_intent.conversionRate < minConversionRate) revert RateBelowMinimum(_intent.conversionRate, minConversionRate);
 
         address intentGatingService = IEscrow(_intent.escrow).getDepositGatingService(_intent.depositId, _intent.paymentMethod);
-        if (_intent.lifecycleHookData.length != 0) {
+        if (_intent.data.length != 0) {
             if (address(lifecycleHook) == address(0)) revert LifecycleHookDataRequiresHook();
             if (intentGatingService == address(0)) revert LifecycleHookDataRequiresGatingService();
         }
@@ -686,145 +662,108 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         delete intents[_intentHash];
         delete intentManagerFeeRecipient[_intentHash];
         delete intentManagerFee[_intentHash];
-        delete intentLifecycleHookData[_intentHash];
 
         emit IntentPruned(_intentHash);
     }
 
-    /**
-     * @notice Calculates and transfers fees to the protocol fee recipient and referrer.
-     */
-    function _calculateAndTransferFees(
-        IERC20 _token,
-        bytes32 _intentHash,
+    /// @notice Computes the exact fee amounts and recipients before lifecycle settlement.
+    function _calculateFees(
         Intent memory _intent,
         uint256 _releaseAmount,
         address _managerFeeRecipient,
         uint256 _managerFee
-    ) internal returns (uint256 netFees) {
-        uint256 protocolFeeAmount;
-        uint256 referralFeeAmount;
-        uint256 managerFeeAmount;
-
-        // Calculate protocol fee (taken from taker) - based on release amount
+    ) internal view returns (FeePlan memory plan) {
         if (protocolFeeRecipient != address(0) && protocolFee > 0) {
-            protocolFeeAmount = (_releaseAmount * protocolFee) / PRECISE_UNIT;
-            _token.safeTransfer(protocolFeeRecipient, protocolFeeAmount);
+            plan.protocolRecipient = protocolFeeRecipient;
+            plan.protocolAmount = (_releaseAmount * protocolFee) / PRECISE_UNIT;
+            plan.total = plan.protocolAmount;
         }
-
-        // Calculate referral fees (taken from taker) - based on release amount
+        plan.referralAmounts = new uint256[](_intent.referralFees.length);
         for (uint256 i = 0; i < _intent.referralFees.length; ++i) {
-            IReferralFee.ReferralFee memory referralFee = _intent.referralFees[i];
-            uint256 feeAmount = (_releaseAmount * referralFee.fee) / PRECISE_UNIT;
-            referralFeeAmount += feeAmount;
-            _token.safeTransfer(referralFee.recipient, feeAmount);
-            emit IntentReferralFeeDistributed(_intentHash, referralFee.recipient, feeAmount);
+            uint256 amount = (_releaseAmount * _intent.referralFees[i].fee) / PRECISE_UNIT;
+            plan.referralAmounts[i] = amount;
+            plan.total += amount;
         }
-
-        // Calculate manager fee (taken from taker) - based on release amount
         if (_managerFeeRecipient != address(0) && _managerFee > 0) {
-            managerFeeAmount = (_releaseAmount * _managerFee) / PRECISE_UNIT;
-            _token.safeTransfer(_managerFeeRecipient, managerFeeAmount);
+            plan.managerRecipient = _managerFeeRecipient;
+            plan.managerAmount = (_releaseAmount * _managerFee) / PRECISE_UNIT;
+            plan.total += plan.managerAmount;
         }
+    }
 
-        netFees = protocolFeeAmount + referralFeeAmount + managerFeeAmount;
+    /// @notice Transfers the precomputed protocol, referral and manager fees in their existing order.
+    function _transferFees(IERC20 _token, bytes32 _intentHash, Intent memory _intent, FeePlan memory _plan) internal {
+        if (_plan.protocolRecipient != address(0)) {
+            _token.safeTransfer(_plan.protocolRecipient, _plan.protocolAmount);
+        }
+        for (uint256 i = 0; i < _intent.referralFees.length; ++i) {
+            address recipient = _intent.referralFees[i].recipient;
+            uint256 amount = _plan.referralAmounts[i];
+            _token.safeTransfer(recipient, amount);
+            emit IntentReferralFeeDistributed(_intentHash, recipient, amount);
+        }
+        if (_plan.managerRecipient != address(0)) {
+            _token.safeTransfer(_plan.managerRecipient, _plan.managerAmount);
+        }
     }
 
     /**
-     * @notice Transfers fees, notifies the snapshotted lifecycle hook of settlement (fail-closed), then routes the
-     * executable remainder to a deferral vault, through the post-intent hook, or directly to the recipient.
-     * A deferred settlement skips the post-intent hook.
-     * @dev A reverting lifecycle hook aborts the entire settlement, including the preceding fee transfers.
+     * @notice Settles through the snapshotted hook, unlocks escrow funds, then pays fees and the net payout.
+     * @dev The hook must read the deposit before escrow can delete an exhausted deposit during unlock.
+     * A reverting callback or transfer rolls back the entire settlement.
      * The snapshotted lifecycle hook selects the deferral vault that receives the net amount on deferred settlement,
-     * but receives no token allowance. Manual release executes the configured
-     * post-intent hook with empty fulfillment-time data or transfers directly to the recipient when no hook is configured.
+     * but receives no token allowance. Manual release passes an empty extension to the lifecycle hook.
      */
-    function _collectFeesTransferFundsAndExecuteAction(
+    function _settleAndTransferFunds(
         IERC20 _token,
         bytes32 _intentHash,
         Intent memory _intent,
         uint256 _releaseAmount,
-        bytes memory _postIntentHookData,
         address _managerFeeRecipient,
         uint256 _managerFee,
         bool _isManualRelease,
-        bytes memory _lifecycleHookData,
         bytes memory _extensionData
     ) internal {
         IIntentLifecycleHookV2 snapshottedLifecycleHook = intentLifecycleHooks[_intentHash];
         delete intentLifecycleHooks[_intentHash];
 
-        uint256 netFees = _calculateAndTransferFees(_token, _intentHash, _intent, _releaseAmount, _managerFeeRecipient, _managerFee);
-        uint256 netAmount = _releaseAmount - netFees;
-
+        FeePlan memory fees = _calculateFees(_intent, _releaseAmount, _managerFeeRecipient, _managerFee);
+        uint256 netAmount = _releaseAmount - fees.total;
+        address vault;
         if (address(snapshottedLifecycleHook) != address(0)) {
-            address vault = snapshottedLifecycleHook.settleIntent(
+            vault = snapshottedLifecycleHook.settleIntent(
                 IIntentLifecycleHookV2.SettlementContext({
                     intentHash: _intentHash,
                     token: address(_token),
+                    taker: _intent.owner,
                     recipient: _intent.to,
+                    escrow: _intent.escrow,
+                    depositId: _intent.depositId,
+                    paymentMethod: _intent.paymentMethod,
                     releaseAmount: _releaseAmount,
                     netAmount: netAmount,
-                    lifecycleHookData: _lifecycleHookData,
+                    data: _intent.data,
                     extensionData: _extensionData,
                     isManualRelease: _isManualRelease
                 })
             );
-            if (vault != address(0)) {
-                _token.safeTransfer(vault, netAmount);
-                snapshottedLifecycleHook.onDeferredPayoutFunded(_intentHash);
-                emit IntentPayoutDeferred(_intentHash, _intent.to, vault, netAmount);
-                emit IntentFulfilled(_intentHash, vault, netAmount, _isManualRelease);
-                return;
-            }
         }
 
-        address fundsTransferredTo = _intent.to;
-        if (address(_intent.postIntentHook) != address(0)) {
-            // Snapshot balance to enforce exact consumption by the hook
-            uint256 preBalance = _token.balanceOf(address(this));
-
-            // Grant exact allowance to the post-intent hook using SafeERC20 with zero-before-set
-            _token.safeApprove(address(_intent.postIntentHook), 0);
-            _token.safeApprove(address(_intent.postIntentHook), netAmount);
-            IPostIntentHookV2.HookExecutionContext memory hookCtx = IPostIntentHookV2.HookExecutionContext({
-                intentHash: _intentHash,
-                token: address(_token),
-                executableAmount: netAmount,
-                intent: IPostIntentHookV2.HookIntentContext({
-                    owner: _intent.owner,
-                    to: _intent.to,
-                    escrow: _intent.escrow,
-                    depositId: _intent.depositId,
-                    amount: _intent.amount,
-                    timestamp: _intent.timestamp,
-                    paymentMethod: _intent.paymentMethod,
-                    fiatCurrency: _intent.fiatCurrency,
-                    conversionRate: _intent.conversionRate,
-                    payeeId: _intent.payeeId,
-                    signalHookData: _intent.data
-                })
-            });
-            _intent.postIntentHook.execute(hookCtx, _postIntentHookData);
-            
-            // Enforce that the hook pulled exactly netAmount to prevent stranded funds
-            uint256 postBalance = _token.balanceOf(address(this));
-            require(postBalance <= preBalance, "PostIntentHook: unexpected balance increase");
-            uint256 spent = preBalance - postBalance;
-            require(spent == netAmount, "PostIntentHook: must pull exact netAmount");
-
-            // Reset allowance to prevent residual balance drainage (and fail closed on non-standard ERC20s)
-            _token.safeApprove(address(_intent.postIntentHook), 0);
-
-            fundsTransferredTo = address(_intent.postIntentHook);
-        } else {
-            // Otherwise transfer directly to the intent recipient
-            _token.safeTransfer(_intent.to, netAmount);
+        IEscrow(_intent.escrow).unlockAndTransferFunds(_intent.depositId, _intentHash, _releaseAmount, address(this));
+        _transferFees(_token, _intentHash, _intent, fees);
+        if (vault != address(0)) {
+            _token.safeTransfer(vault, netAmount);
+            snapshottedLifecycleHook.onDeferredPayoutFunded(_intentHash);
+            emit IntentPayoutDeferred(_intentHash, _intent.to, vault, netAmount);
+            emit IntentFulfilled(_intentHash, vault, netAmount, _isManualRelease);
+            return;
         }
+
+        _token.safeTransfer(_intent.to, netAmount);
 
         emit IntentFulfilled(
             _intentHash, 
-            fundsTransferredTo, 
+            _intent.to,
             netAmount, 
             _isManualRelease
         );
@@ -857,8 +796,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
             chainId
         );
 
-        if (_intent.lifecycleHookData.length != 0) {
-            message = abi.encodePacked(message, keccak256(_intent.lifecycleHookData));
+        if (_intent.data.length != 0) {
+            message = abi.encodePacked(message, keccak256(_intent.data));
         }
 
         bytes32 verifierPayload = keccak256(message).toEthSignedMessageHash();

@@ -365,17 +365,17 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         );
     }
 
-    function test_O4IgnoresAugustOptOutUntilDepositorOptsOutAgain() public {
+    function test_O4RiskWindowProtectionIgnoresAugustOptOut() public {
         vm.prank(depositor);
         predecessorPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, false);
         _deployLane45();
         _activateLane46();
         assertFalse(predecessorPolicy.isDisputeProtectionEnabled(address(escrow), depositId, METHOD));
-        assertTrue(freshPolicy.isDisputeProtectionEnabled(address(escrow), depositId, METHOD));
+        assertEq(freshPolicy.getRiskWindow(METHOD), RISK_WINDOW);
         bytes32 protectedId = _signalO4();
         assertEq(
             uint256(freshPolicy.getDisputeProtectionIntent(protectedId).status),
-            uint256(P.DisputeProtectionIntentStatus.PENDING)
+            uint256(P.DisputeProtectionIntentStatus.NONE)
         );
         _settleO4(protectedId, _signedProof(protectedId, PAYMENT_ID, successor.DOMAIN_SEPARATOR(), true));
         assertEq(
@@ -383,14 +383,6 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
             uint256(P.CollateralSource.DEFERRED_PAYOUT)
         );
         assertEq(freshVault.lockedStake(other), INTENT_AMOUNT);
-        vm.prank(depositor);
-        freshPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, false);
-        assertFalse(freshPolicy.isDisputeProtectionEnabled(address(escrow), depositId, METHOD));
-        bytes32 optedOutId = _signalO4();
-        assertEq(
-            uint256(freshPolicy.getDisputeProtectionIntent(optedOutId).status),
-            uint256(P.DisputeProtectionIntentStatus.NONE)
-        );
         vm.prank(depositor);
         whitelist.setEnabled(address(escrow), depositId, METHOD, true);
         IOrchestratorV4.SignalIntentParams memory params = _defaultV4Params();
@@ -456,10 +448,8 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
             referralFees: params.referralFees,
             gatingServiceSignature: params.gatingServiceSignature,
             signatureExpiration: params.signatureExpiration,
-            postIntentHook: params.postIntentHook,
             preIntentHookData: params.preIntentHookData,
-            data: params.data,
-            lifecycleHookData: ""
+            data: params.data
         });
     }
 
@@ -569,7 +559,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
     }
 
     function _settleO4(bytes32 intentHash, bytes memory proof) private {
-        orchestratorV4.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, intentHash, "", ""));
+        orchestratorV4.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, intentHash, ""));
     }
 
     function _settle(bytes32 intentHash, bytes memory proof) private {

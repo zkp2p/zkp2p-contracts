@@ -3,7 +3,6 @@ pragma solidity ^0.8.18;
 
 import {OrchestratorV4Fixture} from "../helpers/OrchestratorV4Fixture.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
-import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
 
 contract OrchestratorV4ValidationTest is OrchestratorV4Fixture {
     function test_AccountWithActiveIntentRevertsWhenMultipleIntentsDisabled() public virtual {
@@ -20,12 +19,7 @@ contract OrchestratorV4ValidationTest is OrchestratorV4Fixture {
         _signalCall(taker, params);
     }
 
-    function test_SignalRejectsEoaPostIntentHook() public {
-        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
-        params.postIntentHook = IPostIntentHookV2(other);
-        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.InvalidPostIntentHook.selector, other));
-        _signalCall(taker, params);
-    }
+
 
     function test_SignalRejectsUnwhitelistedEscrow() public {
         escrowRegistry.removeEscrow(address(escrow));
@@ -84,23 +78,9 @@ contract OrchestratorV4ValidationTest is OrchestratorV4Fixture {
         _signalCall(taker, params);
     }
 
-    function test_FulfillRejectsPostIntentHookThatPullsTooLittle() public {
-        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
-        params.postIntentHook = partialPostIntentHook;
-        params.data = abi.encode(other);
-        bytes32 intentHash = _signal(taker, params);
-        vm.expectRevert(bytes("PostIntentHook: must pull exact netAmount"));
-        _fulfill(intentHash, INTENT_AMOUNT, CONVERSION_RATE);
-    }
 
-    function test_FulfillRejectsPostIntentHookThatIncreasesBalance() public {
-        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
-        params.postIntentHook = pushPostIntentHook;
-        params.data = abi.encode(other);
-        bytes32 intentHash = _signal(taker, params);
-        vm.expectRevert(bytes("PostIntentHook: unexpected balance increase"));
-        _fulfill(intentHash, INTENT_AMOUNT, CONVERSION_RATE);
-    }
+
+
 
     function test_HookSetterRejectsUnauthorizedCaller() public {
         vm.expectRevert(
@@ -138,8 +118,7 @@ contract OrchestratorV4ValidationTest is OrchestratorV4Fixture {
             IOrchestratorV4.FulfillIntentParams({
                 paymentProof: _paymentProof(mismatchedHash, INTENT_AMOUNT, CONVERSION_RATE),
                 intentHash: intentHash,
-                verificationData: "",
-                postIntentHookData: ""
+                verificationData: ""
             })
         );
     }

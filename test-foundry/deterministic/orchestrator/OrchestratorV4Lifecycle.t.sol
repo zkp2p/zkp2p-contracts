@@ -103,24 +103,19 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         _fulfill(intentHash, INTENT_AMOUNT, CONVERSION_RATE);
 
         assertEq(lifecycleHookMock.settlementCalls(), 1);
-        (
-            bytes32 settledIntentHash,
-            address settlementToken,
-            address recipient,
-            uint256 releaseAmount,
-            uint256 netAmount,
-            bytes memory lifecycleHookData,
-            bytes memory extensionData,
-            bool isManualRelease
-        ) = lifecycleHookMock.lastSettlementContext();
-        assertEq(settledIntentHash, intentHash);
-        assertEq(settlementToken, address(token));
-        assertEq(recipient, taker);
-        assertEq(releaseAmount, INTENT_AMOUNT);
-        assertEq(netAmount, INTENT_AMOUNT - 250_000);
-        assertEq(lifecycleHookData, "");
-        assertEq(extensionData, abi.encode(uint256(1)));
-        assertFalse(isManualRelease);
+        IIntentLifecycleHookV2.SettlementContext memory context = lifecycleHookMock.getLastSettlementContext();
+        assertEq(context.intentHash, intentHash);
+        assertEq(context.token, address(token));
+        assertEq(context.taker, taker);
+        assertEq(context.recipient, taker);
+        assertEq(context.escrow, address(escrow));
+        assertEq(context.depositId, depositId);
+        assertEq(context.paymentMethod, METHOD);
+        assertEq(context.releaseAmount, INTENT_AMOUNT);
+        assertEq(context.netAmount, INTENT_AMOUNT - 250_000);
+        assertEq(context.data, "");
+        assertEq(context.extensionData, abi.encode(uint256(1)));
+        assertFalse(context.isManualRelease);
         assertEq(token.balanceOf(referrer) - referrerBefore, 150_000);
         assertEq(token.balanceOf(other) - otherBefore, 100_000);
         assertEq(token.balanceOf(taker) - recipientBefore, INTENT_AMOUNT - 250_000);
@@ -147,22 +142,21 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         _fulfill(intentHash, INTENT_AMOUNT, CONVERSION_RATE);
     }
 
-    function test_ManualReleaseRoutesThroughLifecycleAndPostIntentHook() public {
+    function test_ManualReleaseRoutesThroughLifecycleToRecipient() public {
         orchestrator.setLifecycleHook(lifecycleHookMock);
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.referralFees = _twoReferralFees();
-        params.postIntentHook = postIntentHook;
-        params.data = abi.encode(delegate);
+        params.to = delegate;
         bytes32 intentHash = _signal(taker, params);
         uint256 recipientBefore = token.balanceOf(taker);
         uint256 hookRecipientBefore = token.balanceOf(delegate);
         uint256 netAmount = INTENT_AMOUNT - 250_000;
         vm.expectEmit(true, true, true, true);
-        emit IntentFulfilled(intentHash, address(postIntentHook), netAmount, true);
+        emit IntentFulfilled(intentHash, delegate, netAmount, true);
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(intentHash);
         assertEq(lifecycleHookMock.settlementCalls(), 1);
-        (,,,,, bytes memory lifecycleHookData, bytes memory extensionData, bool isManualRelease) = lifecycleHookMock.lastSettlementContext();
+        (,,,,,,,,, bytes memory lifecycleHookData, bytes memory extensionData, bool isManualRelease) = lifecycleHookMock.lastSettlementContext();
         assertEq(lifecycleHookData, "");
         assertEq(extensionData, "");
         assertTrue(isManualRelease);

@@ -131,7 +131,7 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         _transfer(disputeVerifier, true);
         _transfer(freshVault, false);
         freshPolicy.transferOwnership(safe);
-        assertTrue(freshPolicy.isDisputeProtectionEnabled(address(escrow), depositId, METHOD));
+        assertEq(freshPolicy.getRiskWindow(METHOD), RISK_WINDOW);
     }
 
     function test_CutoverPassesForEveryConditionalAcceptanceCombination() public {
@@ -403,13 +403,6 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
             guard,
             abi.encodeWithSelector(DisputeBypassTrustSurfaceChecks.FreshPolicyPendingOwnerMismatch.selector, other)
         );
-    }
-
-    function test_GuardAllowsExplicitFreshPolicyReenable() public {
-        DisputeBypassCutoverGuard guard = _guard(_surface(), true, true);
-        vm.prank(depositor);
-        freshPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, true);
-        guard.assertReady();
     }
 
     function test_GuardRejectsOrchestratorV4AlreadyRegistered() public {

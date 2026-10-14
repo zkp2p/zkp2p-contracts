@@ -997,9 +997,6 @@ async function withCleanLaneEnv(run) {
 }
 
 test("lane 46 classifies bypass policy activity across O4 registration", () => {
-  const {
-    FORBIDDEN_POLICY_LIFECYCLE_EVENTS,
-  } = require("../deploy/37_deploy_method_scoped_dispute_lifecycle_stack.ts");
   /** @param {string} name */
   const event = (name) =>
     /** @type {import("../deploy/37_deploy_method_scoped_dispute_lifecycle_stack").FreshStackEvent} */ ({
@@ -1010,20 +1007,21 @@ test("lane 46 classifies bypass policy activity across O4 registration", () => {
       transactionHash: hash(1),
     });
   const configuration = [
-    "DisputeProtectionEnabledUpdated",
     "RiskWindowUpdated",
     "LifecycleHookAuthorizationUpdated",
     "OwnershipTransferStarted",
   ].map(event);
   assert.deepEqual(lane.BYPASS_POLICY_LIFECYCLE_EVENTS, [
-    ...FORBIDDEN_POLICY_LIFECYCLE_EVENTS,
+    "DisputeProtectionIntentSettled",
+    "DisputeProtectionIntentReleased",
+    "DisputeResolved",
     "DeferredPayoutFunded",
     "DeferredPayoutClaimed",
   ]);
   for (const name of [
     "DeferredPayoutFunded",
     "DeferredPayoutClaimed",
-    "DisputeProtectionIntentOpened",
+    "DisputeProtectionIntentSettled",
   ]) {
     assert.throws(
       () => lane.classifyBypassPolicyActivity([event(name)], true),
@@ -1040,10 +1038,8 @@ test("lane 46 classifies bypass policy activity across O4 registration", () => {
   assert.doesNotThrow(() =>
     lane.classifyBypassPolicyActivity(
       [
-        "DisputeProtectionIntentOpened",
         "DisputeProtectionIntentSettled",
         "DisputeProtectionIntentReleased",
-        "DisputeProtectionIntentCancelled",
         "DisputeResolved",
         "DeferredPayoutFunded",
         "DeferredPayoutClaimed",
@@ -1053,6 +1049,11 @@ test("lane 46 classifies bypass policy activity across O4 registration", () => {
       false
     )
   );
+  for (const removed of ["DisputeProtectionIntentOpened", "DisputeProtectionIntentCancelled", "DisputeProtectionEnabledUpdated"]) {
+    for (const beforeCutover of [true, false]) {
+      assert.throws(() => lane.classifyBypassPolicyActivity([event(removed)], beforeCutover), /unclassified event/);
+    }
+  }
   for (const beforeCutover of [true, false]) {
     assert.throws(
       () =>

@@ -42,7 +42,7 @@ contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
             assertEq(attestation.releaseAmount, index == 2 ? 45e6 : INTENT_AMOUNT);
             uint256 net = attestation.releaseAmount - attestation.releaseAmount * PROTOCOL_FEE / 1e18
                 - attestation.releaseAmount * REFERRAL_FEE / 1e18;
-            orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, id, "", ""));
+            orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, id, ""));
             P.DisputeProtectionIntent memory record = protection.getDisputeProtectionIntent(id);
             (address lockOwner, uint256 lockedAmount,) = vault.locks(id);
             if (index == 0) {

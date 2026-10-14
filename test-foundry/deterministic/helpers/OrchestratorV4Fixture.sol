@@ -7,12 +7,9 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {EscrowV2} from "contracts/EscrowV2.sol";
 import {OrchestratorV4} from "contracts/OrchestratorV4.sol";
 import {OrchestratorMock} from "../../mocks/OrchestratorMock.sol";
-import {PartialPullPostIntentHookV2Mock} from "../../mocks/PartialPullPostIntentHookV2Mock.sol";
 import {PaymentVerifierV2Mock} from "../../mocks/PaymentVerifierV2Mock.sol";
 import {PostIntentHookV2Mock} from "../../mocks/PostIntentHookV2Mock.sol";
 import {PreIntentHookMock} from "../../mocks/PreIntentHookMock.sol";
-import {PushPostIntentHookV2Mock} from "../../mocks/PushPostIntentHookV2Mock.sol";
-import {ReentrantPostIntentHookV2} from "../../mocks/ReentrantPostIntentHookV2.sol";
 import {ReentrantPreIntentHookMock} from "../../mocks/ReentrantPreIntentHookMock.sol";
 import {ReentrantSignalIntentCallerV2Mock} from "../../mocks/ReentrantSignalIntentCallerV2Mock.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
@@ -21,6 +18,7 @@ import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.so
 import {PaymentVerifierRegistry} from "contracts/registries/PaymentVerifierRegistry.sol";
 import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
+import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
 import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
@@ -53,9 +51,6 @@ abstract contract OrchestratorV4Fixture is Test {
     PaymentVerifierV2Mock internal verifier;
     PreIntentHookMock internal preIntentHook;
     PostIntentHookV2Mock internal postIntentHook;
-    PartialPullPostIntentHookV2Mock internal partialPostIntentHook;
-    PushPostIntentHookV2Mock internal pushPostIntentHook;
-    ReentrantPostIntentHookV2 internal reentrantPostIntentHook;
     ReentrantSignalIntentCallerV2Mock internal reentrantSignalCaller;
     ReentrantPreIntentHookMock internal reentrantPreIntentHook;
     OrchestratorMock internal orchestratorMock;
@@ -103,13 +98,9 @@ abstract contract OrchestratorV4Fixture is Test {
         );
         orchestrator.setAllowMultipleIntents(true);
         postIntentHook = new PostIntentHookV2Mock(address(token), address(orchestrator));
-        partialPostIntentHook = new PartialPullPostIntentHookV2Mock(address(token), address(orchestrator));
-        pushPostIntentHook = new PushPostIntentHookV2Mock(address(token), address(orchestrator));
-        reentrantPostIntentHook = new ReentrantPostIntentHookV2(address(token), address(orchestrator));
         reentrantSignalCaller = new ReentrantSignalIntentCallerV2Mock(address(orchestrator));
         reentrantPreIntentHook = new ReentrantPreIntentHookMock(address(reentrantSignalCaller));
         orchestratorMock = new OrchestratorMock(address(escrow));
-        token.transfer(address(pushPostIntentHook), 10e6);
 
         escrowRegistry.addEscrow(address(escrow));
         orchestratorRegistry.addOrchestrator(address(orchestrator));
@@ -168,7 +159,6 @@ abstract contract OrchestratorV4Fixture is Test {
         uint256 amount,
         uint256 conversionRate,
         IReferralFee.ReferralFee[] memory referralFees,
-        IPostIntentHookV2 hook,
         bytes memory data
     ) internal view returns (IOrchestratorV4.SignalIntentParams memory) {
         return IOrchestratorV4.SignalIntentParams({
@@ -182,17 +172,26 @@ abstract contract OrchestratorV4Fixture is Test {
             referralFees: referralFees,
             gatingServiceSignature: "",
             signatureExpiration: block.timestamp + 1 days,
-            postIntentHook: hook,
             preIntentHookData: "",
-            data: data,
-            lifecycleHookData: ""
+            data: data
         });
     }
 
     function _defaultParams() internal view virtual returns (IOrchestratorV4.SignalIntentParams memory) {
         return _params(
-            depositId, taker, INTENT_AMOUNT, CONVERSION_RATE, _emptyReferralFees(), IPostIntentHookV2(address(0)), ""
+            depositId, taker, INTENT_AMOUNT, CONVERSION_RATE, _emptyReferralFees(), ""
         );
+    }
+
+    function _v3Params() internal view returns (IOrchestratorV3.SignalIntentParams memory) {
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
+        return IOrchestratorV3.SignalIntentParams({
+            escrow: params.escrow, depositId: params.depositId, amount: params.amount, to: params.to,
+            paymentMethod: params.paymentMethod, fiatCurrency: params.fiatCurrency,
+            conversionRate: params.conversionRate, referralFees: params.referralFees,
+            gatingServiceSignature: params.gatingServiceSignature, signatureExpiration: params.signatureExpiration,
+            postIntentHook: IPostIntentHookV2(address(0)), preIntentHookData: params.preIntentHookData, data: params.data
+        });
     }
 
     function _intentHash(uint256 counter) internal view returns (bytes32) {
@@ -227,8 +226,7 @@ abstract contract OrchestratorV4Fixture is Test {
             IOrchestratorV4.FulfillIntentParams({
                 paymentProof: _paymentProof(intentHash, releaseAmount, conversionRate),
                 intentHash: intentHash,
-                verificationData: "",
-                postIntentHookData: ""
+                verificationData: ""
             })
         );
     }
@@ -284,7 +282,7 @@ abstract contract OrchestratorV4Fixture is Test {
 
     function _signalWithLifecycleHookData(bytes memory lifecycleHookData) internal returns (bytes32 hash) {
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
-        params.lifecycleHookData = lifecycleHookData;
+        params.data = lifecycleHookData;
         params.gatingServiceSignature = _lifecycleHookDataSignature(params, lifecycleHookData);
         hash = _intentHash(orchestrator.intentCounter());
         vm.prank(taker);
@@ -302,7 +300,6 @@ abstract contract OrchestratorV4Fixture is Test {
             INTENT_AMOUNT,
             CONVERSION_RATE,
             _emptyReferralFees(),
-            IPostIntentHookV2(address(0)),
             ""
         );
         params.signatureExpiration = expiration;

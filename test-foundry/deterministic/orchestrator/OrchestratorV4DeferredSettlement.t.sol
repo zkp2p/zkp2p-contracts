@@ -54,13 +54,11 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
         orchestrator.setLifecycleHook(hook);
     }
 
-    function test_PayNowPathMatchesV3() public {
+    function test_PayNowTransfersToRecipientWithoutPostIntentHook() public {
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
-        params.postIntentHook = postIntentHook;
-        params.data = abi.encode(taker);
         params.referralFees = _twoReferralFees();
         bytes32 hash = _signal(taker, params);
-        vm.expectCall(address(postIntentHook), abi.encodeWithSelector(postIntentHook.execute.selector));
+        assertEq(orchestrator.getIntent(hash).postIntentHook, address(0));
         _fulfill(hash, INTENT_AMOUNT, CONVERSION_RATE);
         assertEq(token.balanceOf(taker), INTENT_AMOUNT - 250_000);
         assertEq(hook.fundedCalls(), 0);
@@ -86,19 +84,15 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
         assertEq(address(orchestrator.getIntentLifecycleHook(hash)), address(0));
     }
 
-    function test_DeferredSkipsPostIntentHook() public {
+    function test_DeferredPaysVaultWithoutPostIntentHook() public {
         hook.setDeferralVault(address(hook));
-        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
-        params.postIntentHook = postIntentHook;
-        params.data = abi.encode(address(0));
-        bytes32 hash = _signal(taker, params);
-        hook.setDeferralVault(address(0));
-        vm.expectRevert("Target address cannot be zero");
-        _fulfill(hash, INTENT_AMOUNT, CONVERSION_RATE);
-        hook.setDeferralVault(address(hook));
+        bytes32 hash = _signalDefault();
+        assertEq(orchestrator.getIntent(hash).postIntentHook, address(0));
         _fulfill(hash, INTENT_AMOUNT, CONVERSION_RATE);
         assertEq(token.balanceOf(address(hook)), INTENT_AMOUNT);
+        assertEq(token.balanceOf(address(postIntentHook)), 0);
         assertEq(token.allowance(address(orchestrator), address(postIntentHook)), 0);
+        assertEq(postIntentHook.lastPostIntentHookData(), "");
     }
 
     function test_FeesPaidBeforeDeferral() public {
@@ -120,11 +114,11 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
     function test_ExtensionWordZeroForwarded() public {
         verifier.setExtensionData(abi.encode(uint256(1)));
         _fulfill(_signalDefault(), INTENT_AMOUNT, CONVERSION_RATE);
-        (,,,,,, bytes memory extensionData,) = hook.lastSettlementContext();
+        (,,,,,,,,,, bytes memory extensionData,) = hook.lastSettlementContext();
         assertEq(extensionData, abi.encode(uint256(1)));
         verifier.setExtensionData(abi.encode(uint256(0)));
         _fulfill(_signalDefault(), INTENT_AMOUNT, CONVERSION_RATE);
-        (,,,,,, extensionData,) = hook.lastSettlementContext();
+        (,,,,,,,,,, extensionData,) = hook.lastSettlementContext();
         assertEq(extensionData, abi.encode(uint256(0)));
     }
 
@@ -133,7 +127,7 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
         bytes32 hash = _signalDefault();
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(hash);
-        (,,,,,, bytes memory extensionData, bool manual) = hook.lastSettlementContext();
+        (,,,,,,,,,, bytes memory extensionData, bool manual) = hook.lastSettlementContext();
         assertEq(extensionData, "");
         assertTrue(manual);
         assertEq(token.balanceOf(taker), INTENT_AMOUNT);
@@ -195,7 +189,7 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
         assertEq(orchestrator.intentCounter(), oldOrchestrator.intentCounter());
         bytes32 hash = _signalDefault();
         vm.prank(taker);
-        oldOrchestrator.signalIntent(abi.decode(abi.encode(_defaultParams()), (IOrchestratorV3.SignalIntentParams)));
+        oldOrchestrator.signalIntent(_v3Params());
         bytes32[] memory hashes = oldOrchestrator.getAccountIntents(taker);
         assertEq(hashes.length, 1);
         assertNotEq(hash, hashes[0]);

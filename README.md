@@ -806,7 +806,7 @@ Only the exact superseded staging UPV4 address `0x3fe38Afdfa85A9E14D9b0ae5A5B2E5
 pinned runtime hash may be replaced. Lane 45 deletes that record and deploys a different address.
 Pre-cutover binding checks use the pinned retired verifier independently of the mutable record, including
 after a crash between deletion and deployment; other identity or runtime mismatches fail closed.
-The cascade policy starts with protection on by default; opt-outs are not carried over; depositors opt out again on it.
+The cascade policy protects every method with a nonzero risk window; it has no per-deposit opt-out.
 Historical lane 45 first executed on staging on 2026-10-11 from `f9eab7f`. The stake-owner bypass trio
 replaced that first trio on 2026-10-13 from `285bc5c`; UPV4 and its record were unchanged by that run.
 
@@ -999,23 +999,48 @@ The fully static result preserves the V1 `success`, `intentHash`, `releaseAmount
 then returns the uncapped `attestedReleaseAmount`, verified `PaymentDetails`, and signed/validated
 `IntentSnapshot`. `balanceFunded` is not a result field. Dynamic extension bytes are a separate
 trailing return value; unsigned metadata is never returned. O3 reads the V1 prefix with or without
-extension bytes. O4 forwards the raw extension and opaque `lifecycleHookData` saved before pruning to
+extension bytes. O4 forwards the raw extension and opaque `intent.data` saved before pruning to
 its snapshotted IntentLifecycleHookV2. The hook is stateless by design: per-intent data lives only in O4,
 and the hook decodes and validates it because governance can replace hooks for future intents while O4
 is not upgradeable. Manual release forwards the saved data and an empty extension; the hook skips the
-attestation comparison and extension validation and uses `balanceFunded = false`.
+attestation comparison and extension validation and follows the independent manual-release path without relayer bypass.
 
-IOrchestratorV4 keeps Intent and FulfillIntentParams ABI-identical to V3. Its SignalIntentParams
-keeps V3's fields in order and appends `bytes lifecycleHookData` after `data`. Non-empty data requires
-a current lifecycle hook (`LifecycleHookDataRequiresHook`) and a gating service for the deposit's
-payment method (`LifecycleHookDataRequiresGatingService`). O4 appends `keccak256(lifecycleHookData)`
-to the gating message and verifies the service's signature. Empty data needs no gating service,
-preserves the plain V3 message byte-for-byte and is never written to the hook-data mapping.
-`getIntentLifecycleHookData(intentHash)` returns the bytes until pruning.
+IOrchestratorV4 keeps `Intent` ABI-identical to V3, including its reserved `postIntentHook` address,
+which O4 always stores as zero. `SignalIntentParams` keeps V3's fields in order except `postIntentHook`;
+`FulfillIntentParams` keeps V3's fields except `postIntentHookData`. O4 has no post-intent-hook execution.
+`data` is the opaque lifecycle hook payload and is stored only in `Intent.data`. Non-empty data requires
+a mounted lifecycle hook (`LifecycleHookDataRequiresHook`) and a deposit payment-method gating service
+(`LifecycleHookDataRequiresGatingService`). O4 appends `keccak256(data)` to the gating message; empty
+data preserves the plain V3 packed message byte-for-byte. Read it through `getIntent(intentHash).data`
+until pruning; there is no separate hook-data mapping or getter. Fees are unchanged. The net payout goes
+to the lifecycle hook's deferral vault or directly to `intent.to`. O4 computes the fee plan and calls
+settlement before escrow unlock, so the policy can read a deposit that will close on its final payout;
+after unlock it transfers protocol, referral and manager fees, then the net payout.
+
+IntentLifecycleHookV2 is stateless. A deposit's enabled whitelist is a pure admission gate: non-members
+are rejected, and members still enter the collateral cascade. For a nonzero method risk window, signal
+checks the deposit token against the vault's stake token, the policy's hook authorization, and paused
+admissions, without writing policy state. Cancellation is an unrestricted no-op, retained for future
+hooks; O4 still invokes the snapshotted callback on cancel, escrow prune and orphan cleanup.
+
+`SettlementContext` is `{ intentHash, token, taker, recipient, escrow, depositId, paymentMethod,
+releaseAmount, netAmount, data, extensionData, isManualRelease }`. O4 reads intent fields before pruning:
+`taker = intent.owner`, `recipient = intent.to`, and `data = intent.data`. The hook passes these identities
+and amounts to the policy's `onIntentSettled(SettleParams)`, with `bypass` set for balance-funded payments
+or takers whitelisted in the calling O4's relayer registry. Relayer-signed orders bypass dispute collateral
+by rule; a replacement hook can change that rule. Manual release has its own path and never uses relayer bypass.
+
+DisputeProtectionPolicyV2 has no signal/cancel records and no per-deposit opt-outs. A zero risk window
+pays normally with no record. Otherwise settlement reads the depositor and rechecks the token, snapshots
+the current risk window, and selects manual release, bypass, gross stake collateral, or a deferred net
+payout. Paused admissions do not block settlement. Statuses are `NONE`, `AWAITING_FUNDING`, `SETTLED`,
+`RELEASED`, and `DISPUTED`. One `DisputeProtectionIntentSettled` event includes all participant identities,
+method, window, collateral source, stake owner, amounts, eligibility time and manual-release flag;
+`DisputeProtectionIntentReleased` remains on immediate releases. No Opened or Cancelled event is emitted.
 
 IntentLifecycleHookV2 accepts empty data or exactly 64 bytes of `abi.encode(uint8(1), bytes32 conditionsHash)`
-with a nonzero hash; malformed data reverts with `InvalidLifecycleHookData`. After whitelist and policy
-admission, the hook retains its v1 gating-service check (`ConditionsRequireGatingService`) as a backstop;
+with a nonzero hash; malformed data reverts with `InvalidLifecycleHookData`. After whitelist and read-only policy
+checks, the hook retains its v1 gating-service check (`ConditionsRequireGatingService`) as a backstop;
 O4 has already required the service and verified its signature covering the data hash. The concrete hook's
 pure `conditionsHashOf(bytes)` helper is an off-chain convenience for readers using the snapshotted hook,
 not part of the interface O4 checks. Settlement compares extension word 1 with this
@@ -1045,16 +1070,15 @@ OrchestratorV3 and IntentLifecycleHookV1 remain unchanged.
 
 ### O4 lifecycle hook data
 
-`signalIntent(params)` accepts `bytes lifecycleHookData` as the last field, after `data`.
+`signalIntent(params)` uses its final `bytes data` field as opaque lifecycle hook data.
 O4 stores and forwards these bytes without interpreting them. Non-empty data requires a current hook
 (`LifecycleHookDataRequiresHook`) and a gating service for the deposit's payment method
-(`LifecycleHookDataRequiresGatingService`). O4 appends the 32-byte `keccak256(lifecycleHookData)` to
+(`LifecycleHookDataRequiresGatingService`). O4 appends the 32-byte `keccak256(data)` to
 the existing 336-byte packed gating message (368 bytes total) and verifies the service's signature.
 Empty bytes mean no hook data, need no gating service and preserve the plain V3 gating message byte-for-byte.
 The field changes O4's calldata selector and ERC-165 interface id.
-`getIntentLifecycleHookData(intentHash)` exposes the bytes until fulfillment, manual release, cancellation,
-escrow pruning or orphan cleanup. Empty data never writes the mapping. `intent.data` remains the separate
-post-intent hook payload.
+`getIntent(intentHash).data` exposes the bytes until fulfillment, manual release, cancellation,
+escrow pruning or orphan cleanup. O4 never executes a post-intent hook.
 
 The stateless IntentLifecycleHookV2 validates v1 hook data as exactly
 `abi.encode(uint8(1), bytes32 conditionsHash)` (64 bytes, nonzero hash), and requires a deposit gating
@@ -1069,7 +1093,7 @@ conditions hash. Missing complete words mean zero. IntentLifecycleHookV2 rejects
 hash decoded from the pre-prune hook data forwarded by O4. `ConditionsNotAttested(intentHash)` rolls
 back the entire fulfillment on mismatch. The comparison is symmetric: empty hook data rejects a nonzero
 attested hash. Words 2+ are ignored. Manual release ignores the extension, skips the hash comparison,
-and uses `balanceFunded = false`. Both formats are interpreted only by the replaceable hook.
+and follows the independent manual-release path without relayer bypass. Both formats are interpreted only by the replaceable hook.
 
 Off-chain convention v1 is
 `conditionsHash = keccak256(abi.encode(uint8(1), salt, payerIdHash))`,
