@@ -70,6 +70,9 @@ OrchestratorV2.fulfillIntent
 
 Important ownership boundaries:
 
+- `OrchestratorV4` is OrchestratorV3 plus deferred settlement, and is not a proxy.
+- `CascadeDisputeProtectionPolicy` and `IntentLifecycleHookV2` serve only OrchestratorV4; OrchestratorV3 keeps `DisputeProtectionPolicy` and `IntentLifecycleHookV1`.
+- `UnifiedPaymentVerifierV4` returns the attestation-signed balance flag and serves both OrchestratorV3 and OrchestratorV4.
 - `EscrowV2` owns deposits, locking, and release.
 - `OrchestratorV2` owns intent lifecycle and fee routing.
 - `OrchestratorV3` owns the V3 intent lifecycle and snapshots the

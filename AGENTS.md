@@ -257,6 +257,12 @@ This section describes the V1 stack, whose sources now live in `contracts/archiv
 - Wiring: Deploy registries → deploy `Escrow` → deploy `Orchestrator` with registry addresses → `Escrow.setOrchestrator(...)` → deploy `UnifiedPaymentVerifier` and register it per `paymentMethod` in `PaymentVerifierRegistry` (also set provider hashes/timestamp buffers) → whitelist escrows/hooks as needed. Current `OrchestratorV3` deliberately retains the relayer admission boundary while replacing the V2 deposit-whitelist-hook path with snapshotted, fail-closed lifecycle callbacks; review those differences as designed behavior, not accidental parity drift.
 - Flow: Maker `createDeposit` on `Escrow` → Taker `signalIntent` on `Orchestrator` (escrow locks funds) → `fulfillIntent` calls method verifier → on success, `Orchestrator` unlocks/transfers from `Escrow`, applies fees, runs optional post‑intent hook.
 
+Important ownership boundaries:
+
+- `OrchestratorV4` is OrchestratorV3 plus deferred settlement, and is not a proxy.
+- `CascadeDisputeProtectionPolicy` and `IntentLifecycleHookV2` serve only OrchestratorV4; OrchestratorV3 keeps `DisputeProtectionPolicy` and `IntentLifecycleHookV1`.
+- `UnifiedPaymentVerifierV4` returns the attestation-signed balance flag and serves both OrchestratorV3 and OrchestratorV4.
+
 ### Minimal Diagram
 
 ```

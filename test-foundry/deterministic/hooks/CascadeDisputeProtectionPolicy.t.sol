@@ -450,18 +450,19 @@ contract CascadeDisputeProtectionPolicyTest is Test {
         _stake(TAKER, 2 * GROSS);
         _signal(ID);
         policy.onIntentSettled(ID, GROSS, NET, false, false);
-        vm.warp(block.timestamp + 1);
+        vm.warp(vm.getBlockTimestamp() + 1);
         _signal(ID2);
         policy.onIntentSettled(ID2, GROSS, NET, false, false);
         _mature();
         bytes32[] memory ids = new bytes32[](2);
         ids[0] = ID;
         ids[1] = ID2;
-        vm.expectRevert(abi.encodeWithSelector(P.DisputeProtectionIntentNotReleaseEligible.selector, uint64(block.timestamp + 1), uint64(block.timestamp)));
+        uint64 timestamp = uint64(vm.getBlockTimestamp());
+        vm.expectRevert(abi.encodeWithSelector(P.DisputeProtectionIntentNotReleaseEligible.selector, timestamp + 1, timestamp));
         policy.releaseMaturedDisputeProtectionIntents(ids);
         _status(P.DisputeProtectionIntentStatus.SETTLED);
         assertEq(vault.lockedStake(TAKER), 2 * GROSS);
-        vm.warp(block.timestamp + 1);
+        vm.warp(vm.getBlockTimestamp() + 1);
         policy.releaseMaturedDisputeProtectionIntents(ids);
         assertEq(vault.lockedStake(TAKER), 0);
     }
