@@ -184,7 +184,8 @@ abstract contract OrchestratorV4Fixture is Test {
             signatureExpiration: block.timestamp + 1 days,
             postIntentHook: hook,
             preIntentHookData: "",
-            data: data
+            data: data,
+            conditionsHash: bytes32(0)
         });
     }
 
@@ -283,10 +284,11 @@ abstract contract OrchestratorV4Fixture is Test {
 
     function _signalWithConditions(bytes32 conditionsHash) internal returns (bytes32 hash) {
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
+        params.conditionsHash = conditionsHash;
         params.gatingServiceSignature = _conditionsSignature(params, conditionsHash);
         hash = _intentHash(orchestrator.intentCounter());
         vm.prank(taker);
-        orchestrator.signalIntentWithConditions(params, conditionsHash);
+        orchestrator.signalIntent(params);
     }
 
     function _gatedParams(uint256 gatedDepositId, uint256 signerKey, address signedCaller, uint256 expiration)

@@ -46,6 +46,7 @@ interface IOrchestratorV4 {
         IPostIntentHookV2 postIntentHook;           // Optional post-intent hook (address(0) for no hook)
         bytes preIntentHookData;                    // Ephemeral data passed only to the pre-intent hook during signalIntent
         bytes data;                                 // Signal data persisted in Intent and forwarded as post-intent hook signalHookData
+        bytes32 conditionsHash;                     // Opaque attested-conditions hash; bytes32(0) = no conditions
     }
 
     struct FulfillIntentParams {
@@ -104,7 +105,6 @@ interface IOrchestratorV4 {
 
     // Zero value errors
     error ZeroAddress();
-    error ZeroValue();
 
     // Authorization errors
     error UnauthorizedEscrowCaller(address caller);
@@ -168,11 +168,10 @@ interface IOrchestratorV4 {
 
     /* ============ External Functions for Users ============ */
 
-    /// @notice Signals an intent and locks its escrow funds.
+    /// @notice Signals an intent and locks its escrow funds, with optional attested conditions.
+    /// @dev A nonzero conditionsHash requires a deposit gating service and is appended to its signed message.
+    /// A zero conditionsHash preserves the plain V3 gating message byte-for-byte.
     function signalIntent(SignalIntentParams calldata params) external;
-
-    /// @notice Signals an intent with nonzero conditions signed by its deposit gating service.
-    function signalIntentWithConditions(SignalIntentParams calldata params, bytes32 conditionsHash) external;
 
     /// @notice Sets the deposit pre-intent hook as depositor or delegate.
     function setDepositPreIntentHook(address escrow, uint256 depositId, IPreIntentHook hook) external;

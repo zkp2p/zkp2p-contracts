@@ -9,9 +9,10 @@ contract OrchestratorV4ConditionsTest is OrchestratorV4Fixture {
 
     function test_ConditionsRequireGatingService() public {
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
+        params.conditionsHash = CONDITIONS;
         vm.expectRevert(IOrchestratorV4.ConditionsRequireGatingService.selector);
         vm.prank(taker);
-        orchestrator.signalIntentWithConditions(params, CONDITIONS);
+        orchestrator.signalIntent(params);
     }
 
     function _useGatedDeposit() internal {
@@ -58,35 +59,50 @@ contract OrchestratorV4ConditionsTest is OrchestratorV4Fixture {
         _useGatedDeposit();
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.data = hex"deadbeef";
+        params.conditionsHash = CONDITIONS;
         params.gatingServiceSignature = _conditionsSignature(params, CONDITIONS);
         bytes32 id = _intentHash(orchestrator.intentCounter());
         vm.prank(taker);
-        orchestrator.signalIntentWithConditions(params, CONDITIONS);
+        orchestrator.signalIntent(params);
         assertEq(orchestrator.intentConditions(id), CONDITIONS);
         assertEq(orchestrator.getIntent(id).data, hex"deadbeef");
     }
 
-    function test_ZeroConditionsRejected() public {
-        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
-        vm.expectRevert(IOrchestratorV4.ZeroValue.selector);
-        vm.prank(taker);
-        orchestrator.signalIntentWithConditions(params, bytes32(0));
+    function test_ZeroConditionsUsesPlainGatingMessage() public {
+        _useGatedDeposit();
+        IOrchestratorV4.SignalIntentParams memory params =
+            _gatedParams(depositId, gatingServiceKey, taker, block.timestamp + 1 days);
+        params.conditionsHash = bytes32(0);
+        bytes memory plainSignature = params.gatingServiceSignature;
+        params.gatingServiceSignature = _conditionsSignature(params, bytes32(0));
+        vm.expectRevert(IOrchestratorV4.InvalidSignature.selector);
+        _signalCall(taker, params);
+        params.gatingServiceSignature = plainSignature;
+        bytes32 id = _signal(taker, params);
+        assertEq(orchestrator.intentConditions(id), bytes32(0));
+        assertEq(orchestrator.getIntent(id).owner, taker);
+        _fulfill(id, INTENT_AMOUNT, CONVERSION_RATE);
+        assertEq(orchestrator.getIntent(id).owner, address(0));
+        assertEq(token.balanceOf(taker), INTENT_AMOUNT);
     }
 
     function test_GatingSignaturesCannotCrossPathsOrConditions() public {
         _useGatedDeposit();
         IOrchestratorV4.SignalIntentParams memory params =
             _gatedParams(depositId, gatingServiceKey, taker, block.timestamp + 1 days);
-        vm.expectRevert(IOrchestratorV4.InvalidSignature.selector);
-        vm.prank(taker);
-        orchestrator.signalIntentWithConditions(params, CONDITIONS);
-        params.gatingServiceSignature = _conditionsSignature(params, CONDITIONS);
+        params.conditionsHash = CONDITIONS;
         vm.expectRevert(IOrchestratorV4.InvalidSignature.selector);
         vm.prank(taker);
         orchestrator.signalIntent(params);
+        params.gatingServiceSignature = _conditionsSignature(params, CONDITIONS);
+        params.conditionsHash = bytes32(0);
         vm.expectRevert(IOrchestratorV4.InvalidSignature.selector);
         vm.prank(taker);
-        orchestrator.signalIntentWithConditions(params, keccak256("other conditions"));
+        orchestrator.signalIntent(params);
+        params.conditionsHash = keccak256("other conditions");
+        vm.expectRevert(IOrchestratorV4.InvalidSignature.selector);
+        vm.prank(taker);
+        orchestrator.signalIntent(params);
     }
 
     function test_ConditionsEchoRequiredBeforeFundsMove() public {

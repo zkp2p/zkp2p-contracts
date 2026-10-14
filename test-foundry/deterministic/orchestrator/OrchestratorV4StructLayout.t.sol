@@ -8,6 +8,13 @@ import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
 
 contract OrchestratorV4StructLayoutTest is Test {
+    function test_SignalSelectorIncludesTrailingConditionsHash() public pure {
+        bytes4 expected = bytes4(keccak256(
+            "signalIntent((address,uint256,uint256,address,bytes32,bytes32,uint256,(address,uint256)[],bytes,uint256,address,bytes,bytes,bytes32))"
+        ));
+        assertEq(IOrchestratorV4.signalIntent.selector, expected);
+    }
+
     function test_IntentEncodingMatchesV3() public pure {
         IReferralFee.ReferralFee[] memory fees = _fees();
         IOrchestratorV3.Intent memory v3 = IOrchestratorV3.Intent({
@@ -43,7 +50,7 @@ contract OrchestratorV4StructLayoutTest is Test {
         assertEq(abi.encode(v3), abi.encode(v4));
     }
 
-    function test_SignalIntentParamsEncodingMatchesV3() public pure {
+    function test_SignalIntentParamsExtendsV3WithConditionsHashLast() public pure {
         IReferralFee.ReferralFee[] memory fees = _fees();
         IOrchestratorV3.SignalIntentParams memory v3 = IOrchestratorV3.SignalIntentParams({
             escrow: address(1),
@@ -60,22 +67,38 @@ contract OrchestratorV4StructLayoutTest is Test {
             preIntentHookData: hex"44556677",
             data: hex"8899"
         });
-        IOrchestratorV4.SignalIntentParams memory v4 = IOrchestratorV4.SignalIntentParams({
-            escrow: address(1),
-            depositId: 2,
-            amount: 3,
-            to: address(4),
-            paymentMethod: bytes32(uint256(5)),
-            fiatCurrency: bytes32(uint256(6)),
-            conversionRate: 7,
-            referralFees: fees,
-            gatingServiceSignature: hex"112233",
-            signatureExpiration: 8,
-            postIntentHook: IPostIntentHookV2(address(9)),
-            preIntentHookData: hex"44556677",
-            data: hex"8899"
-        });
-        assertEq(abi.encode(v3), abi.encode(v4));
+        bytes32 conditionsHash = keccak256("conditions");
+        // Positional construction locks V3's field order and the appended conditions hash.
+        IOrchestratorV4.SignalIntentParams memory v4 = IOrchestratorV4.SignalIntentParams(
+            v3.escrow,
+            v3.depositId,
+            v3.amount,
+            v3.to,
+            v3.paymentMethod,
+            v3.fiatCurrency,
+            v3.conversionRate,
+            v3.referralFees,
+            v3.gatingServiceSignature,
+            v3.signatureExpiration,
+            v3.postIntentHook,
+            v3.preIntentHookData,
+            v3.data,
+            conditionsHash
+        );
+        assertEq(v4.escrow, v3.escrow);
+        assertEq(v4.depositId, v3.depositId);
+        assertEq(v4.amount, v3.amount);
+        assertEq(v4.to, v3.to);
+        assertEq(v4.paymentMethod, v3.paymentMethod);
+        assertEq(v4.fiatCurrency, v3.fiatCurrency);
+        assertEq(v4.conversionRate, v3.conversionRate);
+        assertEq(abi.encode(v4.referralFees), abi.encode(v3.referralFees));
+        assertEq(v4.gatingServiceSignature, v3.gatingServiceSignature);
+        assertEq(v4.signatureExpiration, v3.signatureExpiration);
+        assertEq(address(v4.postIntentHook), address(v3.postIntentHook));
+        assertEq(v4.preIntentHookData, v3.preIntentHookData);
+        assertEq(v4.data, v3.data);
+        assertEq(v4.conditionsHash, conditionsHash);
     }
 
     function test_FulfillIntentParamsEncodingMatchesV3() public pure {

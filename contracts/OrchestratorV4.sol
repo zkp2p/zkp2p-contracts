@@ -114,6 +114,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      * service to prove their eligibility to take liquidity. This function captures and stores all values required for fullfilling
      * the intent to give strong guarantees to the buyer. Snapshots the global lifecycle hook and executes fail-closed risk
      * admission before locking liquidity for the corresponding deposit on the escrow contract.
+     * Nonzero conditionsHash requires a deposit gating service and is appended to its signed message;
+     * zero preserves the plain V3 gating message byte-for-byte.
      *
      * @param _params                   Struct containing all the intent parameters
      */
@@ -122,22 +124,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         nonReentrant
         whenNotPaused
     {
-        _signalIntent(_params, bytes32(0));
-    }
-
-    /// @notice Signals an intent with opaque conditions vouched for by the deposit's gating service.
-    function signalIntentWithConditions(SignalIntentParams calldata _params, bytes32 _conditionsHash)
-        external
-        nonReentrant
-        whenNotPaused
-    {
-        if (_conditionsHash == bytes32(0)) revert ZeroValue();
-        _signalIntent(_params, _conditionsHash);
-    }
-
-    function _signalIntent(SignalIntentParams calldata _params, bytes32 _conditionsHash) internal {
         // Checks
-        _validateSignalIntent(_params, _conditionsHash);
+        _validateSignalIntent(_params);
         _executeHookIfSet(depositPreIntentHooks[_params.escrow][_params.depositId], _params);
 
         // Effects
@@ -152,7 +140,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (managerFee > MAX_MANAGER_FEE) revert FeeExceedsMaximum(managerFee, MAX_MANAGER_FEE);  // policy cap (e.g., 5%)
         intentManagerFeeRecipient[intentHash] = managerFeeRecipient;
         intentManagerFee[intentHash] = managerFee;
-        intentConditions[intentHash] = _conditionsHash;
+        intentConditions[intentHash] = _params.conditionsHash;
 
         Intent storage storedIntent = intents[intentHash];
         storedIntent.owner = msg.sender;
@@ -569,7 +557,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     /**
      * @notice Validates an intent before it is signaled.
      */
-    function _validateSignalIntent(SignalIntentParams calldata _intent, bytes32 _conditionsHash) internal view {
+    function _validateSignalIntent(SignalIntentParams calldata _intent) internal view {
         // Check if account can have multiple intents
         bool canHaveMultipleIntents = relayerRegistry.isWhitelistedRelayer(msg.sender) || allowMultipleIntents;
         if (!canHaveMultipleIntents && accountIntents[msg.sender].length > 0) {
@@ -607,14 +595,14 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (_intent.conversionRate < minConversionRate) revert RateBelowMinimum(_intent.conversionRate, minConversionRate);
 
         address intentGatingService = IEscrow(_intent.escrow).getDepositGatingService(_intent.depositId, _intent.paymentMethod);
-        if (_conditionsHash != bytes32(0) && intentGatingService == address(0)) revert ConditionsRequireGatingService();
+        if (_intent.conditionsHash != bytes32(0) && intentGatingService == address(0)) revert ConditionsRequireGatingService();
         if (intentGatingService != address(0)) {
             // Check if signature has expired
             if (block.timestamp > _intent.signatureExpiration) {
                 revert SignatureExpired(_intent.signatureExpiration, block.timestamp);
             }
 
-            if (!_isValidIntentGatingSignature(_intent, intentGatingService, msg.sender, _conditionsHash)) {
+            if (!_isValidIntentGatingSignature(_intent, intentGatingService, msg.sender)) {
                 revert InvalidSignature();
             }
         }
@@ -839,8 +827,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     function _isValidIntentGatingSignature(
         SignalIntentParams calldata _intent,
         address _intentGatingService,
-        address _caller,
-        bytes32 _conditionsHash
+        address _caller
     )
         internal
         view
@@ -861,8 +848,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
             chainId
         );
 
-        if (_conditionsHash != bytes32(0)) {
-            message = abi.encodePacked(message, _conditionsHash);
+        if (_intent.conditionsHash != bytes32(0)) {
+            message = abi.encodePacked(message, _intent.conditionsHash);
         }
 
         bytes32 verifierPayload = keccak256(message).toEthSignedMessageHash();

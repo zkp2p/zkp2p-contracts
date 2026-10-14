@@ -266,7 +266,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
     }
 
     function test_O4SignalRevertsBeforeRegistration() public {
-        IOrchestratorV4.SignalIntentParams memory params = abi.decode(abi.encode(_defaultParams()), (IOrchestratorV4.SignalIntentParams));
+        IOrchestratorV4.SignalIntentParams memory params = _defaultV4Params();
         vm.expectRevert(
             abi.encodeWithSelector(IntentLifecycleHookV2.UnauthorizedOrchestrator.selector, address(orchestratorV4))
         );
@@ -393,7 +393,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         );
         vm.prank(depositor);
         whitelist.setEnabled(address(escrow), depositId, METHOD, true);
-        IOrchestratorV4.SignalIntentParams memory params = abi.decode(abi.encode(_defaultParams()), (IOrchestratorV4.SignalIntentParams));
+        IOrchestratorV4.SignalIntentParams memory params = _defaultV4Params();
         vm.expectRevert(
             abi.encodeWithSelector(
                 IntentLifecycleHookV2.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker
@@ -443,12 +443,32 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         vm.stopPrank();
     }
 
+    function _defaultV4Params() private view returns (IOrchestratorV4.SignalIntentParams memory) {
+        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        return IOrchestratorV4.SignalIntentParams({
+            escrow: params.escrow,
+            depositId: params.depositId,
+            amount: params.amount,
+            to: params.to,
+            paymentMethod: params.paymentMethod,
+            fiatCurrency: params.fiatCurrency,
+            conversionRate: params.conversionRate,
+            referralFees: params.referralFees,
+            gatingServiceSignature: params.gatingServiceSignature,
+            signatureExpiration: params.signatureExpiration,
+            postIntentHook: params.postIntentHook,
+            preIntentHookData: params.preIntentHookData,
+            data: params.data,
+            conditionsHash: bytes32(0)
+        });
+    }
+
     function _signalO4() private returns (bytes32 id) {
         id = bytes32(
             uint256(keccak256(abi.encodePacked(address(orchestratorV4), orchestratorV4.intentCounter())))
                 % CIRCOM_PRIME_FIELD
         );
-        IOrchestratorV4.SignalIntentParams memory params = abi.decode(abi.encode(_defaultParams()), (IOrchestratorV4.SignalIntentParams));
+        IOrchestratorV4.SignalIntentParams memory params = _defaultV4Params();
         params.to = other;
         vm.prank(taker);
         orchestratorV4.signalIntent(params);

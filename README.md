@@ -994,8 +994,8 @@ then returns `balanceFunded`, the uncapped `attestedReleaseAmount`, verified `Pa
 and signed/validated `IntentSnapshot`. Dynamic extension bytes are a separate trailing return
 value; unsigned metadata is never returned. O3 reads the V1 prefix, and O4 uses the capped
 release amount and balance flag, and checks the signed extension's conditions hash for every intent.
-IOrchestratorV4 owns its Intent, SignalIntentParams and FulfillIntentParams structs with the
-same ABI layouts as V3.
+IOrchestratorV4 keeps Intent and FulfillIntentParams ABI-identical to V3. Its SignalIntentParams
+keeps V3's fields in order and appends bytes32 conditionsHash after data.
 
 ### Deferred lifecycle compatibility
 
@@ -1007,10 +1007,11 @@ supportsInterface. OrchestratorV3 and IntentLifecycleHookV1 remain unchanged.
 
 ### O4 intent conditions
 
-`signalIntentWithConditions(params, conditionsHash)` requires a nonzero hash and a deposit gating
-service. The gating service signs the existing 336-byte packed message with the 32-byte hash
-appended (368 bytes total). `signalIntent(params)` retains its original calldata and signature
-format. `intentConditions(intentHash)` exposes the hash until the intent is pruned.
+`signalIntent(params)` accepts `conditionsHash` as the last field, after `data`.
+A nonzero hash requires a deposit gating service, which signs the existing 336-byte packed
+message with the 32-byte hash appended (368 bytes total). `bytes32(0)` means no conditions
+and preserves the plain V3 gating message byte-for-byte. The added field changes O4's calldata
+selector and ERC-165 interface id. `intentConditions(intentHash)` exposes the hash until pruning.
 
 The hash is opaque on-chain. UPV4's signed `extensionData` word 0 is the attested conditions
 hash, zero when none. An absent extension or one shorter than 32 bytes attests zero. On every
