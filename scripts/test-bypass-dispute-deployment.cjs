@@ -625,7 +625,8 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
   const requiredAbiFunctions = /** @type {Array<[string, string[]]>} */ ([
     ["CascadeDisputeProtectionPolicy", ["claimFor", "onDeferredPayoutFunded"]],
     ["StakeVaultCascade", ["payOutStake"]],
-    ["OrchestratorV4", ["lifecycleHookInterfaceId"]],
+    ["OrchestratorV4", ["supportsInterface"]],
+    ["IntentLifecycleHookV2", ["supportsInterface"]],
     ["UnifiedPaymentVerifierV4", ["addPaymentMethod", "DOMAIN_SEPARATOR"]],
   ]);
   for (const [recordName, functionNames] of requiredAbiFunctions) {

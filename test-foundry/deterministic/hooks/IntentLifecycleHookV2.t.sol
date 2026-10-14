@@ -119,6 +119,13 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         assertEq(orchestrator.intentCounter(), beforeCounter);
     }
 
+    function test_RejectsRegisteredNonERC165Caller() public {
+        orchestratorRegistry.addOrchestrator(address(token));
+        vm.prank(address(token));
+        vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV2.UnsupportedOrchestrator.selector, address(token)));
+        hook.onIntentSignaled(ID);
+    }
+
     function test_UnregisteredCallerRejected() public {
         bytes memory reason = abi.encodeWithSelector(IntentLifecycleHookV2.UnauthorizedOrchestrator.selector, address(this));
         vm.expectRevert(reason);
@@ -182,11 +189,14 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         }
     }
 
-    function test_InterfaceIdMarker() public {
+    function test_SupportsInterface() public {
         bytes4 expected = IIntentLifecycleHookV2.onIntentSignaled.selector
             ^ IIntentLifecycleHookV2.onIntentCancelled.selector ^ IIntentLifecycleHookV2.settleIntent.selector
-            ^ IIntentLifecycleHookV2.onDeferredPayoutFunded.selector ^ IIntentLifecycleHookV2.lifecycleHookInterfaceId.selector;
-        assertEq(hook.lifecycleHookInterfaceId(), expected);
+            ^ IIntentLifecycleHookV2.onDeferredPayoutFunded.selector;
+        assertTrue(hook.supportsInterface(expected));
+        assertTrue(hook.supportsInterface(0x01ffc9a7));
+        assertFalse(hook.supportsInterface(0xffffffff));
+        assertFalse(hook.supportsInterface(type(IOrchestratorV4).interfaceId));
         assertEq(expected, type(IIntentLifecycleHookV2).interfaceId);
         assertEq(address(hook.orchestratorRegistry()), address(orchestratorRegistry));
         assertEq(address(hook.whitelistPolicy()), address(whitelist));
@@ -199,8 +209,8 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         stub.signal(hook, missing);
     }
 
-    function test_RejectsInvalidInterfaceMarkers() public {
-        bytes memory callData = abi.encodeWithSelector(IIntentLifecycleHookV2.lifecycleHookInterfaceId.selector);
+    function test_RejectsInvalidERC165Responses() public {
+        bytes memory callData = abi.encodeWithSignature("supportsInterface(bytes4)", type(IOrchestratorV4).interfaceId);
         for (uint256 i; i < 4; ++i) {
             if (i == 0) vm.mockCallRevert(address(stub), callData, "");
             else vm.mockCall(address(stub), callData, i == 1 ? bytes("") : i == 2 ? bytes(hex"12345678") : abi.encode(bytes4(0)));

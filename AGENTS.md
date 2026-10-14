@@ -467,3 +467,11 @@ and signed/validated `IntentSnapshot`. Dynamic extension bytes are a separate tr
 value; unsigned metadata is never returned. O3 reads the V1 prefix, and O4 uses the capped
 release amount and balance flag while ignoring the additional data. IOrchestratorV4 owns its
 Intent, SignalIntentParams and FulfillIntentParams structs with the same ABI layouts as V3.
+
+### Deferred lifecycle compatibility
+
+OrchestratorV4 and IntentLifecycleHookV2 use standard ERC-165 checks in both directions.
+O4 accepts zero or a hook advertising IIntentLifecycleHookV2; V2 admission requires a
+registered caller advertising IOrchestratorV4. Both advertise IERC165 and reject
+0xffffffff. The protocol interfaces contain only their own functions, excluding
+supportsInterface. OrchestratorV3 and IntentLifecycleHookV1 remain unchanged.

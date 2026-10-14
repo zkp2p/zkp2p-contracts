@@ -2,22 +2,18 @@
 
 pragma solidity ^0.8.18;
 
+import {ERC165Checker} from "@openzeppelin/contracts/utils/introspection/ERC165Checker.sol";
+import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
+
 import {IIntentLifecycleHookV2} from "../interfaces/IIntentLifecycleHookV2.sol";
 import {ICascadeDisputeProtectionPolicy} from "../interfaces/ICascadeDisputeProtectionPolicy.sol";
 import {IOrchestratorRegistry} from "../interfaces/IOrchestratorRegistry.sol";
 import {IOrchestratorV4} from "../interfaces/IOrchestratorV4.sol";
 import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
 
-interface IDeferredSettlementOrchestrator {
-    /// @notice Returns the supported lifecycle settlement interface.
-    function lifecycleHookInterfaceId() external view returns (bytes4);
-    /// @notice Returns canonical intent data.
-    function getIntent(bytes32 _intentHash) external view returns (IOrchestratorV4.Intent memory);
-}
-
 /// @notice Routes whitelist admission and cascade settlement for compatible registered orchestrators.
 /// @dev Governance must drain outstanding intents before deregistering an orchestrator.
-contract IntentLifecycleHookV2 is IIntentLifecycleHookV2 {
+contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
     /* ============ State Variables ============ */
 
     IOrchestratorRegistry public immutable orchestratorRegistry;
@@ -55,14 +51,13 @@ contract IntentLifecycleHookV2 is IIntentLifecycleHookV2 {
      * @inheritdoc IIntentLifecycleHookV2
      */
     function onIntentSignaled(bytes32 _intentHash) external override onlyOrchestrator {
-        (bool success, bytes memory result) = msg.sender.staticcall(
-            abi.encodeWithSelector(IDeferredSettlementOrchestrator.lifecycleHookInterfaceId.selector)
-        );
-        if (!success || result.length != 32) revert UnsupportedOrchestrator(msg.sender);
-        if (bytes32(result) != bytes32(type(IIntentLifecycleHookV2).interfaceId)) {
+        // O3 ignores the vault returned by settleIntent and pays intent.to directly.
+        // Deferred settlement would stay AWAITING_FUNDING with no lock, silently removing seller dispute protection.
+        // Only V4-compatible orchestrators may use this hook.
+        if (!ERC165Checker.supportsInterface(msg.sender, type(IOrchestratorV4).interfaceId)) {
             revert UnsupportedOrchestrator(msg.sender);
         }
-        IOrchestratorV4.Intent memory intent = IDeferredSettlementOrchestrator(msg.sender).getIntent(_intentHash);
+        IOrchestratorV4.Intent memory intent = IOrchestratorV4(msg.sender).getIntent(_intentHash);
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
 
         bool isWhitelistEnabled = whitelistPolicy.enabled(intent.escrow, intent.depositId, intent.paymentMethod);
@@ -106,9 +101,9 @@ contract IntentLifecycleHookV2 is IIntentLifecycleHookV2 {
         disputeProtectionPolicy.onDeferredPayoutFunded(_intentHash);
     }
 
-    /// @inheritdoc IIntentLifecycleHookV2
-    function lifecycleHookInterfaceId() external pure override returns (bytes4) {
-        return type(IIntentLifecycleHookV2).interfaceId;
+    /// @notice Reports ERC-165 and IIntentLifecycleHookV2 support.
+    function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
+        return interfaceId == type(IIntentLifecycleHookV2).interfaceId || super.supportsInterface(interfaceId);
     }
 
     /* ============ Modifiers ============ */

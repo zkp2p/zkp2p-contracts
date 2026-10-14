@@ -12,14 +12,20 @@ import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionP
 import {PaymentVerifierMock} from "contracts/mocks/PaymentVerifierMock.sol";
 import {LifecycleHookV2Mock} from "../../mocks/LifecycleHookV2Mock.sol";
 
-contract WrongLifecycleMarker {
-    /// @notice Returns an unsupported marker.
-    function lifecycleHookInterfaceId() external pure returns (bytes4) {
-        return 0xdeadbeef;
+contract WrongLifecycleInterface {
+    /// @notice Rejects only the hook interface, including an invalid ERC-165 advertisement.
+    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
+        return interfaceId != type(IIntentLifecycleHookV2).interfaceId;
     }
 }
 
-contract ShortLifecycleMarker {
+contract ERC165OnlyHook {
+    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
+        return interfaceId == 0x01ffc9a7;
+    }
+}
+
+contract ShortERC165Response {
     fallback() external {
         assembly {
             return(0, 1)
@@ -27,7 +33,7 @@ contract ShortLifecycleMarker {
     }
 }
 
-contract MalformedLifecycleMarker {
+contract InvalidERC165Response {
     fallback() external {
         bytes4 marker = type(IIntentLifecycleHookV2).interfaceId;
         assembly {
@@ -166,9 +172,13 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
     }
 
     function test_InterfaceId() public view {
-        assertEq(orchestrator.lifecycleHookInterfaceId(), type(IIntentLifecycleHookV2).interfaceId);
-        assertEq(hook.lifecycleHookInterfaceId(), type(IIntentLifecycleHookV2).interfaceId);
-        assertEq(verifier.lifecycleHookInterfaceId(), type(IIntentLifecycleHookV2).interfaceId);
+        assertTrue(orchestrator.supportsInterface(type(IOrchestratorV4).interfaceId));
+        assertTrue(orchestrator.supportsInterface(0x01ffc9a7));
+        assertFalse(orchestrator.supportsInterface(0xffffffff));
+        assertFalse(orchestrator.supportsInterface(type(IIntentLifecycleHookV2).interfaceId));
+        assertTrue(hook.supportsInterface(type(IIntentLifecycleHookV2).interfaceId));
+        assertTrue(hook.supportsInterface(0x01ffc9a7));
+        assertFalse(hook.supportsInterface(0xffffffff));
     }
 
     function test_IntentHashesDifferFromV3() public {
@@ -199,12 +209,13 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
         _rejectHook(address(oldHook));
     }
 
-    function test_SetLifecycleHookRejectsWrongMarkerAndCodeless() public {
-        _rejectHook(address(new WrongLifecycleMarker()));
+    function test_SetLifecycleHookRejectsWrongInterfaceAndCodeless() public {
+        _rejectHook(address(new WrongLifecycleInterface()));
+        _rejectHook(address(new ERC165OnlyHook()));
         _rejectHook(address(token));
         _rejectHook(other);
-        _rejectHook(address(new ShortLifecycleMarker()));
-        _rejectHook(address(new MalformedLifecycleMarker()));
+        _rejectHook(address(new ShortERC165Response()));
+        _rejectHook(address(new InvalidERC165Response()));
     }
 
     function test_SetLifecycleHookAcceptsV2AndZero() public {

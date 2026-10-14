@@ -144,9 +144,6 @@ interface IOrchestratorV4 {
     error TransferFailed(address recipient, uint256 amount);
     error EscrowLockFailed();
 
-    /// @notice Returns the supported deferred-settlement lifecycle interface id.
-    function lifecycleHookInterfaceId() external pure returns (bytes4);
-
     /* ============ View Functions ============ */
 
     /// @notice Returns the active intent.

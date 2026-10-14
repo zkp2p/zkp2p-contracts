@@ -2,6 +2,9 @@
 
 pragma solidity ^0.8.18;
 
+import {ERC165Checker} from "@openzeppelin/contracts/utils/introspection/ERC165Checker.sol";
+import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
+
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -33,7 +36,7 @@ import { ReferralFeeLib } from "./lib/ReferralFeeLib.sol";
  * @dev Deferred settlement skips the post-intent hook. intent.data is never read by the protocol;
  * it is stored and forwarded only as opaque post-intent hook data.
  */
-contract OrchestratorV4 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
+contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
 
     using AddressArrayUtils for address[];
     using Bytes32ArrayUtils for bytes32[];
@@ -387,11 +390,11 @@ contract OrchestratorV4 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
         address hookAddress = address(_hook);
         if (hookAddress != address(0)) {
             if (hookAddress.code.length == 0) revert InvalidLifecycleHook(hookAddress);
-            (bool success, bytes memory result) = hookAddress.staticcall(
-                abi.encodeWithSelector(IIntentLifecycleHookV2.lifecycleHookInterfaceId.selector)
-            );
-            if (!success || result.length < 32) revert InvalidLifecycleHook(hookAddress);
-            if (bytes32(result) != bytes32(type(IIntentLifecycleHookV2).interfaceId)) {
+            // Settlement needs settleIntent to return the deferral vault and onDeferredPayoutFunded support.
+            // A V1 hook allows signaling but makes every fulfil and manual release revert.
+            // Hooks are snapshotted per intent, so switching hooks later cannot repair those intents.
+            // Reject incompatible hooks at configuration time.
+            if (!ERC165Checker.supportsInterface(hookAddress, type(IIntentLifecycleHookV2).interfaceId)) {
                 revert InvalidLifecycleHook(hookAddress);
             }
         }
@@ -488,11 +491,9 @@ contract OrchestratorV4 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
 
     /* ============ External View Functions ============ */
 
-    /**
-     * @notice Returns the supported deferred-settlement lifecycle interface id.
-     */
-    function lifecycleHookInterfaceId() external pure returns (bytes4) {
-        return type(IIntentLifecycleHookV2).interfaceId;
+    /// @notice Reports ERC-165 and IOrchestratorV4 support.
+    function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
+        return interfaceId == type(IOrchestratorV4).interfaceId || super.supportsInterface(interfaceId);
     }
 
     /**

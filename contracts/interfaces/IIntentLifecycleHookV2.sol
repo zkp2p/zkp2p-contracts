@@ -26,6 +26,4 @@ interface IIntentLifecycleHookV2 {
     /// @notice Accounts for the net payout transferred to the deferral vault.
     function onDeferredPayoutFunded(bytes32 _intentHash) external;
 
-    /// @notice Marker both sides check: a V2 hook returns type(IIntentLifecycleHookV2).interfaceId.
-    function lifecycleHookInterfaceId() external pure returns (bytes4);
 }

@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
+import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
+
 import {IIntentLifecycleHookV2} from "contracts/interfaces/IIntentLifecycleHookV2.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @notice Configurable lifecycle callbacks for OrchestratorV4 tests.
-contract LifecycleHookV2Mock is IIntentLifecycleHookV2 {
+contract LifecycleHookV2Mock is ERC165, IIntentLifecycleHookV2 {
     bool public revertOnSignal;
     bool public revertOnCallback;
     bool public revertOnFunding;
@@ -91,8 +93,8 @@ contract LifecycleHookV2Mock is IIntentLifecycleHookV2 {
         fundedCalls++;
     }
 
-    /// @inheritdoc IIntentLifecycleHookV2
-    function lifecycleHookInterfaceId() external pure override returns (bytes4) {
-        return type(IIntentLifecycleHookV2).interfaceId;
+    /// @notice Reports ERC-165 and IIntentLifecycleHookV2 support.
+    function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
+        return interfaceId == type(IIntentLifecycleHookV2).interfaceId || super.supportsInterface(interfaceId);
     }
 }

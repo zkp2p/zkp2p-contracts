@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
+import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
+
 import {IIntentLifecycleHookV2} from "contracts/interfaces/IIntentLifecycleHookV2.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 
-contract OrchestratorV4Stub {
+contract OrchestratorV4Stub is ERC165 {
     mapping(bytes32 => IOrchestratorV4.Intent) internal intents;
 
     /// @notice Stores canonical intent data for a test.
@@ -17,9 +19,9 @@ contract OrchestratorV4Stub {
         return intents[_intentHash];
     }
 
-    /// @notice Reports support for deferred lifecycle settlement.
-    function lifecycleHookInterfaceId() external pure returns (bytes4) {
-        return type(IIntentLifecycleHookV2).interfaceId;
+    /// @notice Reports ERC-165 and IOrchestratorV4 support.
+    function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
+        return interfaceId == type(IOrchestratorV4).interfaceId || super.supportsInterface(interfaceId);
     }
 
     /// @notice Calls admission as the registered orchestrator.

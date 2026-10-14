@@ -2,7 +2,6 @@
 pragma solidity ^0.8.18;
 
 import { IPaymentVerifierV2 } from "contracts/interfaces/IPaymentVerifierV2.sol";
-import { IIntentLifecycleHookV2 } from "contracts/interfaces/IIntentLifecycleHookV2.sol";
 import { IPaymentVerifier } from "contracts/interfaces/IPaymentVerifier.sol";
 import { IOrchestrator } from "contracts/interfaces/IOrchestrator.sol";
 import { IOrchestratorV2 } from "contracts/interfaces/IOrchestratorV2.sol";
@@ -33,11 +32,6 @@ contract PaymentVerifierV2Mock is IPaymentVerifierV2 {
     /// @notice Configures the signed balance flag returned by the mock.
     function setBalanceFunded(bool _balanceFunded) external {
         balanceFunded = _balanceFunded;
-    }
-
-    /// @notice Returns the V2 lifecycle marker used by the fixture.
-    function lifecycleHookInterfaceId() external pure returns (bytes4) {
-        return type(IIntentLifecycleHookV2).interfaceId;
     }
 
     bool public shouldVerifyPayment;
