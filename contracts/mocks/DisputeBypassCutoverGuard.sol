@@ -2,35 +2,32 @@
 
 pragma solidity ^0.8.18;
 
-import {IActivationPolicy, InventoryTuple} from "./DisputeMethodScopedActivationTypes.sol";
 import {
     DisputeBypassTrustSurfaceChecks,
     IBypassActivationVault,
+    IBypassActivationCascadePolicy,
     BypassTrustSurface
 } from "./DisputeBypassActivationTypes.sol";
 
 /**
  * @title DisputeBypassCutoverGuard
- * @notice Binds the bypass cutover to its proof-time trust surface and depositor inventory.
+ * @notice Binds the cutover that registers O4 while O3 keeps its August lifecycle hook.
  * @dev The predecessor dispute writer stays because pre-cutover intents keep settling through the predecessor policy.
  */
 contract DisputeBypassCutoverGuard is DisputeBypassTrustSurfaceChecks {
     bool private immutable expectVaultAcceptOwnership;
     bool private immutable expectPolicyAcceptOwnership;
-    InventoryTuple[] private inventoryTuples;
 
     constructor(
         BypassTrustSurface memory _expected,
         bool _expectVaultAcceptOwnership,
-        bool _expectPolicyAcceptOwnership,
-        InventoryTuple[] memory _inventoryTuples
+        bool _expectPolicyAcceptOwnership
     ) DisputeBypassTrustSurfaceChecks(_expected) {
         expectVaultAcceptOwnership = _expectVaultAcceptOwnership;
         expectPolicyAcceptOwnership = _expectPolicyAcceptOwnership;
-        inventoryTuples = _inventoryTuples;
     }
 
-    /// @notice Reverts unless the complete prepared cutover state and depositor opt-outs still match.
+    /// @notice Reverts unless the prepared cutover state matches and O4 remains unregistered.
     function assertReady() external view {
         _assertTrustSurface();
         _assertOwnership();
@@ -43,14 +40,7 @@ contract DisputeBypassCutoverGuard is DisputeBypassTrustSurfaceChecks {
         _assertLifecycleHook(expected.predecessorHook);
         _assertFreshPolicyConfiguration();
 
-        IActivationPolicy fresh = IActivationPolicy(expected.freshPolicy);
-        for (uint256 tupleIndex = 0; tupleIndex < inventoryTuples.length; tupleIndex++) {
-            InventoryTuple memory tuple = inventoryTuples[tupleIndex];
-            bool actual = fresh.isDisputeProtectionEnabled(tuple.escrow, tuple.depositId, tuple.paymentMethod);
-            if (actual) {
-                revert InventoryTupleProtectionMismatch(tuple.escrow, tuple.depositId, tuple.paymentMethod, actual);
-            }
-        }
+        _assertOrchestratorV4Registration(false);
     }
 
     function _assertOwnership() private view {
@@ -62,7 +52,7 @@ contract DisputeBypassCutoverGuard is DisputeBypassTrustSurfaceChecks {
         address wantedPendingOwner = expectVaultAcceptOwnership ? expected.safe : address(0);
         if (actual != wantedPendingOwner) revert FreshVaultPendingOwnerMismatch(actual);
 
-        IActivationPolicy fresh = IActivationPolicy(expected.freshPolicy);
+        IBypassActivationCascadePolicy fresh = IBypassActivationCascadePolicy(expected.freshPolicy);
         actual = fresh.owner();
         wantedOwner = expectPolicyAcceptOwnership ? expected.deployer : expected.safe;
         if (actual != wantedOwner) revert FreshPolicyOwnerMismatch(actual);

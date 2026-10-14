@@ -6,12 +6,12 @@ import {DisputeBypassTrustSurfaceChecks, BypassTrustSurface} from "./DisputeBypa
 
 /**
  * @title DisputeBypassCutoverPostcondition
- * @notice Verifies the complete bypass cutover target state.
+ * @notice Verifies O4 registration and the unchanged O3 hook in fork simulation only.
  */
 contract DisputeBypassCutoverPostcondition is DisputeBypassTrustSurfaceChecks {
     constructor(BypassTrustSurface memory _expected) DisputeBypassTrustSurfaceChecks(_expected) {}
 
-    /// @notice Reverts unless ownership, writers, routes, and the lifecycle hook match the activated stack.
+    /// @notice Reverts unless the activated stack matches and O3 keeps its August lifecycle hook.
     function assertPostconditions() external view {
         _assertTrustSurface();
         _assertFreshSafeOwnership();
@@ -24,6 +24,7 @@ contract DisputeBypassCutoverPostcondition is DisputeBypassTrustSurfaceChecks {
         nullifierWriters[0] = expected.verifier;
         _assertNullifierWriters(nullifierWriters);
         _assertRoutes(expected.verifier);
-        _assertLifecycleHook(expected.freshHook);
+        _assertLifecycleHook(expected.predecessorHook);
+        _assertOrchestratorV4Registration(true);
     }
 }

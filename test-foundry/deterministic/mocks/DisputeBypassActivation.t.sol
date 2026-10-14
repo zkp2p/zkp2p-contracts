@@ -5,7 +5,14 @@ import {StakeVault} from "contracts/StakeVault.sol";
 import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
-import {InventoryTuple} from "contracts/mocks/DisputeMethodScopedActivationTypes.sol";
+import {OrchestratorV4} from "contracts/OrchestratorV4.sol";
+import {
+    CascadeDisputeProtectionPolicy,
+    IPredecessorDisputeProtectionPolicy
+} from "contracts/hooks/CascadeDisputeProtectionPolicy.sol";
+import {IntentLifecycleHookV2} from "contracts/hooks/IntentLifecycleHookV2.sol";
+import {IIntentLifecycleHook} from "contracts/interfaces/IIntentLifecycleHook.sol";
+import {IIntentLifecycleHookV2} from "contracts/interfaces/IIntentLifecycleHookV2.sol";
 import {BypassTrustSurface, DisputeBypassTrustSurfaceChecks} from "contracts/mocks/DisputeBypassActivationTypes.sol";
 import {DisputeBypassCutoverGuard} from "contracts/mocks/DisputeBypassCutoverGuard.sol";
 import {DisputeBypassCutoverPostcondition} from "contracts/mocks/DisputeBypassCutoverPostcondition.sol";
@@ -40,13 +47,15 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
     StakeVault internal predecessorVault;
     StakeVault internal freshVault;
     DisputeProtectionPolicy internal predecessorPolicy;
-    DisputeProtectionPolicy internal freshPolicy;
+    CascadeDisputeProtectionPolicy internal freshPolicy;
     AddressGroupRegistry internal groupRegistry;
     WhitelistPolicy internal whitelistPolicy;
     IntentLifecycleHookV1 internal predecessorHook;
-    IntentLifecycleHookV1 internal freshHook;
+    IntentLifecycleHookV2 internal freshHook;
+    OrchestratorV4 internal orchestratorV4;
 
     function setUp() public override {
+        vm.chainId(CHAIN_ID);
         super.setUp();
         safe = makeAddr("safe");
         witness = makeAddr("witness");
@@ -61,11 +70,17 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         freshVault = new StakeVault(address(this), token, address(0), 0);
         predecessorPolicy =
             new DisputeProtectionPolicy(address(this), predecessorVault, disputeVerifier, disputeRegistry);
-        freshPolicy = new DisputeProtectionPolicy(address(this), freshVault, disputeVerifier, disputeRegistry);
+        freshPolicy = new CascadeDisputeProtectionPolicy(
+            address(this),
+            freshVault,
+            disputeVerifier,
+            disputeRegistry,
+            IPredecessorDisputeProtectionPolicy(address(predecessorPolicy))
+        );
         groupRegistry = new AddressGroupRegistry();
         whitelistPolicy = new WhitelistPolicy(groupRegistry, escrowRegistry, orchestratorRegistry);
         predecessorHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, predecessorPolicy);
-        freshHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, freshPolicy);
+        freshHook = new IntentLifecycleHookV2(orchestratorRegistry, whitelistPolicy, freshPolicy);
         predecessorVault.initializeController(address(predecessorPolicy));
         freshVault.initializeController(address(freshPolicy));
         disputeRegistry.addWritePermission(address(predecessorPolicy));
@@ -75,8 +90,18 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         freshPolicy.setRiskWindow(METHOD, predecessorPolicy.getRiskWindow(METHOD));
         orchestrator.setLifecycleHook(predecessorHook);
         orchestrator.setAllowMultipleIntents(false);
-        vm.prank(depositor);
-        freshPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, false);
+        orchestratorV4 = new OrchestratorV4(
+            address(this),
+            orchestrator.chainId(),
+            address(escrowRegistry),
+            address(paymentVerifierRegistry),
+            address(relayerRegistry),
+            orchestrator.protocolFee(),
+            orchestrator.protocolFeeRecipient()
+        );
+        orchestratorV4.setLifecycleHook(freshHook);
+        orchestratorV4.setAllowMultipleIntents(orchestrator.allowMultipleIntents());
+        orchestratorV4.transferOwnership(safe);
         vm.prank(depositor);
         predecessorPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, false);
         predecessorPolicy.setRiskWindow(PAYPAL, RISK_WINDOW);
@@ -110,7 +135,8 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         _transfer(predecessorPolicy, true);
         _transfer(disputeVerifier, true);
         _transfer(freshVault, false);
-        _transfer(freshPolicy, false);
+        freshPolicy.transferOwnership(safe);
+        assertFalse(freshPolicy.isDisputeProtectionEnabled(address(escrow), depositId, METHOD));
     }
 
     function test_CutoverPassesForEveryConditionalAcceptanceCombination() public {
@@ -241,10 +267,10 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         );
     }
 
-    function test_GuardRejectsHookDrift() public {
+    function test_GuardRejectsO3HookDrift() public {
         DisputeBypassCutoverGuard guard = _guard(_surface(), true, true);
         vm.prank(safe);
-        orchestrator.setLifecycleHook(freshHook);
+        orchestrator.setLifecycleHook(IIntentLifecycleHook(address(freshHook)));
         _expectReady(
             guard,
             abi.encodeWithSelector(DisputeBypassTrustSurfaceChecks.LifecycleHookMismatch.selector, address(freshHook))
@@ -253,11 +279,18 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
 
     function test_GuardRejectsFreshVaultDelay() public {
         StakeVault delayedVault = new StakeVault(address(this), token, address(0), CONTROLLER_CHANGE_DELAY);
-        DisputeProtectionPolicy delayedPolicy =
-            new DisputeProtectionPolicy(address(this), delayedVault, disputeVerifier, disputeRegistry);
-        IntentLifecycleHookV1 delayedHook =
-            new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, delayedPolicy);
+        CascadeDisputeProtectionPolicy delayedPolicy = new CascadeDisputeProtectionPolicy(
+            address(this),
+            delayedVault,
+            disputeVerifier,
+            disputeRegistry,
+            IPredecessorDisputeProtectionPolicy(address(predecessorPolicy))
+        );
+        IntentLifecycleHookV2 delayedHook =
+            new IntentLifecycleHookV2(orchestratorRegistry, whitelistPolicy, delayedPolicy);
         delayedVault.initializeController(address(delayedPolicy));
+        vm.prank(safe);
+        orchestratorV4.setLifecycleHook(delayedHook);
         BypassTrustSurface memory surface = _surface();
         surface.freshVault = address(delayedVault);
         surface.freshPolicy = address(delayedPolicy);
@@ -347,19 +380,123 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         );
     }
 
-    function test_GuardRejectsInventoryTupleReenabled() public {
+    function test_GuardAllowsExplicitFreshPolicyReenable() public {
         DisputeBypassCutoverGuard guard = _guard(_surface(), true, true);
         vm.prank(depositor);
         freshPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, true);
+        guard.assertReady();
+    }
+
+    function test_GuardRejectsOrchestratorV4AlreadyRegistered() public {
+        DisputeBypassCutoverGuard guard = _guard(_surface(), true, true);
+        vm.prank(safe);
+        orchestratorRegistry.addOrchestrator(address(orchestratorV4));
+        _expectReady(
+            guard,
+            abi.encodeWithSelector(DisputeBypassTrustSurfaceChecks.OrchestratorV4RegistrationMismatch.selector, true)
+        );
+    }
+
+    function test_GuardRejectsOrchestratorV4HookDrift() public {
+        DisputeBypassCutoverGuard guard = _guard(_surface(), true, true);
+        vm.prank(safe);
+        orchestratorV4.setLifecycleHook(IIntentLifecycleHookV2(address(0)));
         _expectReady(
             guard,
             abi.encodeWithSelector(
-                DisputeBypassTrustSurfaceChecks.InventoryTupleProtectionMismatch.selector,
-                address(escrow),
-                depositId,
-                METHOD,
-                true
+                DisputeBypassTrustSurfaceChecks.OrchestratorV4LifecycleHookMismatch.selector, address(0)
             )
+        );
+    }
+
+    function test_GuardRejectsOrchestratorV4ConfigDrift() public {
+        DisputeBypassCutoverGuard guard = _guard(_surface(), true, true);
+        vm.prank(safe);
+        orchestratorV4.setProtocolFeeRecipient(other);
+        _expectReady(
+            guard,
+            abi.encodeWithSelector(
+                DisputeBypassTrustSurfaceChecks.OrchestratorV4ProtocolFeeRecipientMismatch.selector, other
+            )
+        );
+        vm.startPrank(safe);
+        orchestratorV4.setProtocolFeeRecipient(protocolFeeRecipient);
+        orchestratorV4.setAllowMultipleIntents(true);
+        vm.stopPrank();
+        _expectReady(
+            guard,
+            abi.encodeWithSelector(
+                DisputeBypassTrustSurfaceChecks.OrchestratorV4AllowMultipleIntentsMismatch.selector, true
+            )
+        );
+        vm.startPrank(safe);
+        orchestratorV4.setAllowMultipleIntents(false);
+        orchestratorV4.setRelayerRegistry(other);
+        vm.stopPrank();
+        _expectReady(
+            guard,
+            abi.encodeWithSelector(
+                DisputeBypassTrustSurfaceChecks.OrchestratorV4RelayerRegistryMismatch.selector, other
+            )
+        );
+    }
+
+    function test_GuardRejectsOrchestratorV4OwnerDrift() public {
+        DisputeBypassCutoverGuard guard = _guard(_surface(), true, true);
+        vm.prank(safe);
+        orchestratorV4.transferOwnership(other);
+        _expectReady(
+            guard, abi.encodeWithSelector(DisputeBypassTrustSurfaceChecks.OrchestratorV4OwnerMismatch.selector, other)
+        );
+    }
+
+    function test_GuardRejectsOrchestratorRegistryOwnerDrift() public {
+        DisputeBypassCutoverGuard guard = _guard(_surface(), true, true);
+        vm.prank(safe);
+        orchestratorRegistry.transferOwnership(other);
+        _expectReady(
+            guard,
+            abi.encodeWithSelector(DisputeBypassTrustSurfaceChecks.OrchestratorRegistryOwnerMismatch.selector, other)
+        );
+    }
+
+    function test_PostconditionRejectsO3HookChange() public {
+        BypassTrustSurface memory surface = _surface();
+        DisputeBypassCutoverPostcondition postcondition = new DisputeBypassCutoverPostcondition(surface);
+        _executeBatch(_guard(surface, true, true), true, true);
+        vm.prank(safe);
+        orchestrator.setLifecycleHook(IIntentLifecycleHook(address(freshHook)));
+        vm.expectRevert(
+            abi.encodeWithSelector(DisputeBypassTrustSurfaceChecks.LifecycleHookMismatch.selector, address(freshHook))
+        );
+        postcondition.assertPostconditions();
+    }
+
+    function test_PostconditionRejectsUnregisteredO4() public {
+        BypassTrustSurface memory surface = _surface();
+        DisputeBypassCutoverPostcondition postcondition = new DisputeBypassCutoverPostcondition(surface);
+        _executeBatch(_guard(surface, true, true), true, true);
+        vm.prank(safe);
+        orchestratorRegistry.removeOrchestrator(address(orchestratorV4));
+        vm.expectRevert(
+            abi.encodeWithSelector(DisputeBypassTrustSurfaceChecks.OrchestratorV4RegistrationMismatch.selector, false)
+        );
+        postcondition.assertPostconditions();
+    }
+
+    function test_GuardRejectsFreshPolicyPredecessorDrift() public {
+        CascadeDisputeProtectionPolicy wrongPolicy = new CascadeDisputeProtectionPolicy(
+            address(this), freshVault, disputeVerifier, disputeRegistry, IPredecessorDisputeProtectionPolicy(address(0))
+        );
+        IntentLifecycleHookV2 wrongHook = new IntentLifecycleHookV2(orchestratorRegistry, whitelistPolicy, wrongPolicy);
+        vm.prank(safe);
+        orchestratorV4.setLifecycleHook(wrongHook);
+        BypassTrustSurface memory surface = _surface();
+        surface.freshPolicy = address(wrongPolicy);
+        surface.freshHook = address(wrongHook);
+        _expectReady(
+            _guard(surface, true, true),
+            abi.encodeWithSelector(DisputeBypassTrustSurfaceChecks.FreshPolicyPredecessorMismatch.selector, address(0))
         );
     }
 
@@ -404,9 +541,8 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
     }
 
     function _expectConstructorReverts(BypassTrustSurface memory surface, bytes memory reason) internal {
-        InventoryTuple[] memory inventory = _inventory();
         vm.expectRevert(reason);
-        new DisputeBypassCutoverGuard(surface, true, true, inventory);
+        new DisputeBypassCutoverGuard(surface, true, true);
         vm.expectRevert(reason);
         new DisputeBypassCutoverPostcondition(surface);
     }
@@ -420,7 +556,7 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         internal
         returns (DisputeBypassCutoverGuard)
     {
-        return new DisputeBypassCutoverGuard(surface, acceptVault, acceptPolicy, _inventory());
+        return new DisputeBypassCutoverGuard(surface, acceptVault, acceptPolicy);
     }
 
     function _executeBatch(DisputeBypassCutoverGuard guard, bool acceptVault, bool acceptPolicy) internal {
@@ -440,7 +576,7 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
             );
         }
         nullifierRegistryV2.removeWritePermission(address(retiredVerifier));
-        orchestrator.setLifecycleHook(freshHook);
+        orchestratorRegistry.addOrchestrator(address(orchestratorV4));
         vm.stopPrank();
     }
 
@@ -461,6 +597,7 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         surface.safe = safe;
         surface.disputeRegistry = address(disputeRegistry);
         surface.orchestrator = address(orchestrator);
+        surface.orchestratorV4 = address(orchestratorV4);
         surface.orchestratorRegistry = address(orchestratorRegistry);
         surface.escrowRegistry = address(escrowRegistry);
         surface.paymentVerifierRegistry = address(paymentVerifierRegistry);
@@ -499,11 +636,6 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         surface.riskWindows = new uint64[](3);
         surface.riskWindows[0] = RISK_WINDOW;
         surface.riskWindows[1] = RISK_WINDOW;
-    }
-
-    function _inventory() internal view returns (InventoryTuple[] memory tuples) {
-        tuples = new InventoryTuple[](1);
-        tuples[0] = InventoryTuple(address(escrow), depositId, METHOD);
     }
 
     function _transfer(StakeVault target, bool accept) internal {

@@ -18,6 +18,7 @@ struct BypassTrustSurface {
     address safe;
     address deployer;
     address orchestrator;
+    address orchestratorV4;
     address orchestratorRegistry;
     address escrowRegistry;
     address paymentVerifierRegistry;
@@ -46,6 +47,32 @@ struct BypassTrustSurface {
     uint256[] currencyCounts;
     bytes32[] riskWindowMethods;
     uint64[] riskWindows;
+}
+
+interface IBypassActivationOrchestratorV4 is IActivationOrchestrator {
+    /// @notice Returns the orchestrator signing chain ID.
+    function chainId() external view returns (uint256);
+}
+
+interface IBypassActivationOwnedRegistry is IActivationOwned, IActivationOrchestratorRegistry {}
+
+interface IBypassActivationCascadePolicy is IActivationOwned {
+    /// @notice Returns the pending governance owner.
+    function pendingOwner() external view returns (address);
+    /// @notice Returns whether new protected intents are paused.
+    function admissionsPaused() external view returns (bool);
+    /// @notice Returns the dispute verifier.
+    function disputeVerifier() external view returns (address);
+    /// @notice Returns the dispute nullifier registry.
+    function disputeNullifierRegistry() external view returns (address);
+    /// @notice Returns the stake vault.
+    function stakeVault() external view returns (address);
+    /// @notice Returns the policy supplying inherited opt-outs.
+    function predecessorPolicy() external view returns (address);
+    /// @notice Returns whether a lifecycle hook is authorized.
+    function isLifecycleHookAuthorized(address hook) external view returns (bool);
+    /// @notice Returns the risk window for a payment method.
+    function getRiskWindow(bytes32 paymentMethod) external view returns (uint64);
 }
 
 interface IBypassActivationPaymentVerifierRegistry is IActivationOwned {
@@ -80,6 +107,20 @@ interface IBypassActivationVault is IActivationVault {
 abstract contract DisputeBypassTrustSurfaceChecks {
     error RiskWindowConfigurationLengthMismatch(uint256 paymentMethodCount, uint256 riskWindowCount);
     error RegistryOwnerMismatch(address actual);
+    error OrchestratorRegistryOwnerMismatch(address actual);
+    error FreshPolicyPredecessorMismatch(address actual);
+    error OrchestratorV4OwnerMismatch(address actual);
+    error OrchestratorV4PausedMismatch(bool actual);
+    error OrchestratorV4ChainIdMismatch(uint256 actual);
+    error OrchestratorV4EscrowRegistryMismatch(address actual);
+    error OrchestratorV4PaymentVerifierRegistryMismatch(address actual);
+    error OrchestratorV4RelayerRegistryMismatch(address actual);
+    error OrchestratorV4ProtocolFeeMismatch(uint256 actual);
+    error OrchestratorV4ProtocolFeeRecipientMismatch(address actual);
+    error OrchestratorV4AllowMultipleIntentsMismatch(bool actual);
+    error OrchestratorV4LifecycleHookMismatch(address actual);
+    error OrchestratorV4RegistrationMismatch(bool actual);
+
     error OrchestratorOwnerMismatch(address actual);
     error OrchestratorPausedMismatch(bool actual);
     error OrchestratorEscrowRegistryMismatch(address actual);
@@ -128,7 +169,6 @@ abstract contract DisputeBypassTrustSurfaceChecks {
     error DisputeWriterCountMismatch(uint256 actual);
     error DisputeWriterMismatch(uint256 index, address actual);
     error LifecycleHookMismatch(address actual);
-    error InventoryTupleProtectionMismatch(address escrow, uint256 depositId, bytes32 paymentMethod, bool actual);
 
     error CurrencyCountLengthMismatch(uint256 actual);
     error CurrencyConfigurationLengthMismatch(uint256 actual, uint256 expectedTotal);
@@ -177,7 +217,10 @@ abstract contract DisputeBypassTrustSurfaceChecks {
         _assertVerifierSurface();
         address actual = IActivationRegistry(expected.disputeRegistry).owner();
         if (actual != expected.safe) revert RegistryOwnerMismatch(actual);
+        actual = IBypassActivationOwnedRegistry(expected.orchestratorRegistry).owner();
+        if (actual != expected.safe) revert OrchestratorRegistryOwnerMismatch(actual);
         _assertOrchestratorSurface();
+        _assertOrchestratorV4Surface();
         _assertFreshHookSurface();
         _assertWhitelistSurface();
         _assertAttestationSurface();
@@ -213,6 +256,42 @@ abstract contract DisputeBypassTrustSurfaceChecks {
         actualBool =
             IActivationOrchestratorRegistry(expected.orchestratorRegistry).isOrchestrator(expected.orchestrator);
         if (!actualBool) revert OrchestratorRegistrationMismatch(actualBool);
+    }
+
+    function _assertOrchestratorV4Surface() private view {
+        IBypassActivationOrchestratorV4 targetOrchestrator = IBypassActivationOrchestratorV4(expected.orchestratorV4);
+        address actualAddress = targetOrchestrator.owner();
+        if (actualAddress != expected.safe) revert OrchestratorV4OwnerMismatch(actualAddress);
+        bool actualBool = targetOrchestrator.paused();
+        if (actualBool) revert OrchestratorV4PausedMismatch(actualBool);
+        actualAddress = targetOrchestrator.escrowRegistry();
+        if (actualAddress != expected.escrowRegistry) revert OrchestratorV4EscrowRegistryMismatch(actualAddress);
+        actualAddress = targetOrchestrator.paymentVerifierRegistry();
+        if (actualAddress != expected.paymentVerifierRegistry) {
+            revert OrchestratorV4PaymentVerifierRegistryMismatch(actualAddress);
+        }
+        actualAddress = targetOrchestrator.relayerRegistry();
+        if (actualAddress != expected.relayerRegistry) revert OrchestratorV4RelayerRegistryMismatch(actualAddress);
+        uint256 actualUint256 = targetOrchestrator.protocolFee();
+        if (actualUint256 != 0) revert OrchestratorV4ProtocolFeeMismatch(actualUint256);
+        actualAddress = targetOrchestrator.protocolFeeRecipient();
+        if (actualAddress != expected.protocolFeeRecipient) {
+            revert OrchestratorV4ProtocolFeeRecipientMismatch(actualAddress);
+        }
+        actualBool = targetOrchestrator.allowMultipleIntents();
+        if (actualBool != expected.allowMultipleIntents) {
+            revert OrchestratorV4AllowMultipleIntentsMismatch(actualBool);
+        }
+        actualUint256 = targetOrchestrator.chainId();
+        if (actualUint256 != block.chainid) revert OrchestratorV4ChainIdMismatch(actualUint256);
+        actualAddress = targetOrchestrator.lifecycleHook();
+        if (actualAddress != expected.freshHook) revert OrchestratorV4LifecycleHookMismatch(actualAddress);
+    }
+
+    function _assertOrchestratorV4Registration(bool wanted) internal view {
+        bool actual =
+            IBypassActivationOwnedRegistry(expected.orchestratorRegistry).isOrchestrator(expected.orchestratorV4);
+        if (actual != wanted) revert OrchestratorV4RegistrationMismatch(actual);
     }
 
     function _assertFreshHookSurface() private view {
@@ -299,13 +378,15 @@ abstract contract DisputeBypassTrustSurfaceChecks {
     }
 
     function _assertFreshStackSurface() private view {
-        IActivationPolicy fresh = IActivationPolicy(expected.freshPolicy);
+        IBypassActivationCascadePolicy fresh = IBypassActivationCascadePolicy(expected.freshPolicy);
         address actualAddress = fresh.disputeVerifier();
         if (actualAddress != expected.disputeVerifier) revert FreshPolicyDisputeVerifierMismatch(actualAddress);
         actualAddress = fresh.disputeNullifierRegistry();
         if (actualAddress != expected.disputeRegistry) revert FreshPolicyDisputeRegistryMismatch(actualAddress);
         actualAddress = fresh.stakeVault();
         if (actualAddress != expected.freshVault) revert FreshPolicyStakeVaultMismatch(actualAddress);
+        actualAddress = fresh.predecessorPolicy();
+        if (actualAddress != expected.predecessorPolicy) revert FreshPolicyPredecessorMismatch(actualAddress);
 
         IBypassActivationVault vault = IBypassActivationVault(expected.freshVault);
         actualAddress = vault.controller();
@@ -323,7 +404,7 @@ abstract contract DisputeBypassTrustSurfaceChecks {
     }
 
     function _assertFreshPolicyConfiguration() internal view {
-        IActivationPolicy fresh = IActivationPolicy(expected.freshPolicy);
+        IBypassActivationCascadePolicy fresh = IBypassActivationCascadePolicy(expected.freshPolicy);
         bool actualBool = fresh.admissionsPaused();
         if (actualBool) revert FreshPolicyAdmissionsPausedMismatch(actualBool);
         actualBool = fresh.isLifecycleHookAuthorized(expected.freshHook);
@@ -344,7 +425,7 @@ abstract contract DisputeBypassTrustSurfaceChecks {
         if (actual != expected.safe) revert FreshVaultOwnerMismatch(actual);
         actual = vault.pendingOwner();
         if (actual != address(0)) revert FreshVaultPendingOwnerMismatch(actual);
-        IActivationPolicy fresh = IActivationPolicy(expected.freshPolicy);
+        IBypassActivationCascadePolicy fresh = IBypassActivationCascadePolicy(expected.freshPolicy);
         actual = fresh.owner();
         if (actual != expected.safe) revert FreshPolicyOwnerMismatch(actual);
         actual = fresh.pendingOwner();
