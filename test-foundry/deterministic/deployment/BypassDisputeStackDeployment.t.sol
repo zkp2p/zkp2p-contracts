@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-// Plan 2 rewrites this lane test
-
 import {OrchestratorV3Fixture} from "../helpers/OrchestratorV3Fixture.sol";
+import {OrchestratorV4} from "contracts/OrchestratorV4.sol";
+import {
+    CascadeDisputeProtectionPolicy,
+    IPredecessorDisputeProtectionPolicy
+} from "contracts/hooks/CascadeDisputeProtectionPolicy.sol";
+import {IntentLifecycleHookV2} from "contracts/hooks/IntentLifecycleHookV2.sol";
+import {ICascadeDisputeProtectionPolicy as P} from "contracts/interfaces/ICascadeDisputeProtectionPolicy.sol";
+import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionPolicy.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
 import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
@@ -38,9 +44,13 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
     StakeVault internal predecessorVault;
     StakeVault internal freshVault;
     DisputeProtectionPolicy internal predecessorPolicy;
-    DisputeProtectionPolicy internal freshPolicy;
+    CascadeDisputeProtectionPolicy internal freshPolicy;
     IntentLifecycleHookV1 internal predecessorHook;
-    IntentLifecycleHookV1 internal freshHook;
+    IntentLifecycleHookV2 internal freshHook;
+    OrchestratorV4 internal orchestratorV4;
+    UnifiedPaymentVerifierV4 internal staleVerifier;
+    StakeVault internal staleVault;
+    DisputeProtectionPolicy internal stalePolicy;
     bytes32[] internal originalMethods;
     mapping(bytes32 => bytes32[]) internal originalCurrencies;
 
@@ -96,9 +106,15 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
 
     function _deployLane45() private {
         freshVault = new StakeVault(address(this), token, address(0), 0);
-        freshPolicy = new DisputeProtectionPolicy(address(this), freshVault, disputeVerifier, disputeNullifiers);
+        freshPolicy = new CascadeDisputeProtectionPolicy(
+            address(this),
+            freshVault,
+            disputeVerifier,
+            disputeNullifiers,
+            IPredecessorDisputeProtectionPolicy(address(predecessorPolicy))
+        );
         freshVault.initializeController(address(freshPolicy));
-        freshHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelist, freshPolicy);
+        freshHook = new IntentLifecycleHookV2(orchestratorRegistry, whitelist, freshPolicy);
         freshPolicy.setLifecycleHookAuthorization(address(freshHook), true);
         // Lane 45 copies nonzero windows in the pinned paypal, venmo order.
         freshPolicy.setRiskWindow(PAYPAL, predecessorPolicy.getRiskWindow(PAYPAL));
@@ -107,10 +123,26 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         for (uint256 index; index < originalMethods.length; index++) {
             successor.addPaymentMethod(originalMethods[index]);
         }
+        orchestratorV4 = new OrchestratorV4(
+            address(this),
+            orchestrator.chainId(),
+            address(orchestrator.escrowRegistry()),
+            address(orchestrator.paymentVerifierRegistry()),
+            address(orchestrator.relayerRegistry()),
+            orchestrator.protocolFee(),
+            orchestrator.protocolFeeRecipient()
+        );
+        orchestratorV4.setLifecycleHook(freshHook);
+        if (orchestrator.allowMultipleIntents()) orchestratorV4.setAllowMultipleIntents(true);
     }
 
     function _activateLane46() private {
         disputeNullifiers.addWritePermission(address(freshPolicy));
+        _rotateVerifierAndRegister(address(predecessor));
+    }
+
+    function _rotateVerifierAndRegister(address retiredVerifier) private {
+        assertFalse(orchestratorRegistry.isOrchestrator(address(orchestratorV4)));
         nullifiers.addWritePermission(address(successor));
         for (uint256 remaining = originalMethods.length; remaining > 0; remaining--) {
             paymentVerifierRegistry.removePaymentMethod(originalMethods[remaining - 1]);
@@ -119,8 +151,8 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
             bytes32 method = originalMethods[index];
             paymentVerifierRegistry.addPaymentMethod(method, address(successor), originalCurrencies[method]);
         }
-        nullifiers.removeWritePermission(address(predecessor));
-        orchestrator.setLifecycleHook(freshHook);
+        nullifiers.removeWritePermission(retiredVerifier);
+        orchestratorRegistry.addOrchestrator(address(orchestratorV4));
     }
 
     function test_ZeroDelayVaultInitializesBeforeLiabilities() public {
@@ -178,7 +210,10 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         expected[0] = address(predecessorPolicy);
         expected[1] = address(freshPolicy);
         assertEq(disputeNullifiers.getWriters(), expected);
-        assertEq(address(orchestrator.lifecycleHook()), address(freshHook));
+        assertEq(address(orchestrator.lifecycleHook()), address(predecessorHook));
+        assertEq(address(orchestratorV4.lifecycleHook()), address(freshHook));
+        assertTrue(orchestratorRegistry.isOrchestrator(address(orchestratorV4)));
+        assertTrue(orchestratorRegistry.isOrchestrator(address(orchestrator)));
         assertTrue(predecessorPolicy.isLifecycleHookAuthorized(address(predecessorHook)));
         assertTrue(freshPolicy.isLifecycleHookAuthorized(address(freshHook)));
         assertEq(predecessorVault.controller(), address(predecessorPolicy));
@@ -190,33 +225,29 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         token.approve(address(predecessorVault), INTENT_AMOUNT);
         predecessorVault.depositStake(INTENT_AMOUNT);
         vm.stopPrank();
-        bytes32 first = _signalProtected(predecessorPolicy);
-        _settle(first, _signedProof(first, PAYMENT_ID, predecessor.DOMAIN_SEPARATOR()));
+        bytes32 first = _signalDefault();
+        _settle(first, _signedProof(first, PAYMENT_ID, predecessor.DOMAIN_SEPARATOR(), false));
         bytes32 nullifier = keccak256(abi.encodePacked(METHOD, PAYMENT_ID));
         assertEq(nullifiers.intentHashByNullifier(nullifier), first);
         assertEq(token.balanceOf(taker), INTENT_AMOUNT);
         assertEq(predecessorVault.lockedStake(taker), INTENT_AMOUNT);
         _activateLane46();
-        vm.startPrank(taker);
-        token.approve(address(freshVault), INTENT_AMOUNT);
-        freshVault.depositStake(INTENT_AMOUNT);
-        vm.stopPrank();
-        bytes32 second = _signalProtected(freshPolicy);
-        bytes memory proof = _signedProof(second, PAYMENT_ID, successor.DOMAIN_SEPARATOR());
+        bytes32 second = _signalO4();
+        bytes memory proof = _signedProof(second, PAYMENT_ID, successor.DOMAIN_SEPARATOR(), true);
         vm.expectRevert("Nullifier has already been used");
-        _settle(second, proof);
+        _settleO4(second, proof);
         assertEq(nullifiers.intentHashByNullifier(nullifier), first);
         assertEq(nullifiers.nullifierByIntentHash(first), nullifier);
         assertEq(nullifiers.nullifierByIntentHash(second), bytes32(0));
-        assertEq(orchestrator.getIntent(second).owner, taker);
+        assertEq(orchestratorV4.getIntent(second).owner, taker);
         _assertRetiredVerifierCannotWrite(second);
     }
 
     function _assertRetiredVerifierCannotWrite(bytes32 intentHash) private {
         bytes32 paymentId = keccak256("fresh-payment-retired-verifier");
-        bytes memory proof = _signedProof(intentHash, paymentId, predecessor.DOMAIN_SEPARATOR());
+        bytes memory proof = _signedProof(intentHash, paymentId, predecessor.DOMAIN_SEPARATOR(), false);
         vm.expectRevert(abi.encodeWithSelector(INullifierRegistryV2.UnauthorizedWriter.selector, address(predecessor)));
-        vm.prank(address(orchestrator));
+        vm.prank(address(orchestratorV4));
         predecessor.verifyPayment(IPaymentVerifier.VerifyPaymentData(intentHash, proof, ""));
         assertFalse(nullifiers.isNullified(keccak256(abi.encodePacked(METHOD, paymentId))));
     }
@@ -237,25 +268,227 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         assertNotEq(keccak256(abi.encode(actual)), keccak256(abi.encode(originalMethods)));
     }
 
-    function _signalProtected(DisputeProtectionPolicy) private returns (bytes32) {
+    function test_O4SignalRevertsBeforeRegistration() public {
         IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
-        params.data = "";
-        return _signal(taker, params);
+        vm.expectRevert(
+            abi.encodeWithSelector(IntentLifecycleHookV2.UnauthorizedOrchestrator.selector, address(orchestratorV4))
+        );
+        vm.prank(taker);
+        orchestratorV4.signalIntent(params);
+    }
+
+    function test_O4ConfigMatchesO3() public view {
+        assertEq(orchestratorV4.owner(), orchestrator.owner());
+        assertFalse(orchestratorV4.paused());
+        assertEq(orchestratorV4.chainId(), orchestrator.chainId());
+        assertEq(address(orchestratorV4.escrowRegistry()), address(orchestrator.escrowRegistry()));
+        assertEq(address(orchestratorV4.paymentVerifierRegistry()), address(orchestrator.paymentVerifierRegistry()));
+        assertEq(address(orchestratorV4.relayerRegistry()), address(orchestrator.relayerRegistry()));
+        assertEq(orchestratorV4.protocolFee(), orchestrator.protocolFee());
+        assertEq(orchestratorV4.protocolFeeRecipient(), orchestrator.protocolFeeRecipient());
+        assertEq(orchestratorV4.allowMultipleIntents(), orchestrator.allowMultipleIntents());
+        assertEq(address(orchestratorV4.lifecycleHook()), address(freshHook));
+        assertFalse(orchestratorRegistry.isOrchestrator(address(orchestratorV4)));
+    }
+
+    function test_O3PendingIntentFulfilsThroughUPV4AfterCutover() public {
+        _stake(predecessorVault);
+        bytes32 id = _signalDefault();
+        assertEq(predecessorVault.lockedStake(taker), INTENT_AMOUNT);
+        _activateLane46();
+        _settle(id, _signedProof(id, PAYMENT_ID, successor.DOMAIN_SEPARATOR(), true));
+        assertEq(token.balanceOf(taker), INTENT_AMOUNT);
+        assertEq(predecessorVault.lockedStake(taker), INTENT_AMOUNT);
+        assertEq(
+            uint256(predecessorPolicy.getDisputeProtectionIntent(id).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.SETTLED)
+        );
+        assertEq(address(orchestrator.lifecycleHook()), address(predecessorHook));
+    }
+
+    function test_O4DeferredSettlementAfterCutover() public {
+        _activateLane46();
+        bytes32 id = _signalO4();
+        assertEq(freshVault.stakeBalance(taker), 0);
+        _settleO4(id, _signedProof(id, PAYMENT_ID, successor.DOMAIN_SEPARATOR(), true));
+        assertEq(token.balanceOf(other), 0);
+        assertEq(token.balanceOf(address(freshVault)), INTENT_AMOUNT);
+        (address owner, uint256 amount,) = freshVault.locks(id);
+        assertEq(owner, other);
+        assertEq(amount, INTENT_AMOUNT);
+        assertEq(
+            uint256(freshPolicy.getDisputeProtectionIntent(id).collateralSource),
+            uint256(P.CollateralSource.DEFERRED_PAYOUT)
+        );
+    }
+
+    function test_O4BalanceFundedPaysNowAfterCutover() public {
+        _activateLane46();
+        bytes32 id = _signalO4();
+        _settleO4(id, _signedProof(id, PAYMENT_ID, successor.DOMAIN_SEPARATOR(), true, true));
+        assertEq(token.balanceOf(other), INTENT_AMOUNT);
+        assertEq(token.balanceOf(address(freshVault)), 0);
+        assertEq(freshVault.lockedStake(other), 0);
+        assertEq(
+            uint256(freshPolicy.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.BYPASS)
+        );
+    }
+
+    function test_O4ManualReleasePaysNowAfterCutover() public {
+        _activateLane46();
+        bytes32 id = _signalO4();
+        uint256 vaultBalance = token.balanceOf(address(freshVault));
+        vm.prank(depositor);
+        orchestratorV4.releaseFundsToPayer(id);
+        assertEq(token.balanceOf(other), INTENT_AMOUNT);
+        assertEq(token.balanceOf(address(freshVault)), vaultBalance);
+        assertEq(freshVault.lockedStake(other), 0);
+        assertEq(
+            uint256(freshPolicy.getDisputeProtectionIntent(id).collateralSource),
+            uint256(P.CollateralSource.MANUAL_RELEASE)
+        );
+    }
+
+    function test_O4InheritsO3PolicyOptOut() public {
+        vm.prank(depositor);
+        predecessorPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, false);
+        _deployLane45();
+        _activateLane46();
+        assertEq(address(freshPolicy.predecessorPolicy()), address(predecessorPolicy));
+        assertFalse(freshPolicy.isDisputeProtectionEnabled(address(escrow), depositId, METHOD));
+        bytes32 id = _signalO4();
+        assertEq(
+            uint256(freshPolicy.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE)
+        );
+        vm.prank(depositor);
+        whitelist.setEnabled(address(escrow), depositId, METHOD, true);
+        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IntentLifecycleHookV2.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker
+            )
+        );
+        vm.prank(taker);
+        orchestratorV4.signalIntent(params);
+    }
+
+    function test_StagingModelRestoresO3HookAndRetiresStaleVerifier() public {
+        _prepareStaging();
+        _stake(staleVault);
+        bytes32 pending = _signalDefault();
+        assertEq(staleVault.lockedStake(taker), INTENT_AMOUNT);
+        bytes32[] memory opened = new bytes32[](1);
+        opened[0] = pending;
+        // Staging commits these two actions before checking the drain precondition.
+        orchestrator.setLifecycleHook(predecessorHook);
+        disputeNullifiers.addWritePermission(address(freshPolicy));
+        vm.expectRevert("Stale bypass intents still open");
+        this.rotateStaging(opened);
+        assertFalse(nullifiers.isWriter(address(successor)));
+        assertFalse(orchestratorRegistry.isOrchestrator(address(orchestratorV4)));
+        vm.prank(taker);
+        orchestrator.cancelIntent(pending);
+        this.rotateStaging(opened);
+        assertEq(address(orchestrator.lifecycleHook()), address(predecessorHook));
+        address[] memory expected = new address[](1);
+        expected[0] = address(successor);
+        assertEq(nullifiers.getWriters(), expected);
+        assertTrue(disputeNullifiers.isWriter(address(stalePolicy)));
+        assertTrue(orchestratorRegistry.isOrchestrator(address(orchestratorV4)));
+        bytes32 id = _signalO4();
+        bytes memory proof = _signedProof(id, PAYMENT_ID, staleVerifier.DOMAIN_SEPARATOR(), true);
+        vm.expectRevert(
+            abi.encodeWithSelector(INullifierRegistryV2.UnauthorizedWriter.selector, address(staleVerifier))
+        );
+        vm.prank(address(orchestratorV4));
+        staleVerifier.verifyPayment(IPaymentVerifier.VerifyPaymentData(id, proof, ""));
+    }
+
+    function _stake(StakeVault target) private {
+        token.transfer(taker, INTENT_AMOUNT);
+        vm.startPrank(taker);
+        token.approve(address(target), INTENT_AMOUNT);
+        target.depositStake(INTENT_AMOUNT);
+        vm.stopPrank();
+    }
+
+    function _signalO4() private returns (bytes32 id) {
+        id = bytes32(
+            uint256(keccak256(abi.encodePacked(address(orchestratorV4), orchestratorV4.intentCounter())))
+                % CIRCOM_PRIME_FIELD
+        );
+        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        params.to = other;
+        vm.prank(taker);
+        orchestratorV4.signalIntent(params);
+    }
+
+    function _prepareStaging() private {
+        orchestrator.setAllowMultipleIntents(false);
+        _deployLane45();
+        staleVerifier = new UnifiedPaymentVerifierV4(orchestratorRegistry, nullifiers, witnesses);
+        nullifiers.removeWritePermission(address(predecessor));
+        nullifiers.addWritePermission(address(staleVerifier));
+        for (uint256 remaining = originalMethods.length; remaining > 0; remaining--) {
+            paymentVerifierRegistry.removePaymentMethod(originalMethods[remaining - 1]);
+        }
+        for (uint256 index; index < originalMethods.length; index++) {
+            bytes32 method = originalMethods[index];
+            staleVerifier.addPaymentMethod(method);
+            paymentVerifierRegistry.addPaymentMethod(method, address(staleVerifier), originalCurrencies[method]);
+        }
+        staleVault = new StakeVault(address(this), token, address(0), 0);
+        stalePolicy = new DisputeProtectionPolicy(address(this), staleVault, disputeVerifier, disputeNullifiers);
+        staleVault.initializeController(address(stalePolicy));
+        // The held no-stake policy is absent; V1 models its pending/cancelled lifecycle.
+        IntentLifecycleHookV1 staleHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelist, stalePolicy);
+        stalePolicy.setLifecycleHookAuthorization(address(staleHook), true);
+        stalePolicy.setRiskWindow(METHOD, RISK_WINDOW);
+        disputeNullifiers.addWritePermission(address(stalePolicy));
+        orchestrator.setLifecycleHook(staleHook);
+        assertEq(orchestratorV4.allowMultipleIntents(), orchestrator.allowMultipleIntents());
+        assertEq(paymentVerifierRegistry.getVerifier(METHOD), address(staleVerifier));
+    }
+
+    function rotateStaging(bytes32[] calldata opened) external {
+        require(msg.sender == address(this));
+        for (uint256 index; index < opened.length; index++) {
+            require(
+                stalePolicy.getDisputeProtectionIntent(opened[index]).status
+                    != IDisputeProtectionPolicy.DisputeProtectionIntentStatus.PENDING,
+                "Stale bypass intents still open"
+            );
+        }
+        _rotateVerifierAndRegister(address(staleVerifier));
     }
 
     function _attestationData(bytes32 intentHash, bytes32 paymentId) private view returns (bytes memory) {
         IOrchestratorV3.Intent memory intent = orchestrator.getIntent(intentHash);
+        if (intent.owner == address(0)) intent = orchestratorV4.getIntent(intentHash);
         return abi.encode(
             UnifiedPaymentVerifierV3.PaymentDetails(METHOD, PAYEE, 5000, USD, block.timestamp * 1000, paymentId),
             UnifiedPaymentVerifierV3.IntentSnapshot(
                 intentHash, intent.amount, METHOD, USD, PAYEE, CONVERSION_RATE, intent.timestamp, 0
-            ),
-            true
+            )
         );
     }
 
-    function _signedProof(bytes32 intentHash, bytes32 paymentId, bytes32 domain) private view returns (bytes memory) {
+    function _signedProof(bytes32 intentHash, bytes32 paymentId, bytes32 domain, bool v4)
+        private
+        view
+        returns (bytes memory)
+    {
+        return _signedProof(intentHash, paymentId, domain, v4, false);
+    }
+
+    function _signedProof(bytes32 intentHash, bytes32 paymentId, bytes32 domain, bool v4, bool balanceFunded)
+        private
+        view
+        returns (bytes memory)
+    {
         bytes memory data = _attestationData(intentHash, paymentId);
+        if (v4) data = bytes.concat(data, abi.encode(balanceFunded));
+        assertEq(data.length, v4 ? 480 : 448);
         bytes32 dataHash = keccak256(data);
         bytes32 structHash = keccak256(
             abi.encode(
@@ -272,6 +505,10 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         return abi.encode(
             UnifiedPaymentVerifierV3.PaymentAttestation(intentHash, INTENT_AMOUNT, dataHash, signatures, data, "")
         );
+    }
+
+    function _settleO4(bytes32 intentHash, bytes memory proof) private {
+        orchestratorV4.fulfillIntent(IOrchestratorV3.FulfillIntentParams(proof, intentHash, "", ""));
     }
 
     function _settle(bytes32 intentHash, bytes memory proof) private {
