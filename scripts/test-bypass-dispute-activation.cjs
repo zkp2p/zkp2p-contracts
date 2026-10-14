@@ -1029,7 +1029,7 @@ test("lane 46 classifies bypass policy activity across O4 registration", () => {
       () => lane.classifyBypassPolicyActivity([event(name)], true),
       {
         message:
-          "Fresh CascadeDisputeProtectionPolicy has lifecycle activity before cutover: " +
+          "Fresh DisputeProtectionPolicyV2 has lifecycle activity before cutover: " +
           `${name} in ${hash(1)}`,
       }
     );
@@ -1185,7 +1185,7 @@ test("lane 45 prepared check delegates activating and active stacks to lane 46",
       name,
       {
         address:
-          name === "CascadeDisputeProtectionPolicy"
+          name === "DisputeProtectionPolicyV2"
             ? wanted.addresses.freshPolicy
             : address(90),
       },
@@ -1480,7 +1480,7 @@ test("Base preparation rejects missing recorded pins before chain access", async
         /** @type {any} */ (fakeHre("base")),
         { assertArtifactGitState() {} }
       ),
-      /Base batch preparation requires recorded pin: StakeVaultCascade/
+      /Base batch preparation requires recorded pin: StakeVaultV2/
     );
   });
 });

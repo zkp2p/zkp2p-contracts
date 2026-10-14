@@ -53,8 +53,8 @@ export const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
     "contracts/registries/NullifierRegistry.sol/NullifierRegistry.json",
   DisputeProtectionPolicy:
     "contracts/hooks/DisputeProtectionPolicy.sol/DisputeProtectionPolicy.json",
-  CascadeDisputeProtectionPolicy:
-    "contracts/hooks/CascadeDisputeProtectionPolicy.sol/CascadeDisputeProtectionPolicy.json",
+  DisputeProtectionPolicyV2:
+    "contracts/hooks/DisputeProtectionPolicyV2.sol/DisputeProtectionPolicyV2.json",
   DisputeVerifier:
     "contracts/unifiedVerifier/DisputeVerifier.sol/DisputeVerifier.json",
   IntentLifecycleHookV1:

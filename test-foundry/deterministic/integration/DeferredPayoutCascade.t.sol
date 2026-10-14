@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-import {CascadeStackFixture} from "../helpers/CascadeStackFixture.sol";
-import {ICascadeDisputeProtectionPolicy as P} from "contracts/interfaces/ICascadeDisputeProtectionPolicy.sol";
+import {DisputeProtectionStackV2Fixture} from "../helpers/DisputeProtectionStackV2Fixture.sol";
+import {IDisputeProtectionPolicyV2 as P} from "contracts/interfaces/IDisputeProtectionPolicyV2.sol";
 import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionPolicy.sol";
 import {IDisputeVerifier} from "contracts/interfaces/IDisputeVerifier.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
@@ -13,7 +13,7 @@ import {StakeVault} from "contracts/StakeVault.sol";
 import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 
-contract DeferredPayoutCascadeTest is CascadeStackFixture {
+contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
     function test_BalanceFundedPaysNowWithoutLock() public {
         bytes32 id = _signalDefault();
         _settle(id, INTENT_AMOUNT, true);

@@ -5,14 +5,14 @@ pragma solidity ^0.8.18;
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-import {ICascadeDisputeProtectionPolicy} from "../interfaces/ICascadeDisputeProtectionPolicy.sol";
+import {IDisputeProtectionPolicyV2} from "../interfaces/IDisputeProtectionPolicyV2.sol";
 import {IDisputeVerifier} from "../interfaces/IDisputeVerifier.sol";
 import {IEscrowV2} from "../interfaces/IEscrowV2.sol";
 import {INullifierRegistry} from "../interfaces/INullifierRegistry.sol";
 import {IStakeVault} from "../interfaces/IStakeVault.sol";
 
 /**
- * @title CascadeDisputeProtectionPolicy
+ * @title DisputeProtectionPolicyV2
  * @notice Selects bypass, existing stake, or deferred payout collateral at settlement.
  * @dev Deferred payouts are stake locks funded by the payout. The token must have no transfer callbacks
  * (canonical USDC only). StakeVault owns collateral accounting; the dedicated dispute registry owns replay state.
@@ -22,7 +22,7 @@ import {IStakeVault} from "../interfaces/IStakeVault.sol";
  * active locks before moving vault control unless the successor explicitly adopts their state.
  * Protection starts on by default for windowed methods. Opt-outs are not carried over; depositors opt out again here.
  */
-contract CascadeDisputeProtectionPolicy is ICascadeDisputeProtectionPolicy, Ownable2Step, ReentrancyGuard {
+contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, ReentrancyGuard {
     /* ============ Constants ============ */
 
     uint64 public constant MAX_RISK_WINDOW = 365 days;
@@ -99,7 +99,7 @@ contract CascadeDisputeProtectionPolicy is ICascadeDisputeProtectionPolicy, Owna
     /* ============ Lifecycle Functions ============ */
 
     /**
-     * @inheritdoc ICascadeDisputeProtectionPolicy
+     * @inheritdoc IDisputeProtectionPolicyV2
      */
     function onIntentSignaled(
         bytes32 _intentHash,
@@ -122,7 +122,7 @@ contract CascadeDisputeProtectionPolicy is ICascadeDisputeProtectionPolicy, Owna
         emit DisputeProtectionIntentOpened(_intentHash, _taker, depositor, _recipient, _paymentMethod, riskWindow);
     }
 
-    /// @inheritdoc ICascadeDisputeProtectionPolicy
+    /// @inheritdoc IDisputeProtectionPolicyV2
     function onIntentCancelled(bytes32 _intentHash) external override onlyLifecycleHook nonReentrant {
         DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_intentHash];
         if (intent.status == DisputeProtectionIntentStatus.NONE) return;
@@ -131,7 +131,7 @@ contract CascadeDisputeProtectionPolicy is ICascadeDisputeProtectionPolicy, Owna
         emit DisputeProtectionIntentCancelled(_intentHash);
     }
 
-    /// @inheritdoc ICascadeDisputeProtectionPolicy
+    /// @inheritdoc IDisputeProtectionPolicyV2
     function onIntentSettled(
         bytes32 _intentHash,
         uint256 _releaseAmount,
@@ -173,7 +173,7 @@ contract CascadeDisputeProtectionPolicy is ICascadeDisputeProtectionPolicy, Owna
         }
     }
 
-    /// @inheritdoc ICascadeDisputeProtectionPolicy
+    /// @inheritdoc IDisputeProtectionPolicyV2
     function onDeferredPayoutFunded(bytes32 _intentHash) external override onlyLifecycleHook nonReentrant {
         DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_intentHash];
         if (intent.status != DisputeProtectionIntentStatus.AWAITING_FUNDING) {

@@ -14,16 +14,16 @@ export const LANE_46_TAG = "46_activate_bypass_dispute_stack";
 
 // Record order follows the resumable deployment steps, not the artifact table.
 export const BYPASS_DEPLOYMENT_NAMES = [
-  "StakeVaultCascade",
-  "CascadeDisputeProtectionPolicy",
+  "StakeVaultV2",
+  "DisputeProtectionPolicyV2",
   "IntentLifecycleHookV2",
   "UnifiedPaymentVerifierV4",
   "OrchestratorV4",
 ] as const;
 export type BypassDeploymentName = (typeof BYPASS_DEPLOYMENT_NAMES)[number];
 export const BYPASS_ARTIFACT_NAMES: Record<BypassDeploymentName, string> = {
-  StakeVaultCascade: "StakeVault",
-  CascadeDisputeProtectionPolicy: "CascadeDisputeProtectionPolicy",
+  StakeVaultV2: "StakeVault",
+  DisputeProtectionPolicyV2: "DisputeProtectionPolicyV2",
   IntentLifecycleHookV2: "IntentLifecycleHookV2",
   UnifiedPaymentVerifierV4: "UnifiedPaymentVerifierV4",
   OrchestratorV4: "OrchestratorV4",

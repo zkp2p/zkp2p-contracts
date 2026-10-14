@@ -6,7 +6,7 @@ import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.s
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {OrchestratorV4} from "contracts/OrchestratorV4.sol";
-import {CascadeDisputeProtectionPolicy} from "contracts/hooks/CascadeDisputeProtectionPolicy.sol";
+import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicyV2.sol";
 import {IntentLifecycleHookV2} from "contracts/hooks/IntentLifecycleHookV2.sol";
 import {IIntentLifecycleHook} from "contracts/interfaces/IIntentLifecycleHook.sol";
 import {IIntentLifecycleHookV2} from "contracts/interfaces/IIntentLifecycleHookV2.sol";
@@ -44,7 +44,7 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
     StakeVault internal predecessorVault;
     StakeVault internal freshVault;
     DisputeProtectionPolicy internal predecessorPolicy;
-    CascadeDisputeProtectionPolicy internal freshPolicy;
+    DisputeProtectionPolicyV2 internal freshPolicy;
     AddressGroupRegistry internal groupRegistry;
     WhitelistPolicy internal whitelistPolicy;
     IntentLifecycleHookV1 internal predecessorHook;
@@ -66,7 +66,7 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         freshVault = new StakeVault(address(this), token, address(0), 0);
         predecessorPolicy =
             new DisputeProtectionPolicy(address(this), predecessorVault, disputeVerifier, disputeRegistry);
-        freshPolicy = new CascadeDisputeProtectionPolicy(
+        freshPolicy = new DisputeProtectionPolicyV2(
             address(this),
             freshVault,
             disputeVerifier,
@@ -305,7 +305,7 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
 
     function test_GuardRejectsFreshVaultDelay() public {
         StakeVault delayedVault = new StakeVault(address(this), token, address(0), CONTROLLER_CHANGE_DELAY);
-        CascadeDisputeProtectionPolicy delayedPolicy = new CascadeDisputeProtectionPolicy(
+        DisputeProtectionPolicyV2 delayedPolicy = new DisputeProtectionPolicyV2(
             address(this),
             delayedVault,
             disputeVerifier,

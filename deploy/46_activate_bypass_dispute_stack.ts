@@ -103,8 +103,8 @@ export const FLAGS = {
 
 const RECORD_NAMES = {
   escrow: "EscrowV2",
-  freshVault: "StakeVaultCascade",
-  freshPolicy: "CascadeDisputeProtectionPolicy",
+  freshVault: "StakeVaultV2",
+  freshPolicy: "DisputeProtectionPolicyV2",
   freshHook: "IntentLifecycleHookV2",
   verifier: "UnifiedPaymentVerifierV4",
   predecessorVault: BYPASS_PREDECESSOR_DEPLOYMENT_NAMES.vault,
@@ -552,7 +552,7 @@ export async function readBypassActivationSnapshot(
     writers: await list(c, "getWriters"),
   });
   const vault = await at("StakeVault", a.freshVault);
-  const policy = await at("CascadeDisputeProtectionPolicy", a.freshPolicy);
+  const policy = await at("DisputeProtectionPolicyV2", a.freshPolicy);
   const predecessorVault = await at("StakeVault", a.predecessorVault);
   const predecessorPolicy = await at(
     "DisputeProtectionPolicy",
@@ -814,7 +814,7 @@ export async function assertBypassActivationSharedState(
       deploymentBlock(record),
       block.number
     ),
-    "CascadeDisputeProtectionPolicy"
+    "DisputeProtectionPolicyV2"
   );
   const beforeCutover = !snapshot.orchestratorV4.registered;
   classifyBypassPolicyActivity(events, beforeCutover);

@@ -159,8 +159,8 @@
     were written before the three `transferOwnership` calls to `MULTI_SIG.base`. The updater is
     `0x81630fb1ab2A7Eab137888b9746b66889f78F091`. All three contracts are Basescan-verified. The lane is immutable
     and pinned in `deployments/immutableDeploymentLanes.ts`.
-- `deploy/45_deploy_bypass_dispute_stack.ts` is retargeted to `StakeVaultCascade` (zero controller delay),
-  `CascadeDisputeProtectionPolicy`, `IntentLifecycleHookV2`, `UnifiedPaymentVerifierV4` and `OrchestratorV4`.
+- `deploy/45_deploy_bypass_dispute_stack.ts` is retargeted to `StakeVaultV2` (zero controller delay),
+  `DisputeProtectionPolicyV2`, `IntentLifecycleHookV2`, `UnifiedPaymentVerifierV4` and `OrchestratorV4`.
   This cascade/O4 source has not executed on Base or Base staging. The existing tag and
   `ENABLE_{STAGING,BASE}_V3_DISPUTE_BYPASS_STACK_DEPLOYMENT=true` select resumable deploy-only steps.
   Lane 45 initializes the vault controller, authorizes HookV2, sets PayPal/Venmo windows and configures O4
@@ -217,7 +217,7 @@
   selection, regenerate outputs with the O4 stack exported by name and update these docs.
   Base requires separate approvals for lane 45, its recording PR with pins, and lane-46 preparation;
   after activation, record evidence/outputs and flip `BYPASS_PAYMENT_BINDING_RECORDED.base` to `true`.
-  Canonical dispute aliases keep describing O3's August stack; O4 consumers use `StakeVaultCascade` and
+  Canonical dispute aliases keep describing O3's August stack; O4 consumers use `StakeVaultV2` and
   the other O4 records by name. Retain stale vault exports for withdrawals. Lane 31 selects UPV4 through
   the binding flag independently of aliases; staging lanes 35/41/43 still pin UPV3 and fail closed.
   Lanes 45/46 remain unpinned until Base executes. RC publication is a later, separately approved boundary.
@@ -254,7 +254,7 @@ This section describes the V1 stack, whose sources now live in `contracts/archiv
 Important ownership boundaries:
 
 - `OrchestratorV4` is OrchestratorV3 plus deferred settlement, and is not a proxy.
-- `CascadeDisputeProtectionPolicy` and `IntentLifecycleHookV2` serve only OrchestratorV4; OrchestratorV3 keeps `DisputeProtectionPolicy` and `IntentLifecycleHookV1`.
+- `DisputeProtectionPolicyV2` and `IntentLifecycleHookV2` serve only OrchestratorV4; OrchestratorV3 keeps `DisputeProtectionPolicy` and `IntentLifecycleHookV1`.
 - `UnifiedPaymentVerifierV4` returns the attestation-signed balance flag and serves both OrchestratorV3 and OrchestratorV4.
 
 ### Minimal Diagram

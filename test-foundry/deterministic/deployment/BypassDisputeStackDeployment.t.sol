@@ -3,9 +3,9 @@ pragma solidity ^0.8.18;
 
 import {OrchestratorV3Fixture} from "../helpers/OrchestratorV3Fixture.sol";
 import {OrchestratorV4} from "contracts/OrchestratorV4.sol";
-import {CascadeDisputeProtectionPolicy} from "contracts/hooks/CascadeDisputeProtectionPolicy.sol";
+import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicyV2.sol";
 import {IntentLifecycleHookV2} from "contracts/hooks/IntentLifecycleHookV2.sol";
-import {ICascadeDisputeProtectionPolicy as P} from "contracts/interfaces/ICascadeDisputeProtectionPolicy.sol";
+import {IDisputeProtectionPolicyV2 as P} from "contracts/interfaces/IDisputeProtectionPolicyV2.sol";
 import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionPolicy.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
 import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
@@ -42,7 +42,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
     StakeVault internal predecessorVault;
     StakeVault internal freshVault;
     DisputeProtectionPolicy internal predecessorPolicy;
-    CascadeDisputeProtectionPolicy internal freshPolicy;
+    DisputeProtectionPolicyV2 internal freshPolicy;
     IntentLifecycleHookV1 internal predecessorHook;
     IntentLifecycleHookV2 internal freshHook;
     OrchestratorV4 internal orchestratorV4;
@@ -104,7 +104,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
 
     function _deployLane45() private {
         freshVault = new StakeVault(address(this), token, address(0), 0);
-        freshPolicy = new CascadeDisputeProtectionPolicy(
+        freshPolicy = new DisputeProtectionPolicyV2(
             address(this),
             freshVault,
             disputeVerifier,

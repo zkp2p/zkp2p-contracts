@@ -93,15 +93,15 @@ async function withEnvironment(values, run) {
 
 test("lane 45 exports its cascade identity, live flags, and zero controller delay", () => {
   assert.deepEqual(BYPASS_DEPLOYMENT_NAMES, [
-    "StakeVaultCascade",
-    "CascadeDisputeProtectionPolicy",
+    "StakeVaultV2",
+    "DisputeProtectionPolicyV2",
     "IntentLifecycleHookV2",
     "UnifiedPaymentVerifierV4",
     "OrchestratorV4",
   ]);
   assert.deepEqual(BYPASS_ARTIFACT_NAMES, {
-    StakeVaultCascade: "StakeVault",
-    CascadeDisputeProtectionPolicy: "CascadeDisputeProtectionPolicy",
+    StakeVaultV2: "StakeVault",
+    DisputeProtectionPolicyV2: "DisputeProtectionPolicyV2",
     IntentLifecycleHookV2: "IntentLifecycleHookV2",
     UnifiedPaymentVerifierV4: "UnifiedPaymentVerifierV4",
     OrchestratorV4: "OrchestratorV4",
@@ -581,7 +581,7 @@ function expectedRouting(state, verifier, writers, hook) {
 
 test("local lane 45 recovers a vault with preexisting stake", async () => {
   const state = await localhostFixture();
-  const vault = await state.deployRecord("StakeVaultCascade", "StakeVault", [
+  const vault = await state.deployRecord("StakeVaultV2", "StakeVault", [
     state.deployer,
     state.usdc.address,
     ethers.constants.AddressZero,
@@ -599,7 +599,7 @@ test("local lane 45 recovers a vault with preexisting stake", async () => {
 
   assert.equal(
     await vault.controller(),
-    state.records.get("CascadeDisputeProtectionPolicy").address
+    state.records.get("DisputeProtectionPolicyV2").address
   );
   assert.equal(await vault.pendingController(), ethers.constants.AddressZero);
   assert.equal((await vault.pendingControllerValidAt()).toString(), "0");
@@ -623,8 +623,8 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
   for (const name of BYPASS_DEPLOYMENT_NAMES)
     assert.ok(state.records.get(name), name);
   const requiredAbiFunctions = /** @type {Array<[string, string[]]>} */ ([
-    ["CascadeDisputeProtectionPolicy", ["claimFor", "onDeferredPayoutFunded"]],
-    ["StakeVaultCascade", ["payOutStake"]],
+    ["DisputeProtectionPolicyV2", ["claimFor", "onDeferredPayoutFunded"]],
+    ["StakeVaultV2", ["payOutStake"]],
     ["OrchestratorV4", ["supportsInterface"]],
     ["IntentLifecycleHookV2", ["supportsInterface"]],
     ["UnifiedPaymentVerifierV4", ["addPaymentMethod", "DOMAIN_SEPARATOR"]],
@@ -644,11 +644,11 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
   assert.equal(state.deployCalls(), initialCalls + 5);
   const vault = await ethers.getContractAt(
     "StakeVault",
-    state.records.get("StakeVaultCascade").address
+    state.records.get("StakeVaultV2").address
   );
   const policy = await ethers.getContractAt(
-    "CascadeDisputeProtectionPolicy",
-    state.records.get("CascadeDisputeProtectionPolicy").address
+    "DisputeProtectionPolicyV2",
+    state.records.get("DisputeProtectionPolicyV2").address
   );
   const hook = state.records.get("IntentLifecycleHookV2").address;
   const upv4 = await ethers.getContractAt(
@@ -694,7 +694,7 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
   await deployLane45(state.fakeHre);
   assert.equal(state.deployCalls(), preparedCalls);
   assert.deepEqual(await routingSnapshot(state), before);
-  const policyAbi = state.records.get("CascadeDisputeProtectionPolicy").abi;
+  const policyAbi = state.records.get("DisputeProtectionPolicyV2").abi;
   for (const name of ["validatePayment", "setIntentNoStake"])
     assert.equal(
       policyAbi.some(
@@ -1606,7 +1606,7 @@ test("lane 45 live step handlers only configure the fresh stack on Base and stag
     const state = {
       contracts: {
         vault: {
-          address: addresses.StakeVaultCascade,
+          address: addresses.StakeVaultV2,
           controller: async () => ethers.constants.AddressZero,
           pendingController: async () => ethers.constants.AddressZero,
           pendingControllerValidAt: async () => 0,
@@ -1616,7 +1616,7 @@ test("lane 45 live step handlers only configure the fresh stack on Base and stag
           transferOwnership: transaction("vault.transferOwnership"),
         },
         policy: {
-          address: addresses.CascadeDisputeProtectionPolicy,
+          address: addresses.DisputeProtectionPolicyV2,
           setLifecycleHookAuthorization: transaction(
             "policy.setLifecycleHookAuthorization"
           ),
@@ -1638,9 +1638,9 @@ test("lane 45 live step handlers only configure the fresh stack on Base and stag
     for (const step of lane45.LANE_45_STEP_KINDS[network])
       await lane45.executeLane45Step(hre, network, context, state, step);
     assert.deepEqual([...records.keys()], BYPASS_DEPLOYMENT_NAMES);
-    assert.deepEqual(records.get("CascadeDisputeProtectionPolicy").args, [
+    assert.deepEqual(records.get("DisputeProtectionPolicyV2").args, [
       pins.deployer,
-      addresses.StakeVaultCascade,
+      addresses.StakeVaultV2,
       pins.disputeVerifier.address,
       pins.disputeNullifierRegistry.address,
     ]);

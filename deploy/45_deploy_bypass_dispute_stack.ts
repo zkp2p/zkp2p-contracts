@@ -82,7 +82,7 @@ export function classifyBypassPolicyActivity(
   if (beforeCutover && lifecycleEvents.length > 0) {
     const event = lifecycleEvents[0];
     throw new Error(
-      `Fresh CascadeDisputeProtectionPolicy has lifecycle activity before cutover: ` +
+      `Fresh DisputeProtectionPolicyV2 has lifecycle activity before cutover: ` +
         `${event.name} in ${event.transactionHash}`
     );
   }
@@ -113,7 +113,7 @@ function deploymentBlock(deployment: Deployment): number {
   const block = deployment.receipt?.blockNumber;
   if (typeof block !== "number" || !Number.isSafeInteger(block) || block < 0) {
     throw new Error(
-      "CascadeDisputeProtectionPolicy lacks deployment block evidence"
+      "DisputeProtectionPolicyV2 lacks deployment block evidence"
     );
   }
   return block;
@@ -125,7 +125,7 @@ async function assertFreshPolicyUnused(
 ): Promise<void> {
   if (!deployment) return;
   const artifact = await hre.deployments.getExtendedArtifact(
-    "CascadeDisputeProtectionPolicy"
+    "DisputeProtectionPolicyV2"
   );
   const logs = await hre.ethers.provider.getLogs({
     address: deployment.address,
@@ -136,7 +136,7 @@ async function assertFreshPolicyUnused(
     decodeFreshStackLogs(
       new utils.Interface(artifact.abi),
       logs,
-      "CascadeDisputeProtectionPolicy"
+      "DisputeProtectionPolicyV2"
     ),
     true
   );
@@ -826,13 +826,13 @@ async function readFreshState(
         BigNumber.from(await vault.controllerChangeDelay()).eq(
           BYPASS_STAKE_VAULT_CONTROLLER_CHANGE_DELAY
         ),
-      "Fresh StakeVaultCascade dependency state drifted"
+      "Fresh StakeVaultV2 dependency state drifted"
     );
     const controller: string = await vault.controller();
     requireState(
       sameAddress(controller, constants.AddressZero) ||
         Boolean(policyRecord && sameAddress(controller, policyRecord.address)),
-      "Fresh StakeVaultCascade controller drifted"
+      "Fresh StakeVaultV2 controller drifted"
     );
     const pendingController: string = await vault.pendingController();
     requireState(
@@ -842,7 +842,7 @@ async function readFreshState(
           Boolean(
             policyRecord && sameAddress(pendingController, policyRecord.address)
           )),
-      "Fresh StakeVaultCascade pending controller drifted"
+      "Fresh StakeVaultV2 pending controller drifted"
     );
     completed["initialize-controller"] = Boolean(
       policyRecord && sameAddress(controller, policyRecord.address)
@@ -853,19 +853,19 @@ async function readFreshState(
         await vault.pendingOwner(),
         context.deployer,
         context.governance,
-        "StakeVaultCascade"
+        "StakeVaultV2"
       );
     } else {
       await assertUntransferredOwnership(
         vault,
         context.deployer,
-        "StakeVaultCascade"
+        "StakeVaultV2"
       );
     }
   }
   if (policyRecord) {
     const policy = (contracts.policy = await hre.ethers.getContractAt(
-      "CascadeDisputeProtectionPolicy",
+      "DisputeProtectionPolicyV2",
       policyRecord.address
     ));
     requireState(
@@ -902,13 +902,13 @@ async function readFreshState(
         await policy.pendingOwner(),
         context.deployer,
         context.governance,
-        "CascadeDisputeProtectionPolicy"
+        "DisputeProtectionPolicyV2"
       );
     } else {
       await assertUntransferredOwnership(
         policy,
         context.deployer,
-        "CascadeDisputeProtectionPolicy"
+        "DisputeProtectionPolicyV2"
       );
     }
   }
@@ -1067,18 +1067,18 @@ async function initializeBypassController(
     requireState(
       sameAddress(pendingController, constants.AddressZero) &&
         BigNumber.from(await vault.pendingControllerValidAt()).isZero(),
-      "Fresh StakeVaultCascade pending controller drifted"
+      "Fresh StakeVaultV2 pending controller drifted"
     );
     return;
   }
   requireState(
     sameAddress(controller, constants.AddressZero),
-    "Fresh StakeVaultCascade controller drifted"
+    "Fresh StakeVaultV2 controller drifted"
   );
   if (sameAddress(pendingController, constants.AddressZero)) {
     requireState(
       BigNumber.from(await vault.pendingControllerValidAt()).isZero(),
-      "Fresh StakeVaultCascade pending controller drifted"
+      "Fresh StakeVaultV2 pending controller drifted"
     );
     if (
       BigNumber.from(await vault.totalStaked()).isZero() &&
@@ -1087,7 +1087,7 @@ async function initializeBypassController(
       await (await vault.initializeController(policy.address)).wait();
     } else {
       console.log(
-        "StakeVaultCascade liabilities forced the zero-delay handover"
+        "StakeVaultV2 liabilities forced the zero-delay handover"
       );
       await (await vault.proposeController(policy.address)).wait();
     }
@@ -1095,7 +1095,7 @@ async function initializeBypassController(
   }
   requireState(
     sameAddress(pendingController, policy.address),
-    "Fresh StakeVaultCascade pending controller drifted"
+    "Fresh StakeVaultV2 pending controller drifted"
   );
   await (await policy.acceptVaultController()).wait();
 }
@@ -1131,14 +1131,14 @@ export async function executeLane45Step(
   step: string
 ): Promise<void> {
   if (step === "deploy-vault") {
-    await deployFresh(hre, "StakeVaultCascade", context.deployer, [
+    await deployFresh(hre, "StakeVaultV2", context.deployer, [
       context.deployer,
       context.stakeToken,
       constants.AddressZero,
       BYPASS_STAKE_VAULT_CONTROLLER_CHANGE_DELAY,
     ]);
   } else if (step === "deploy-policy") {
-    await deployFresh(hre, "CascadeDisputeProtectionPolicy", context.deployer, [
+    await deployFresh(hre, "DisputeProtectionPolicyV2", context.deployer, [
       context.deployer,
       state.contracts.vault!.address,
       context.disputeVerifier,
@@ -1380,13 +1380,13 @@ async function deployLocalBypassStack(
     return result;
   };
   await readFreshState(hre, context);
-  const vaultRecord = await deploy("StakeVaultCascade", [
+  const vaultRecord = await deploy("StakeVaultV2", [
     deployer,
     context.stakeToken,
     constants.AddressZero,
     BYPASS_STAKE_VAULT_CONTROLLER_CHANGE_DELAY,
   ]);
-  const policyRecord = await deploy("CascadeDisputeProtectionPolicy", [
+  const policyRecord = await deploy("DisputeProtectionPolicyV2", [
     deployer,
     vaultRecord.address,
     context.disputeVerifier,
@@ -1491,7 +1491,7 @@ export async function bypassDisputeStackPrepared(
     );
     const policy =
       records[
-        BYPASS_DEPLOYMENT_NAMES.indexOf("CascadeDisputeProtectionPolicy")
+        BYPASS_DEPLOYMENT_NAMES.indexOf("DisputeProtectionPolicyV2")
       ]!;
     const orchestratorV3 = await hre.ethers.getContractAt(
       "OrchestratorV3",

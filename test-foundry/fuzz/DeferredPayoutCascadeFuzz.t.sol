@@ -4,8 +4,8 @@ pragma solidity ^0.8.18;
 import {Test} from "forge-std/Test.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
-import {CascadeDisputeProtectionPolicy} from "contracts/hooks/CascadeDisputeProtectionPolicy.sol";
-import {ICascadeDisputeProtectionPolicy as P} from "contracts/interfaces/ICascadeDisputeProtectionPolicy.sol";
+import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicyV2.sol";
+import {IDisputeProtectionPolicyV2 as P} from "contracts/interfaces/IDisputeProtectionPolicyV2.sol";
 import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
 import {MultiAttestationVerifier} from "contracts/unifiedVerifier/MultiAttestationVerifier.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
@@ -21,7 +21,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
     address internal constant DEPOSITOR = address(0x33);
     USDCMock internal token;
     StakeVault internal vault;
-    CascadeDisputeProtectionPolicy internal policy;
+    DisputeProtectionPolicyV2 internal policy;
     EscrowDepositStub internal escrow;
 
     function setUp() public {
@@ -32,7 +32,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
         signers[0] = vm.addr(0xA11CE);
         DisputeVerifier verifier = new DisputeVerifier(address(this), new NullifierRegistryV2(new NullifierRegistry()), new MultiAttestationVerifier(signers, 1));
         NullifierRegistry disputes = new NullifierRegistry();
-        policy = new CascadeDisputeProtectionPolicy(address(this), vault, verifier, disputes);
+        policy = new DisputeProtectionPolicyV2(address(this), vault, verifier, disputes);
         vault.initializeController(address(policy));
         policy.setLifecycleHookAuthorization(address(this), true);
         policy.setRiskWindow(METHOD, WINDOW);

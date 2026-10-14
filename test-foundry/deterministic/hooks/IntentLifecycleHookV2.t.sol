@@ -8,8 +8,8 @@ import {IIntentLifecycleHook} from "contracts/interfaces/IIntentLifecycleHook.so
 import {IOrchestratorRegistry} from "contracts/interfaces/IOrchestratorRegistry.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {IWhitelistPolicy} from "contracts/interfaces/IWhitelistPolicy.sol";
-import {ICascadeDisputeProtectionPolicy as P} from "contracts/interfaces/ICascadeDisputeProtectionPolicy.sol";
-import {CascadeDisputeProtectionPolicy} from "contracts/hooks/CascadeDisputeProtectionPolicy.sol";
+import {IDisputeProtectionPolicyV2 as P} from "contracts/interfaces/IDisputeProtectionPolicyV2.sol";
+import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicyV2.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
@@ -23,7 +23,7 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
     bytes32 internal constant ID = keccak256("intent");
     uint256 internal constant NET = INTENT_AMOUNT - 1e6;
     StakeVault internal vault;
-    CascadeDisputeProtectionPolicy internal policy;
+    DisputeProtectionPolicyV2 internal policy;
     WhitelistPolicy internal whitelist;
     AddressGroupRegistry internal groups;
     IntentLifecycleHookV2 internal hook;
@@ -34,7 +34,7 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         groups = new AddressGroupRegistry();
         whitelist = new WhitelistPolicy(groups, escrowRegistry, orchestratorRegistry);
         vault = new StakeVault(address(this), token, address(0), 0);
-        policy = new CascadeDisputeProtectionPolicy(
+        policy = new DisputeProtectionPolicyV2(
             address(this), vault,
             new DisputeVerifier(address(this), new NullifierRegistryV2(new NullifierRegistry()), new AttestationVerifierMock()),
             new NullifierRegistry()

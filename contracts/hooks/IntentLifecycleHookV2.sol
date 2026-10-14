@@ -6,7 +6,7 @@ import {ERC165Checker} from "@openzeppelin/contracts/utils/introspection/ERC165C
 import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
 import {IIntentLifecycleHookV2} from "../interfaces/IIntentLifecycleHookV2.sol";
-import {ICascadeDisputeProtectionPolicy} from "../interfaces/ICascadeDisputeProtectionPolicy.sol";
+import {IDisputeProtectionPolicyV2} from "../interfaces/IDisputeProtectionPolicyV2.sol";
 import {IOrchestratorRegistry} from "../interfaces/IOrchestratorRegistry.sol";
 import {IOrchestratorV4} from "../interfaces/IOrchestratorV4.sol";
 import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
@@ -18,7 +18,7 @@ contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
 
     IOrchestratorRegistry public immutable orchestratorRegistry;
     IWhitelistPolicy public immutable whitelistPolicy;
-    ICascadeDisputeProtectionPolicy public immutable disputeProtectionPolicy;
+    IDisputeProtectionPolicyV2 public immutable disputeProtectionPolicy;
 
     /* ============ Errors ============ */
 
@@ -34,7 +34,7 @@ contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
     constructor(
         IOrchestratorRegistry _orchestratorRegistry,
         IWhitelistPolicy _whitelistPolicy,
-        ICascadeDisputeProtectionPolicy _disputeProtectionPolicy
+        IDisputeProtectionPolicyV2 _disputeProtectionPolicy
     ) {
         _validateDependency(address(_orchestratorRegistry));
         _validateDependency(address(_whitelistPolicy));

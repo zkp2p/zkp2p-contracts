@@ -5,7 +5,7 @@ import {IPaymentVerifierV2} from "contracts/interfaces/IPaymentVerifierV2.sol";
 
 import {OrchestratorV4Fixture} from "./OrchestratorV4Fixture.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
-import {CascadeDisputeProtectionPolicy} from "contracts/hooks/CascadeDisputeProtectionPolicy.sol";
+import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicyV2.sol";
 import {IntentLifecycleHookV2} from "contracts/hooks/IntentLifecycleHookV2.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
@@ -17,14 +17,14 @@ import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
 import {MultiAttestationVerifier} from "contracts/unifiedVerifier/MultiAttestationVerifier.sol";
 import {UnifiedPaymentVerifierV4} from "contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol";
 
-abstract contract CascadeStackFixture is OrchestratorV4Fixture {
+abstract contract DisputeProtectionStackV2Fixture is OrchestratorV4Fixture {
     uint256 internal constant WITNESS_KEY = 0xA11CE;
     uint64 internal constant RISK_WINDOW = 14 days;
     uint256 internal constant PROTOCOL_FEE = 5e15;
     uint256 internal constant REFERRAL_FEE = 3e15;
     uint256 internal constant NET = INTENT_AMOUNT - INTENT_AMOUNT * PROTOCOL_FEE / 1e18 - INTENT_AMOUNT * REFERRAL_FEE / 1e18;
     StakeVault internal vault;
-    CascadeDisputeProtectionPolicy internal protection;
+    DisputeProtectionPolicyV2 internal protection;
     NullifierRegistry internal disputeNullifiers;
     DisputeVerifier internal disputeVerifier;
     WhitelistPolicy internal whitelist;
@@ -49,7 +49,7 @@ abstract contract CascadeStackFixture is OrchestratorV4Fixture {
         vault = new StakeVault(address(this), token, address(0), 0);
         disputeNullifiers = new NullifierRegistry();
         disputeVerifier = new DisputeVerifier(address(this), nullifiers, witnesses);
-        protection = new CascadeDisputeProtectionPolicy(address(this), vault, disputeVerifier, disputeNullifiers);
+        protection = new DisputeProtectionPolicyV2(address(this), vault, disputeVerifier, disputeNullifiers);
         vault.initializeController(address(protection));
         disputeNullifiers.addWritePermission(address(protection));
         protection.setRiskWindow(METHOD, RISK_WINDOW);

@@ -3,14 +3,14 @@ pragma solidity ^0.8.18;
 
 import {IPaymentVerifierV2} from "contracts/interfaces/IPaymentVerifierV2.sol";
 
-import {CascadeStackFixture} from "../deterministic/helpers/CascadeStackFixture.sol";
-import {ICascadeDisputeProtectionPolicy as P} from "contracts/interfaces/ICascadeDisputeProtectionPolicy.sol";
+import {DisputeProtectionStackV2Fixture} from "../deterministic/helpers/DisputeProtectionStackV2Fixture.sol";
+import {IDisputeProtectionPolicyV2 as P} from "contracts/interfaces/IDisputeProtectionPolicyV2.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {UnifiedPaymentVerifierV4} from "contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol";
 
 /// @notice Opt-in cross-repo smoke; set ATTESTOR_POLICY_SMOKE_ROOT to a checkout with dependencies.
 /// @dev Outside deterministic/, so coverage never runs this FFI test.
-contract AttestorCascadeSmokeTest is CascadeStackFixture {
+contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
     function test_ServiceSignedProofSmoke() public {
         string memory attestor = vm.envOr("ATTESTOR_POLICY_SMOKE_ROOT", string(""));
         if (bytes(attestor).length == 0) {

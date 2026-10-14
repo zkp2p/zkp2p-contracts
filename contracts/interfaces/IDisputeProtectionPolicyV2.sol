@@ -3,7 +3,7 @@ pragma solidity ^0.8.18;
 
 import {IStakeVault} from "./IStakeVault.sol";
 
-interface ICascadeDisputeProtectionPolicy {
+interface IDisputeProtectionPolicyV2 {
     enum DisputeProtectionIntentStatus { NONE, PENDING, CANCELLED, AWAITING_FUNDING, SETTLED, RELEASED, DISPUTED }
     enum CollateralSource { NONE, BYPASS, STAKE, DEFERRED_PAYOUT, MANUAL_RELEASE }
 

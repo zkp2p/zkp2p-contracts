@@ -71,7 +71,7 @@ OrchestratorV2.fulfillIntent
 Important ownership boundaries:
 
 - `OrchestratorV4` is OrchestratorV3 plus deferred settlement, and is not a proxy.
-- `CascadeDisputeProtectionPolicy` and `IntentLifecycleHookV2` serve only OrchestratorV4; OrchestratorV3 keeps `DisputeProtectionPolicy` and `IntentLifecycleHookV1`.
+- `DisputeProtectionPolicyV2` and `IntentLifecycleHookV2` serve only OrchestratorV4; OrchestratorV3 keeps `DisputeProtectionPolicy` and `IntentLifecycleHookV1`.
 - `UnifiedPaymentVerifierV4` returns the attestation-signed balance flag and serves both OrchestratorV3 and OrchestratorV4.
 - `EscrowV2` owns deposits, locking, and release.
 - `OrchestratorV2` owns intent lifecycle and fee routing.
@@ -177,7 +177,7 @@ Current numbered lanes include:
   2026-10-01 from `88be796` and is still mounted; tagged reruns only verify.
 
 - `45`: cascade stack and O4 deploy-only preparation, retargeted in source and not executed on either
-  network. Deploys zero-delay `StakeVaultCascade`, `CascadeDisputeProtectionPolicy`, `IntentLifecycleHookV2`,
+  network. Deploys zero-delay `StakeVaultV2`, `DisputeProtectionPolicyV2`, `IntentLifecycleHookV2`,
   UPV4 and O4; sets O4's HookV2, matches O3's other configuration and hands ownership to the Safe on Base. O4 remains
   unregistered. Only the pinned superseded staging UPV4 address/runtime may be deleted and redeployed at
   a fresh address; pre-cutover binding checks use that pin independently of the mutable record.
@@ -202,7 +202,7 @@ Current numbered lanes include:
   when staging UPV4's JSON changes, restore staging aliases/evidence/predecessor identities to main's
   August O3 selection, regenerate outputs with the O4 stack by name and update docs. Base records pins
   after lane 45 before lane-46 preparation and flips `BYPASS_PAYMENT_BINDING_RECORDED.base` after activation.
-  Canonical aliases describe O3; O4 uses `StakeVaultCascade` and its other records by name. Current staging
+  Canonical aliases describe O3; O4 uses `StakeVaultV2` and its other records by name. Current staging
   aliases/evidence remain bypass until recording; local aliases are MethodScopedStaked. Each live step,
   recording PR and later RC publication needs separate approval. Restart localhost before a second full deploy.
 

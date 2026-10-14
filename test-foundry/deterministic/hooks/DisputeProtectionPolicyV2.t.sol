@@ -3,8 +3,8 @@ pragma solidity ^0.8.18;
 
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {CascadeDisputeProtectionPolicy} from "contracts/hooks/CascadeDisputeProtectionPolicy.sol";
-import {ICascadeDisputeProtectionPolicy as P} from "contracts/interfaces/ICascadeDisputeProtectionPolicy.sol";
+import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicyV2.sol";
+import {IDisputeProtectionPolicyV2 as P} from "contracts/interfaces/IDisputeProtectionPolicyV2.sol";
 import {IStakeVault} from "contracts/interfaces/IStakeVault.sol";
 import {IDisputeVerifier} from "contracts/interfaces/IDisputeVerifier.sol";
 import {INullifierRegistry} from "contracts/interfaces/INullifierRegistry.sol";
@@ -16,7 +16,7 @@ import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
 import {AttestationVerifierMock} from "../../mocks/AttestationVerifierMock.sol";
 import {EscrowDepositStub} from "../../mocks/EscrowDepositStub.sol";
 
-contract CascadeDisputeProtectionPolicyTest is Test {
+contract DisputeProtectionPolicyV2Test is Test {
     event DisputeProtectionIntentOpened(bytes32 indexed intentHash, address indexed taker, address indexed depositor, address recipient, bytes32 paymentMethod, uint64 riskWindow);
     event DisputeProtectionIntentSettled(bytes32 indexed intentHash, P.CollateralSource indexed collateralSource, address indexed stakeOwner, uint256 releaseAmount, uint256 lockedAmount, uint64 releaseEligibleAt, bool isManualRelease);
     event RiskWindowUpdated(bytes32 indexed paymentMethod, uint64 riskWindow);
@@ -34,7 +34,7 @@ contract CascadeDisputeProtectionPolicyTest is Test {
     address internal constant STRANGER = address(0x44);
     USDCMock internal usdc;
     StakeVault internal vault;
-    CascadeDisputeProtectionPolicy internal policy;
+    DisputeProtectionPolicyV2 internal policy;
     EscrowDepositStub internal escrow;
     DisputeVerifier internal verifier;
     NullifierRegistry internal disputes;
@@ -53,7 +53,7 @@ contract CascadeDisputeProtectionPolicyTest is Test {
     }
 
     function _newPolicy() internal {
-        policy = new CascadeDisputeProtectionPolicy(address(this), vault, verifier, disputes);
+        policy = new DisputeProtectionPolicyV2(address(this), vault, verifier, disputes);
         policy.setLifecycleHookAuthorization(address(this), true);
         policy.setRiskWindow(METHOD, WINDOW);
         disputes.addWritePermission(address(policy));
@@ -402,13 +402,13 @@ contract CascadeDisputeProtectionPolicyTest is Test {
     }
     function test_ConstructorRejectsZeroOrCodelessDependencies() public {
         vm.expectRevert(P.ZeroAddress.selector);
-        new CascadeDisputeProtectionPolicy(address(0), vault, verifier, disputes);
+        new DisputeProtectionPolicyV2(address(0), vault, verifier, disputes);
         for (uint256 i; i < 3; ++i) {
             for (uint256 j; j < 2; ++j) {
                 address bad = j == 0 ? address(0) : STRANGER;
                 if (j == 0) vm.expectRevert(P.ZeroAddress.selector);
                 else vm.expectRevert(abi.encodeWithSelector(P.InvalidContract.selector, bad));
-                new CascadeDisputeProtectionPolicy(address(this), i == 0 ? IStakeVault(bad) : vault, i == 1 ? IDisputeVerifier(bad) : verifier, i == 2 ? INullifierRegistry(bad) : disputes);
+                new DisputeProtectionPolicyV2(address(this), i == 0 ? IStakeVault(bad) : vault, i == 1 ? IDisputeVerifier(bad) : verifier, i == 2 ? INullifierRegistry(bad) : disputes);
             }
         }
     }
