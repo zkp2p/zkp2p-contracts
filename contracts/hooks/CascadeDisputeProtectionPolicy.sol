@@ -28,6 +28,9 @@ interface IPredecessorDisputeProtectionPolicy {
  * Intent hashes must embed the originating orchestrator so identities cannot collide. Governance must keep
  * predecessor hooks authorized and orchestrators registered until their snapshotted intents drain, and drain
  * active locks before moving vault control unless the successor explicitly adopts their state.
+ * Opt-out read-through works only while the predecessor's method risk window is nonzero. Before zeroing
+ * that window or giving the cascade a window for a method the predecessor has at zero, import that method's
+ * opt-outs rebuilt from the predecessor's DisputeProtectionEnabledUpdated events.
  */
 contract CascadeDisputeProtectionPolicy is ICascadeDisputeProtectionPolicy, Ownable2Step, ReentrancyGuard {
     /* ============ Constants ============ */
@@ -306,6 +309,16 @@ contract CascadeDisputeProtectionPolicy is ICascadeDisputeProtectionPolicy, Owna
         if (_riskWindow > MAX_RISK_WINDOW) revert InvalidRiskWindow(_riskWindow);
         paymentMethodRiskWindow[_paymentMethod] = _riskWindow;
         emit RiskWindowUpdated(_paymentMethod, _riskWindow);
+    }
+
+    /// @inheritdoc ICascadeDisputeProtectionPolicy
+    function importOptOuts(OptOutImport[] calldata _optOuts) external override onlyOwner {
+        for (uint256 i = 0; i < _optOuts.length; ++i) {
+            OptOutImport calldata optOut = _optOuts[i];
+            if (optOutState[optOut.escrow][optOut.depositId][optOut.paymentMethod] != OptOutState.INHERIT) continue;
+            optOutState[optOut.escrow][optOut.depositId][optOut.paymentMethod] = OptOutState.DISABLED;
+            emit DisputeProtectionOptOutImported(optOut.escrow, optOut.depositId, optOut.paymentMethod);
+        }
     }
 
     /**

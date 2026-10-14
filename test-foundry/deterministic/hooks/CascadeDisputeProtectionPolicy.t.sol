@@ -35,6 +35,7 @@ contract PredecessorPolicyStub is IPredecessorDisputeProtectionPolicy {
 }
 
 contract CascadeDisputeProtectionPolicyTest is Test {
+    event DisputeProtectionOptOutImported(address indexed escrow, uint256 indexed depositId, bytes32 indexed paymentMethod);
     event DisputeProtectionIntentOpened(bytes32 indexed intentHash, address indexed taker, address indexed depositor, address recipient, bytes32 paymentMethod, uint64 riskWindow);
     event DisputeProtectionIntentSettled(bytes32 indexed intentHash, P.CollateralSource indexed collateralSource, address indexed stakeOwner, uint256 releaseAmount, uint256 lockedAmount, uint64 releaseEligibleAt, bool isManualRelease);
     event RiskWindowUpdated(bytes32 indexed paymentMethod, uint64 riskWindow);
@@ -487,6 +488,64 @@ contract CascadeDisputeProtectionPolicyTest is Test {
         assertEq(address(policy.predecessorPolicy()), address(predecessor));
         assertFalse(policy.isDisputeProtectionEnabled(address(escrow), 1, METHOD));
         vm.expectRevert(abi.encodeWithSelector(P.DisputeProtectionNotEnabled.selector, address(escrow), 1, METHOD));
+        _signal(ID);
+    }
+    function test_ImportOptOutsDisablesInheritTuples() public {
+        P.OptOutImport[] memory imports = new P.OptOutImport[](2);
+        imports[0] = P.OptOutImport(address(escrow), 1, METHOD);
+        imports[1] = P.OptOutImport(address(escrow), 2, METHOD);
+        vm.expectEmit(true, true, true, true, address(policy));
+        emit DisputeProtectionOptOutImported(address(escrow), 1, METHOD);
+        vm.expectEmit(true, true, true, true, address(policy));
+        emit DisputeProtectionOptOutImported(address(escrow), 2, METHOD);
+        policy.importOptOuts(imports);
+        assertFalse(policy.isDisputeProtectionEnabled(address(escrow), 1, METHOD));
+        assertFalse(policy.isDisputeProtectionEnabled(address(escrow), 2, METHOD));
+        vm.recordLogs();
+        policy.importOptOuts(imports);
+        assertEq(vm.getRecordedLogs().length, 0);
+    }
+    function test_ImportOptOutsSkipsExplicitChoices() public {
+        _opt(true);
+        vm.prank(DEPOSITOR);
+        policy.setDisputeProtectionEnabled(address(escrow), 2, METHOD, false);
+        P.OptOutImport[] memory imports = new P.OptOutImport[](2);
+        imports[0] = P.OptOutImport(address(escrow), 1, METHOD);
+        imports[1] = P.OptOutImport(address(escrow), 2, METHOD);
+        vm.recordLogs();
+        policy.importOptOuts(imports);
+        assertEq(vm.getRecordedLogs().length, 0);
+        assertTrue(policy.isDisputeProtectionEnabled(address(escrow), 1, METHOD));
+        assertFalse(policy.isDisputeProtectionEnabled(address(escrow), 2, METHOD));
+    }
+    function test_ImportOptOutsOnlyOwner() public {
+        P.OptOutImport[] memory imports = new P.OptOutImport[](1);
+        imports[0] = P.OptOutImport(address(escrow), 1, METHOD);
+        vm.prank(STRANGER);
+        vm.expectRevert("Ownable: caller is not the owner");
+        policy.importOptOuts(imports);
+        assertTrue(policy.isDisputeProtectionEnabled(address(escrow), 1, METHOD));
+    }
+    function test_ImportedOptOutSurvivesPredecessorWindowZeroed() public {
+        PredecessorPolicyStub predecessor = new PredecessorPolicyStub();
+        _newPolicy(predecessor);
+        assertFalse(policy.isDisputeProtectionEnabled(address(escrow), 1, METHOD));
+        P.OptOutImport[] memory imports = new P.OptOutImport[](1);
+        imports[0] = P.OptOutImport(address(escrow), 1, METHOD);
+        policy.importOptOuts(imports);
+        predecessor.configure(0, false);
+        assertFalse(policy.isDisputeProtectionEnabled(address(escrow), 1, METHOD));
+        vm.expectRevert(abi.encodeWithSelector(P.DisputeProtectionNotEnabled.selector, address(escrow), 1, METHOD));
+        _signal(ID);
+    }
+    function test_DepositorCanReenableImportedOptOut() public {
+        P.OptOutImport[] memory imports = new P.OptOutImport[](1);
+        imports[0] = P.OptOutImport(address(escrow), 1, METHOD);
+        policy.importOptOuts(imports);
+        assertFalse(policy.isDisputeProtectionEnabled(address(escrow), 1, METHOD));
+        _opt(true);
+        policy.importOptOuts(imports);
+        assertTrue(policy.isDisputeProtectionEnabled(address(escrow), 1, METHOD));
         _signal(ID);
     }
     function test_LocalSettingOverridesPredecessor() public {

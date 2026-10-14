@@ -713,7 +713,8 @@ contract OrchestratorV4 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
      * executable remainder to a deferral vault, through the post-intent hook, or directly to the recipient.
      * A deferred settlement skips the post-intent hook.
      * @dev A reverting lifecycle hook aborts the entire settlement, including the preceding fee transfers.
-     * The lifecycle hook receives no token allowance and cannot move settlement funds. Manual release executes the configured
+     * The snapshotted lifecycle hook selects the deferral vault that receives the net amount on deferred settlement,
+     * but receives no token allowance. Manual release executes the configured
      * post-intent hook with empty fulfillment-time data or transfers directly to the recipient when no hook is configured.
      */
     function _collectFeesTransferFundsAndExecuteAction(
