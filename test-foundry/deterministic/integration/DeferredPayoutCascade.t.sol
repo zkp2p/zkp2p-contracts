@@ -18,9 +18,9 @@ import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
     bytes32 internal constant CONDITIONS = keccak256("signed conditions");
 
-    function test_V1DataWithoutGatingServiceRejectedByOrchestrator() public {
+    function test_ConditionsHashWithoutGatingServiceRejectedByOrchestrator() public {
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
-        params.data = abi.encode(uint8(1), CONDITIONS);
+        params.data = abi.encodePacked(CONDITIONS);
         bytes32 id = _intentHash(orchestrator.intentCounter());
         vm.expectRevert(IOrchestratorV4.LifecycleHookDataRequiresGatingService.selector);
         _signalCall(taker, params);
@@ -47,7 +47,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         depositId = _createDeposit(gatingService, delegate);
         vm.stopPrank();
         if (staked) _stake(vault, taker, INTENT_AMOUNT);
-        bytes32 id = _signalWithLifecycleHookData(abi.encode(uint8(1), CONDITIONS));
+        bytes32 id = _signalWithLifecycleHookData(abi.encodePacked(CONDITIONS));
         UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(
             _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, balanceFunded),
             (UnifiedPaymentVerifierV4.PaymentAttestation)
@@ -61,7 +61,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
             );
             vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV2.ConditionsNotAttested.selector, id));
             orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(invalidProof, id, ""));
-            assertEq(orchestrator.getIntent(id).data, abi.encode(uint8(1), CONDITIONS));
+            assertEq(orchestrator.getIntent(id).data, abi.encodePacked(CONDITIONS));
             assertEq(orchestrator.getIntent(id).owner, taker);
             assertEq(token.balanceOf(address(escrow)), escrowBalance);
             assertEq(token.balanceOf(address(vault)), vaultBalance);
@@ -117,9 +117,21 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         _assertFees();
     }
 
-    function test_WhitelistMemberStillDefersUncoveredPayout() public {
-        AddressGroupRegistry groups = AddressGroupRegistry(address(whitelist.groupRegistry()));
-        bytes32 group = groups.createGroup("Takers");
+    event DisputeProtectionIntentSettled(bytes32 indexed intentHash, address indexed taker, address indexed depositor, address recipient, bytes32 paymentMethod, uint64 riskWindow, P.CollateralSource collateralSource, address stakeOwner, uint256 releaseAmount, uint256 lockedAmount, uint64 releaseEligibleAt, bool isManualRelease);
+
+    function _expectSettlement(bytes32 id, P.CollateralSource source) internal {
+        bool deferred = source == P.CollateralSource.DEFERRED_PAYOUT;
+        vm.expectEmit(true, true, true, true, address(protection));
+        emit DisputeProtectionIntentSettled(
+            id, taker, depositor, other, METHOD, RISK_WINDOW, source,
+            deferred ? other : address(0), INTENT_AMOUNT, deferred ? NET : 0,
+            uint64(block.timestamp + (deferred ? RISK_WINDOW : 0)), source == P.CollateralSource.MANUAL_RELEASE
+        );
+    }
+
+    function _whitelistTaker() internal returns (AddressGroupRegistry groups, bytes32 group) {
+        groups = AddressGroupRegistry(address(whitelist.groupRegistry()));
+        group = groups.createGroup("Takers");
         address[] memory members = new address[](1);
         members[0] = taker;
         groups.addMembers(group, members);
@@ -127,12 +139,86 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         ids[0] = group;
         vm.prank(depositor);
         whitelist.configureDeposit(address(escrow), depositId, METHOD, true, ids, new address[](0));
-        bytes32 id = _signalDefault();
+    }
+
+    function _assertDeferredSettlement(bytes32 id) internal {
+        _expectSettlement(id, P.CollateralSource.DEFERRED_PAYOUT);
         _settle(id, INTENT_AMOUNT, false);
         assertEq(token.balanceOf(other), 0);
         _assertLock(id, other, NET);
         assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.DEFERRED_PAYOUT));
         _assertFees();
+    }
+
+    function test_WhitelistedTakerBypassesWithInsufficientStake() public {
+        _whitelistTaker();
+        _stake(vault, taker, INTENT_AMOUNT - 1);
+        bytes32 id = _signalDefault();
+        assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
+        _expectSettlement(id, P.CollateralSource.BYPASS);
+        _settle(id, INTENT_AMOUNT, false);
+        assertEq(token.balanceOf(other), NET);
+        _assertLock(id, address(0), 0);
+        assertEq(vault.lockedStake(taker), 0);
+        assertEq(vault.lockedStake(other), 0);
+        assertEq(vault.freeStake(taker), INTENT_AMOUNT - 1);
+        assertEq(token.balanceOf(address(vault)), INTENT_AMOUNT - 1);
+        P.DisputeProtectionIntent memory record = protection.getDisputeProtectionIntent(id);
+        assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.BYPASS));
+        assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.RELEASED));
+        assertEq(record.lockedAmount, 0);
+        _assertFees();
+    }
+
+    function test_AllowedTakerWithWhitelistDisabledAtSettlementIsProtected() public {
+        _whitelistTaker();
+        bytes32 id = _signalDefault();
+        vm.prank(depositor);
+        whitelist.setEnabled(address(escrow), depositId, METHOD, false);
+        assertTrue(whitelist.isTakerAllowed(address(escrow), depositId, METHOD, taker));
+        _assertDeferredSettlement(id);
+    }
+
+    function test_TakerRemovedAfterSignalIsProtected() public {
+        (AddressGroupRegistry groups, bytes32 group) = _whitelistTaker();
+        bytes32 id = _signalDefault();
+        address[] memory members = new address[](1);
+        members[0] = taker;
+        groups.removeMembers(group, members);
+        _assertDeferredSettlement(id);
+    }
+
+    function test_WhitelistedRecipientDoesNotBypass() public {
+        (AddressGroupRegistry groups, bytes32 group) = _whitelistTaker();
+        bytes32 id = _signalDefault();
+        address[] memory members = new address[](1);
+        members[0] = taker;
+        groups.removeMembers(group, members);
+        members[0] = other;
+        groups.addMembers(group, members);
+        assertTrue(whitelist.isTakerAllowed(address(escrow), depositId, METHOD, other));
+        assertFalse(whitelist.isTakerAllowed(address(escrow), depositId, METHOD, taker));
+        _assertDeferredSettlement(id);
+    }
+
+    function test_WhitelistedTakerManualReleaseUsesManualSource() public {
+        _whitelistTaker();
+        bytes32 id = _signalDefault();
+        _expectSettlement(id, P.CollateralSource.MANUAL_RELEASE);
+        vm.prank(depositor);
+        orchestrator.releaseFundsToPayer(id);
+        assertEq(token.balanceOf(other), NET);
+        _assertLock(id, address(0), 0);
+        assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.MANUAL_RELEASE));
+        _assertFees();
+    }
+
+    function test_ZeroHashDataIsUnconditioned() public {
+        vm.startPrank(depositor);
+        depositId = _createDeposit(gatingService, delegate);
+        vm.stopPrank();
+        bytes32 id = _signalWithLifecycleHookData(abi.encodePacked(bytes32(0)));
+        _assertDeferredSettlement(id);
     }
 
     function test_EnabledWhitelistRejectsNonMemberBeforeEscrowLock() public {

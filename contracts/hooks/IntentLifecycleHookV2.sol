@@ -19,7 +19,16 @@ import {IEscrowV2} from "../interfaces/IEscrowV2.sol";
 /// Registered orchestrators calling these callbacks must honour the deferral vault returned by settleIntent;
 /// registering an orchestrator is a governance assertion of that obligation.
 /// Stateless by design: per-intent hook data is stored by the orchestrator, never by this hook.
-/// V1 hook data is abi.encode(uint8(1), bytes32 conditionsHash), exactly 64 bytes with a nonzero hash.
+/// Hook data is the raw 32-byte conditions hash, or empty for no conditions. bytes32(data) reads the
+/// first word, right-padding shorter data; empty and all-zero data are unconditioned. There is no
+/// length or version decoding: the conditions version lives in the attestor-side hash preimage,
+/// and each intent's data is interpreted only by its snapshotted hook.
+/// Non-manual settlements bypass collateral for balance-funded payments, registered relayer takers,
+/// or takers allowed by an enabled deposit/payment-method whitelist, in that short-circuit order.
+/// Whitelist state is read live at settlement: disabling it or removing the taker after signal restores
+/// the collateral cascade unless another bypass applies. Whitelisting the recipient does not qualify.
+/// At signal, the whitelist is only an admission gate; every windowed intent still checks the stake
+/// token, hook authorization and paused admissions, including whitelisted and registered relayer takers.
 contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
     /* ============ State Variables ============ */
 
@@ -31,7 +40,6 @@ contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
 
     error InvalidBalanceFundedFlag(uint256 value);
     error ConditionsNotAttested(bytes32 intentHash);
-    error InvalidLifecycleHookData();
     error ConditionsRequireGatingService();
     error ZeroAddress();
     error InvalidDependency(address dependency);
@@ -83,17 +91,11 @@ contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
             if (disputeProtectionPolicy.admissionsPaused()) revert AdmissionsPaused();
         }
         if (
-            _conditionsHashOf(_data) != bytes32(0)
+            bytes32(_data) != bytes32(0)
                 && IEscrowV2(intent.escrow).getDepositGatingService(intent.depositId, intent.paymentMethod) == address(0)
         ) {
             revert ConditionsRequireGatingService();
         }
-    }
-
-    /// @notice Decodes the v1 conditions hash, returning zero for empty data and reverting on malformed data.
-    /// @dev Off-chain convenience; not part of the lifecycle hook interface OrchestratorV4 checks.
-    function conditionsHashOf(bytes calldata _data) external pure returns (bytes32) {
-        return _conditionsHashOf(_data);
     }
 
     /**
@@ -107,7 +109,7 @@ contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
     function settleIntent(SettlementContext calldata _context)
         external override onlyOrchestrator returns (address deferralVault)
     {
-        bytes32 expected = _conditionsHashOf(_context.data);
+        bytes32 expected = bytes32(_context.data);
         bool bypass;
         if (!_context.isManualRelease) {
             uint256 flag = _context.extensionData.length >= 32
@@ -117,7 +119,11 @@ contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
                 ? abi.decode(_context.extensionData[32:64], (bytes32)) : bytes32(0);
             if (attested != expected) revert ConditionsNotAttested(_context.intentHash);
             bypass = flag == 1
-                || IOrchestratorV4(msg.sender).relayerRegistry().isWhitelistedRelayer(_context.taker);
+                || IOrchestratorV4(msg.sender).relayerRegistry().isWhitelistedRelayer(_context.taker)
+                || (whitelistPolicy.enabled(_context.escrow, _context.depositId, _context.paymentMethod)
+                    && whitelistPolicy.isTakerAllowed(
+                        _context.escrow, _context.depositId, _context.paymentMethod, _context.taker
+                    ));
         }
         bool deferred = disputeProtectionPolicy.onIntentSettled(IDisputeProtectionPolicyV2.SettleParams({
             intentHash: _context.intentHash,
@@ -152,15 +158,6 @@ contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
     }
 
     /* ============ Internal Functions ============ */
-
-    function _conditionsHashOf(bytes calldata _data) internal pure returns (bytes32) {
-        if (_data.length == 0) return bytes32(0);
-        if (_data.length != 64) revert InvalidLifecycleHookData();
-        // Decode the full version word so noncanonical uint8 encodings also use the custom error.
-        (uint256 version, bytes32 conditionsHash) = abi.decode(_data, (uint256, bytes32));
-        if (version != 1 || conditionsHash == bytes32(0)) revert InvalidLifecycleHookData();
-        return conditionsHash;
-    }
 
     function _validateDependency(address _dependency) internal view {
         if (_dependency == address(0)) revert ZeroAddress();

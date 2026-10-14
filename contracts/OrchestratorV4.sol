@@ -33,6 +33,7 @@ import { ReferralFeeLib } from "./lib/ReferralFeeLib.sol";
  * lifecycle — signal, cancel, fulfill, manual release, prune, orphan cleanup — and extends it
  * with snapshotted governance-selected fail-closed lifecycle callbacks and deferred settlement.
  * @dev Intent retains the V3 ABI layout. Its data is opaque lifecycle hook data; postIntentHook is always zero.
+ * IntentLifecycleHookV2 uses a raw 32-byte conditions hash (or empty); only the snapshotted hook interprets data.
  */
 contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
 
@@ -121,6 +122,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      * admission before locking liquidity for the corresponding deposit on the escrow contract.
      * Non-empty data requires a lifecycle hook and appends its keccak256 hash to the gating message;
      * empty data preserves the plain V3 gating message byte-for-byte. The data is opaque to this contract.
+     * IntentLifecycleHookV2 expects abi.encodePacked(conditionsHash) or empty data; O4 checks no data format.
      *
      * @param _params                   Struct containing all the intent parameters
      */

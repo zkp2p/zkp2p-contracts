@@ -757,7 +757,8 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
     hookInterface.getFunction("onIntentSignaled").format(),
     "onIntentSignaled(bytes32,bytes)"
   );
-  assert.equal(hookInterface.getFunction("conditionsHashOf").stateMutability, "pure");
+  assert.equal("conditionsHashOf(bytes)" in hookInterface.functions, false);
+  assert.equal("InvalidLifecycleHookData()" in hookInterface.errors, false);
   const o4Abi = state.records.get("OrchestratorV4").abi;
   const v3Abi = state.records.get("OrchestratorV3").abi;
   /** @param {any[]} abi */

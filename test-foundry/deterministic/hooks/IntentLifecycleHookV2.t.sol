@@ -68,8 +68,8 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         return IIntentLifecycleHookV2.SettlementContext(id, address(token), taker, other, address(escrow), depositId, METHOD, INTENT_AMOUNT, NET, "", abi.encode(balanceFunded), false);
     }
 
-    function _whitelistTaker() internal {
-        bytes32 group = groups.createGroup("Takers");
+    function _whitelistTaker() internal returns (bytes32 group) {
+        group = groups.createGroup("Takers");
         address[] memory members = new address[](1);
         members[0] = taker;
         groups.addMembers(group, members);
@@ -79,12 +79,84 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         whitelist.configureDeposit(address(escrow), depositId, METHOD, true, ids, new address[](0));
     }
 
-    function test_WhitelistedTakerGoesThroughCascade() public {
-        _whitelistTaker();
-        stub.signal(hook, ID, "");
-        assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
+    event DisputeProtectionIntentSettled(bytes32 indexed intentHash, address indexed taker, address indexed depositor, address recipient, bytes32 paymentMethod, uint64 riskWindow, P.CollateralSource collateralSource, address stakeOwner, uint256 releaseAmount, uint256 lockedAmount, uint64 releaseEligibleAt, bool isManualRelease);
+
+    function _expectSettlement(P.CollateralSource source) internal {
+        bool deferred = source == P.CollateralSource.DEFERRED_PAYOUT;
+        vm.expectEmit(true, true, true, true, address(policy));
+        emit DisputeProtectionIntentSettled(
+            ID, taker, depositor, other, METHOD, 14 days, source,
+            deferred ? other : address(0), INTENT_AMOUNT, deferred ? NET : 0,
+            uint64(block.timestamp + (deferred ? 14 days : 0)), source == P.CollateralSource.MANUAL_RELEASE
+        );
+    }
+
+    function _assertDeferred() internal {
+        _expectSettlement(P.CollateralSource.DEFERRED_PAYOUT);
         assertEq(stub.settle(hook, _context(ID, false)), address(vault));
         assertEq(uint256(policy.getDisputeProtectionIntent(ID).collateralSource), uint256(P.CollateralSource.DEFERRED_PAYOUT));
+    }
+
+    function test_WhitelistedTakerBypassesWithInsufficientStake() public {
+        _whitelistTaker();
+        token.transfer(taker, INTENT_AMOUNT - 1);
+        vm.startPrank(taker);
+        token.approve(address(vault), INTENT_AMOUNT - 1);
+        vault.depositStake(INTENT_AMOUNT - 1);
+        vm.stopPrank();
+        stub.signal(hook, ID, "");
+        assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
+        _expectSettlement(P.CollateralSource.BYPASS);
+        assertEq(stub.settle(hook, _context(ID, false)), address(0));
+        P.DisputeProtectionIntent memory record = policy.getDisputeProtectionIntent(ID);
+        assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.BYPASS));
+        assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.RELEASED));
+        assertEq(record.lockedAmount, 0);
+        assertEq(vault.lockedStake(taker), 0);
+        assertEq(vault.lockedStake(other), 0);
+        assertEq(vault.freeStake(taker), INTENT_AMOUNT - 1);
+    }
+
+    function test_AllowedTakerWithWhitelistDisabledAtSettlementIsProtected() public {
+        _whitelistTaker();
+        stub.signal(hook, ID, "");
+        vm.prank(depositor);
+        whitelist.setEnabled(address(escrow), depositId, METHOD, false);
+        assertTrue(whitelist.isTakerAllowed(address(escrow), depositId, METHOD, taker));
+        _assertDeferred();
+    }
+
+    function test_TakerRemovedAfterSignalIsProtected() public {
+        bytes32 group = _whitelistTaker();
+        stub.signal(hook, ID, "");
+        address[] memory members = new address[](1);
+        members[0] = taker;
+        groups.removeMembers(group, members);
+        _assertDeferred();
+    }
+
+    function test_WhitelistedRecipientDoesNotBypass() public {
+        bytes32 group = _whitelistTaker();
+        stub.signal(hook, ID, "");
+        address[] memory members = new address[](1);
+        members[0] = taker;
+        groups.removeMembers(group, members);
+        members[0] = other;
+        groups.addMembers(group, members);
+        assertTrue(whitelist.isTakerAllowed(address(escrow), depositId, METHOD, other));
+        assertFalse(whitelist.isTakerAllowed(address(escrow), depositId, METHOD, taker));
+        _assertDeferred();
+    }
+
+    function test_WhitelistedTakerManualReleaseUsesManualSource() public {
+        _whitelistTaker();
+        stub.signal(hook, ID, "");
+        IIntentLifecycleHookV2.SettlementContext memory context = _context(ID, true);
+        context.isManualRelease = true;
+        _expectSettlement(P.CollateralSource.MANUAL_RELEASE);
+        assertEq(stub.settle(hook, context), address(0));
+        assertEq(uint256(policy.getDisputeProtectionIntent(ID).collateralSource), uint256(P.CollateralSource.MANUAL_RELEASE));
+        assertEq(vault.lockedStake(taker), 0);
     }
 
     function test_NonWhitelistedTakerGoesThroughCascadeWhenWhitelistDisabled() public {
@@ -110,27 +182,34 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         assertEq(writes.length, 0);
     }
 
-    function test_SignalRejectsTokenMismatch() public {
+    function _assertSignalRevertsForAllTakerKinds(bytes memory reason) internal {
+        vm.expectRevert(reason);
+        stub.signal(hook, ID, "");
+        _whitelistTaker();
+        vm.expectRevert(reason);
+        stub.signal(hook, ID, "");
+        vm.prank(depositor);
+        whitelist.setEnabled(address(escrow), depositId, METHOD, false);
+        relayerRegistry.addRelayer(taker);
+        vm.expectRevert(reason);
+        stub.signal(hook, ID, "");
+    }
+
+    function test_SignalRejectsTokenMismatchForAllTakerKinds() public {
         IEscrowV2.Deposit memory deposit = escrow.getDeposit(depositId);
         deposit.token = IERC20(other);
         vm.mockCall(address(escrow), abi.encodeCall(IEscrowV2.getDeposit, (depositId)), abi.encode(deposit));
-        vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV2.IntentTokenMismatch.selector, address(token), other));
-        stub.signal(hook, ID, "");
+        _assertSignalRevertsForAllTakerKinds(abi.encodeWithSelector(IntentLifecycleHookV2.IntentTokenMismatch.selector, address(token), other));
     }
 
-    function test_SignalRejectsUnauthorizedHook() public {
+    function test_SignalRejectsUnauthorizedHookForAllTakerKinds() public {
         policy.setLifecycleHookAuthorization(address(hook), false);
-        vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV2.LifecycleHookNotAuthorized.selector, address(hook)));
-        stub.signal(hook, ID, "");
+        _assertSignalRevertsForAllTakerKinds(abi.encodeWithSelector(IntentLifecycleHookV2.LifecycleHookNotAuthorized.selector, address(hook)));
     }
 
-    function test_SignalRejectsPausedAdmissionsIncludingWhitelistMembers() public {
+    function test_SignalRejectsPausedAdmissionsForAllTakerKinds() public {
         policy.setAdmissionsPaused(true);
-        vm.expectRevert(IntentLifecycleHookV2.AdmissionsPaused.selector);
-        stub.signal(hook, ID, "");
-        _whitelistTaker();
-        vm.expectRevert(IntentLifecycleHookV2.AdmissionsPaused.selector);
-        stub.signal(hook, ID, "");
+        _assertSignalRevertsForAllTakerKinds(abi.encodeWithSelector(IntentLifecycleHookV2.AdmissionsPaused.selector));
     }
 
     function test_UnprotectedMethodSkipsReadOnlyProtectionChecks() public {
@@ -167,8 +246,8 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         assertEq(stub.settle(hook, _context(ID, false)), address(vault));
     }
 
-    function _v1Data() internal pure returns (bytes memory) {
-        return abi.encode(uint8(1), keccak256("conditions"));
+    function _conditionsData() internal pure returns (bytes memory) {
+        return abi.encodePacked(keccak256("conditions"));
     }
 
     function _useGatedDeposit() internal {
@@ -178,80 +257,60 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         _store(ID, "");
     }
 
-    function _malformedData() internal pure returns (bytes[] memory data) {
-        data = new bytes[](8);
-        data[0] = hex"01";
-        data[1] = new bytes(63);
-        data[2] = bytes.concat(_v1Data(), hex"00");
-        data[3] = abi.encode(uint8(0), keccak256("conditions"));
-        data[4] = abi.encode(uint8(2), keccak256("conditions"));
-        data[5] = abi.encode(uint8(1), bytes32(0));
-        data[6] = abi.encode(uint256(257), keccak256("conditions"));
-        data[7] = abi.encode(uint256(1) << 255 | 1, keccak256("conditions"));
+    function test_ZeroHashDataIsUnconditioned() public {
+        bytes memory data = abi.encodePacked(bytes32(0));
+        stub.signal(hook, ID, data);
+        IIntentLifecycleHookV2.SettlementContext memory context = _context(ID, false);
+        context.data = data;
+        context.extensionData = "";
+        _expectSettlement(P.CollateralSource.DEFERRED_PAYOUT);
+        assertEq(stub.settle(hook, context), address(vault));
     }
 
-    function test_ConditionsHashOf() public {
-        assertEq(hook.conditionsHashOf(""), bytes32(0));
-        assertEq(hook.conditionsHashOf(_v1Data()), keccak256("conditions"));
-        bytes[] memory data = _malformedData();
+    function test_HookDataUsesFirstWordWithRightPadding() public {
+        _useGatedDeposit();
+        bytes[2] memory data = [bytes(hex"01"), bytes.concat(_conditionsData(), hex"ff")];
         for (uint256 i; i < data.length; ++i) {
-            vm.expectRevert(IntentLifecycleHookV2.InvalidLifecycleHookData.selector);
-            hook.conditionsHashOf(data[i]);
+            bytes32 id = keccak256(abi.encode("raw data", i));
+            _store(id, data[i]);
+            stub.signal(hook, id, data[i]);
+            IIntentLifecycleHookV2.SettlementContext memory context = _context(id, true);
+            context.data = data[i];
+            bytes32 expected = i == 0 ? bytes32(uint256(1) << 248) : keccak256("conditions");
+            context.extensionData = abi.encode(uint256(1), expected);
+            assertEq(stub.settle(hook, context), address(0));
         }
     }
 
-    function test_AdmissionRejectsMalformedDataWithoutPolicyRecord() public {
-        _useGatedDeposit();
-        bytes[] memory data = _malformedData();
-        for (uint256 i; i < data.length; ++i) {
-            vm.expectRevert(IntentLifecycleHookV2.InvalidLifecycleHookData.selector);
-            stub.signal(hook, ID, data[i]);
-            assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
-        }
-    }
-
-    function test_V1DataRequiresGatingService() public {
+    function test_ConditionsHashRequiresGatingService() public {
         vm.expectRevert(IntentLifecycleHookV2.ConditionsRequireGatingService.selector);
-        stub.signal(hook, ID, _v1Data());
+        stub.signal(hook, ID, _conditionsData());
         assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
         _useGatedDeposit();
-        stub.signal(hook, ID, _v1Data());
+        stub.signal(hook, ID, _conditionsData());
         assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
     }
 
-    function test_WhitelistedTakerStillValidatesDataAndGatingService() public {
+    function test_WhitelistedTakerStillRequiresGatingService() public {
         _whitelistTaker();
-        vm.expectRevert(IntentLifecycleHookV2.InvalidLifecycleHookData.selector);
-        stub.signal(hook, ID, hex"01");
         vm.expectRevert(IntentLifecycleHookV2.ConditionsRequireGatingService.selector);
-        stub.signal(hook, ID, _v1Data());
+        stub.signal(hook, ID, _conditionsData());
         _useGatedDeposit();
         _whitelistTaker();
-        stub.signal(hook, ID, _v1Data());
+        stub.signal(hook, ID, _conditionsData());
         assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
     }
 
     function test_HookDoesNotWriteStorage() public {
         _useGatedDeposit();
         vm.record();
-        stub.signal(hook, ID, _v1Data());
+        stub.signal(hook, ID, _conditionsData());
         IIntentLifecycleHookV2.SettlementContext memory context = _context(ID, true);
-        context.data = _v1Data();
+        context.data = _conditionsData();
         context.extensionData = abi.encode(uint256(1), keccak256("conditions"));
         stub.settle(hook, context);
         (, bytes32[] memory writes) = vm.accesses(address(hook));
         assertEq(writes.length, 0);
-    }
-
-    function test_SettlementRejectsMalformedHookDataEvenForManualRelease() public {
-        stub.signal(hook, ID, "");
-        IIntentLifecycleHookV2.SettlementContext memory context = _context(ID, false);
-        context.data = hex"01";
-        vm.expectRevert(IntentLifecycleHookV2.InvalidLifecycleHookData.selector);
-        stub.settle(hook, context);
-        context.isManualRelease = true;
-        vm.expectRevert(IntentLifecycleHookV2.InvalidLifecycleHookData.selector);
-        stub.settle(hook, context);
     }
 
     function test_OrchestratorV3SignalRevertsBeforeCreatingIntentOrEscrowLock() public {
@@ -349,7 +408,7 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
     function test_ConditionsMatchAndReservedWordsAreIgnored() public {
         stub.signal(hook, ID, "");
         IIntentLifecycleHookV2.SettlementContext memory context = _context(ID, true);
-        context.data = abi.encode(uint8(1), keccak256("conditions"));
+        context.data = abi.encodePacked(keccak256("conditions"));
         context.extensionData = abi.encode(uint256(1), keccak256("conditions"), type(uint256).max, uint256(2));
         assertEq(stub.settle(hook, context), address(0));
         assertEq(uint256(policy.getDisputeProtectionIntent(ID).collateralSource), uint256(P.CollateralSource.BYPASS));
@@ -358,7 +417,7 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
     function test_ConditionsMismatchIncludingMissingWordsReverts() public {
         stub.signal(hook, ID, "");
         IIntentLifecycleHookV2.SettlementContext memory context = _context(ID, false);
-        context.data = abi.encode(uint8(1), keccak256("conditions"));
+        context.data = abi.encodePacked(keccak256("conditions"));
         bytes[5] memory extensions = [bytes(""), new bytes(31), abi.encode(uint256(1)), bytes.concat(abi.encode(uint256(1)), new bytes(31)), abi.encode(uint256(0), keccak256("wrong"))];
         for (uint256 i; i < extensions.length; ++i) {
             context.extensionData = extensions[i];
@@ -380,7 +439,7 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         stub.signal(hook, ID, "");
         IIntentLifecycleHookV2.SettlementContext memory context = _context(ID, false);
         context.isManualRelease = true;
-        context.data = abi.encode(uint8(1), keccak256("conditions"));
+        context.data = abi.encodePacked(keccak256("conditions"));
         context.extensionData = abi.encode(uint256(2), keccak256("wrong"));
         relayerRegistry.addRelayer(taker);
         vm.expectCall(address(policy), abi.encodeCall(P.onIntentSettled, (P.SettleParams(ID, taker, other, address(escrow), depositId, METHOD, INTENT_AMOUNT, NET, false, true))));

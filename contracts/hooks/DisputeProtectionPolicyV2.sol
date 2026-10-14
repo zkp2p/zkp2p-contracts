@@ -21,6 +21,8 @@ import {IStakeVault} from "../interfaces/IStakeVault.sol";
  * predecessor hooks authorized and orchestrators registered until their snapshotted intents drain, and drain
  * active locks before moving vault control unless the successor explicitly adopts their state.
  * Protection applies to every settlement whose payment method has a nonzero risk window.
+ * The hook supplies bypass for balance-funded payments, registered relayer takers, or whitelisted takers;
+ * these settle without collateral. Manual release takes precedence and retains its own collateral source.
  */
 contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, ReentrancyGuard {
     /* ============ Constants ============ */

@@ -288,9 +288,9 @@ then returns the uncapped `attestedReleaseAmount`, verified `PaymentDetails`, an
 trailing return value; unsigned metadata is never returned. O3 reads the V1 prefix with or without
 extension bytes. O4 forwards the raw extension and opaque `intent.data` saved before pruning to
 its snapshotted IntentLifecycleHookV2. The hook is stateless by design: per-intent data lives only in O4,
-and the hook decodes and validates it because governance can replace hooks for future intents while O4
+and the hook interprets it because governance can replace hooks for future intents while O4
 is not upgradeable. Manual release forwards the saved data and an empty extension; the hook skips the
-attestation comparison and extension validation and follows the independent manual-release path without relayer bypass.
+attestation comparison and extension validation and follows the independent manual-release path without bypass.
 
 IOrchestratorV4 keeps `Intent` ABI-identical to V3, including its reserved `postIntentHook` address,
 which O4 always stores as zero. `SignalIntentParams` keeps V3's fields in order except `postIntentHook`;
@@ -304,18 +304,22 @@ to the lifecycle hook's deferral vault or directly to `intent.to`. O4 computes t
 settlement before escrow unlock, so the policy can read a deposit that will close on its final payout;
 after unlock it transfers protocol, referral and manager fees, then the net payout.
 
-IntentLifecycleHookV2 is stateless. A deposit's enabled whitelist is a pure admission gate: non-members
-are rejected, and members still enter the collateral cascade. For a nonzero method risk window, signal
-checks the deposit token against the vault's stake token, the policy's hook authorization, and paused
-admissions, without writing policy state. Cancellation is an unrestricted no-op, retained for future
-hooks; O4 still invokes the snapshotted callback on cancel, escrow prune and orphan cleanup.
+IntentLifecycleHookV2 is stateless. At signal, a deposit's enabled whitelist is a pure admission gate:
+non-members are rejected. For a nonzero method risk window, signal checks the deposit token against
+the vault's stake token, the policy's hook authorization, and paused admissions for every taker, including
+whitelisted and registered relayer takers, without writing policy state. Cancellation is an unrestricted
+no-op, retained for future hooks; O4 still invokes the snapshotted callback on cancel, escrow prune and
+orphan cleanup.
 
 `SettlementContext` is `{ intentHash, token, taker, recipient, escrow, depositId, paymentMethod,
 releaseAmount, netAmount, data, extensionData, isManualRelease }`. O4 reads intent fields before pruning:
 `taker = intent.owner`, `recipient = intent.to`, and `data = intent.data`. The hook passes these identities
-and amounts to the policy's `onIntentSettled(SettleParams)`, with `bypass` set for balance-funded payments
-or takers whitelisted in the calling O4's relayer registry. Relayer-signed orders bypass dispute collateral
-by rule; a replacement hook can change that rule. Manual release has its own path and never uses relayer bypass.
+and amounts to the policy's `onIntentSettled(SettleParams)`, with `bypass` set for balance-funded payments,
+registered relayer takers, or whitelisted takers, checked in that order. A whitelisted taker means the
+deposit/payment-method whitelist is enabled and `isTakerAllowed` returns true for the taker, not the
+recipient. These checks read live state at settlement: disabling the whitelist or removing the taker
+after signal restores the collateral cascade unless another bypass applies. A replacement hook can
+change these rules. Manual release has its own path and never uses bypass.
 
 DisputeProtectionPolicyV2 has no signal/cancel records and no per-deposit opt-outs. A zero risk window
 pays normally with no record. Otherwise settlement reads the depositor and rechecks the token, snapshots
@@ -325,17 +329,17 @@ payout. Paused admissions do not block settlement. Statuses are `NONE`, `AWAITIN
 method, window, collateral source, stake owner, amounts, eligibility time and manual-release flag;
 `DisputeProtectionIntentReleased` remains on immediate releases. No Opened or Cancelled event is emitted.
 
-IntentLifecycleHookV2 accepts empty data or exactly 64 bytes of `abi.encode(uint8(1), bytes32 conditionsHash)`
-with a nonzero hash; malformed data reverts with `InvalidLifecycleHookData`. After whitelist and read-only policy
-checks, the hook retains its v1 gating-service check (`ConditionsRequireGatingService`) as a backstop;
-O4 has already required the service and verified its signature covering the data hash. The concrete hook's
-pure `conditionsHashOf(bytes)` helper is an off-chain convenience for readers using the snapshotted hook,
-not part of the interface O4 checks. Settlement compares extension word 1 with this
-expected hash (zero for empty data), symmetrically, unless manually released. A mismatch reverts with
-`ConditionsNotAttested(intentHash)`. The hook is snapshotted at signal and also handles settlement.
-IIntentLifecycleHookV2 contains only the four lifecycle callbacks: `onIntentSignaled`,
-`onIntentCancelled`, `settleIntent` and `onDeferredPayoutFunded`. Its ERC-165 interface id is the XOR
-of exactly those four selectors, excluding `conditionsHashOf`; O4 validates it when configuring the hook.
+IntentLifecycleHookV2 reads `bytes32(data)`: clients send empty data for no conditions or
+`abi.encodePacked(conditionsHash)` for a raw 32-byte hash. Empty and all-zero data are unconditioned;
+shorter data is right-padded and longer data uses its first word, with no length or version decoding.
+The conditions version belongs inside the attestor-side hash preimage. Each intent's data is interpreted
+only by its snapshotted hook. After whitelist and read-only policy checks, a nonzero hash requires a
+gating service (`ConditionsRequireGatingService`); O4 separately requires a gating service for any
+non-empty data and verifies its signature covering the data hash. Settlement compares extension word 1
+with the expected hash symmetrically, unless manually released. A mismatch reverts with
+`ConditionsNotAttested(intentHash)`. IIntentLifecycleHookV2 contains only the four lifecycle callbacks:
+`onIntentSignaled`, `onIntentCancelled`, `settleIntent` and `onDeferredPayoutFunded`. Its ERC-165
+interface id is the XOR of exactly those four selectors; O4 validates it when configuring the hook.
 
 The cross-repo attestor smoke remains gated by `ATTESTOR_POLICY_SMOKE_ROOT`. The attestation repo's
 script still emits the old 480-byte format until its PR updates; that format is compatible as above.

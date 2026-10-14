@@ -11,6 +11,7 @@ import { IPreIntentHook } from "./IPreIntentHook.sol";
  * @title IOrchestratorV4
  * @notice Interface for the V4 orchestrator with deferred settlement.
  * @dev Intent retains the V3 ABI layout; data holds opaque lifecycle hook data and postIntentHook is always zero.
+ * IntentLifecycleHookV2 uses a raw 32-byte conditions hash (or empty); only the snapshotted hook interprets data.
  */
 interface IOrchestratorV4 {
 
@@ -168,6 +169,7 @@ interface IOrchestratorV4 {
     /// @dev Non-empty data requires a lifecycle hook and a gating service for the deposit's payment method.
     /// Its keccak256(data) is appended to the gating message covered by the service's signature.
     /// Empty data preserves the plain V3 gating message byte-for-byte. Only the lifecycle hook interprets this data.
+    /// For IntentLifecycleHookV2, pass abi.encodePacked(conditionsHash) or empty data; O4 checks no data format.
     function signalIntent(SignalIntentParams calldata params) external;
 
     /// @notice Sets the deposit pre-intent hook as depositor or delegate.
