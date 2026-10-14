@@ -114,7 +114,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      * service to prove their eligibility to take liquidity. This function captures and stores all values required for fullfilling
      * the intent to give strong guarantees to the buyer. Snapshots the global lifecycle hook and executes fail-closed risk
      * admission before locking liquidity for the corresponding deposit on the escrow contract.
-     * Nonzero conditionsHash requires a deposit gating service and is appended to its signed message;
+     * Nonzero conditionsHash requires a lifecycle hook and deposit gating service and is appended to its signed message;
      * zero preserves the plain V3 gating message byte-for-byte.
      *
      * @param _params                   Struct containing all the intent parameters
@@ -272,10 +272,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (!verificationResult.success) revert PaymentVerificationFailed();
         if (verificationResult.intentHash != _params.intentHash) revert HashMismatch(_params.intentHash, verificationResult.intentHash);
 
-        bytes32 attestedConditionsHash = extensionData.length >= 32 ? abi.decode(extensionData, (bytes32)) : bytes32(0);
-        if (attestedConditionsHash != intentConditions[_params.intentHash]) {
-            revert ConditionsNotAttested(_params.intentHash);
-        }
+        bytes32 conditionsHash = intentConditions[_params.intentHash];
 
         // Effects
         _pruneIntent(_params.intentHash);
@@ -292,7 +289,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
             managerFeeRecipient,
             managerFee,
             false,
-            verificationResult.balanceFunded
+            conditionsHash,
+            extensionData
         );
     }
 
@@ -316,6 +314,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         // Snapshot manager fee terms before pruning (pruning deletes the mappings).
         address managerFeeRecipient = intentManagerFeeRecipient[_intentHash];
         uint256 managerFee = intentManagerFee[_intentHash];
+        bytes32 conditionsHash = intentConditions[_intentHash];
         
         // Effects
         _pruneIntent(_intentHash);
@@ -332,7 +331,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
             managerFeeRecipient,
             managerFee,
             true,
-            false
+            conditionsHash,
+            ""
         );
     }
 
@@ -595,7 +595,10 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (_intent.conversionRate < minConversionRate) revert RateBelowMinimum(_intent.conversionRate, minConversionRate);
 
         address intentGatingService = IEscrow(_intent.escrow).getDepositGatingService(_intent.depositId, _intent.paymentMethod);
-        if (_intent.conditionsHash != bytes32(0) && intentGatingService == address(0)) revert ConditionsRequireGatingService();
+        if (_intent.conditionsHash != bytes32(0)) {
+            if (intentGatingService == address(0)) revert ConditionsRequireGatingService();
+            if (address(lifecycleHook) == address(0)) revert ConditionsRequireLifecycleHook();
+        }
         if (intentGatingService != address(0)) {
             // Check if signature has expired
             if (block.timestamp > _intent.signatureExpiration) {
@@ -741,7 +744,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         address _managerFeeRecipient,
         uint256 _managerFee,
         bool _isManualRelease,
-        bool _balanceFunded
+        bytes32 _conditionsHash,
+        bytes memory _extensionData
     ) internal {
         IIntentLifecycleHookV2 snapshottedLifecycleHook = intentLifecycleHooks[_intentHash];
         delete intentLifecycleHooks[_intentHash];
@@ -757,7 +761,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
                     recipient: _intent.to,
                     releaseAmount: _releaseAmount,
                     netAmount: netAmount,
-                    balanceFunded: _balanceFunded,
+                    conditionsHash: _conditionsHash,
+                    extensionData: _extensionData,
                     isManualRelease: _isManualRelease
                 })
             );

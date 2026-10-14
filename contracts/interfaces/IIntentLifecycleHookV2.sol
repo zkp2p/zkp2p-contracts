@@ -9,7 +9,8 @@ interface IIntentLifecycleHookV2 {
         address recipient;
         uint256 releaseAmount;
         uint256 netAmount;
-        bool balanceFunded;
+        bytes32 conditionsHash;
+        bytes extensionData;
         bool isManualRelease;
     }
 
@@ -19,7 +20,10 @@ interface IIntentLifecycleHookV2 {
     /// @notice Cancels the intent's policy record.
     function onIntentCancelled(bytes32 _intentHash) external;
 
-    /// @notice Selects immediate or deferred settlement using the signed balance flag.
+    /// @notice Validates signed conditions and selects immediate or deferred settlement.
+    /// @dev Signed extension words: 0 = balanceFunded (only 0 or 1), 1 = conditionsHash, 2+ = reserved.
+    /// Missing complete words read as zero. Manual release ignores the extension and uses balanceFunded = false.
+    /// Decoding lives in the governance-replaceable hook because OrchestratorV4 is not upgradeable.
     /// @return deferralVault Zero to pay out now; otherwise the vault that must receive netAmount before onDeferredPayoutFunded.
     function settleIntent(SettlementContext calldata _context) external returns (address deferralVault);
 

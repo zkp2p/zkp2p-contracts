@@ -117,24 +117,24 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
         assertEq(token.balanceOf(address(hook)), INTENT_AMOUNT - 1_750_000);
     }
 
-    function test_BalanceFlagForwarded() public {
-        verifier.setBalanceFunded(true);
+    function test_ExtensionWordZeroForwarded() public {
+        verifier.setExtensionData(abi.encode(uint256(1)));
         _fulfill(_signalDefault(), INTENT_AMOUNT, CONVERSION_RATE);
-        (,,,,, bool flag,) = hook.lastSettlementContext();
-        assertTrue(flag);
-        verifier.setBalanceFunded(false);
+        (,,,,,, bytes memory extensionData,) = hook.lastSettlementContext();
+        assertEq(extensionData, abi.encode(uint256(1)));
+        verifier.setExtensionData(abi.encode(uint256(0)));
         _fulfill(_signalDefault(), INTENT_AMOUNT, CONVERSION_RATE);
-        (,,,,, flag,) = hook.lastSettlementContext();
-        assertFalse(flag);
+        (,,,,,, extensionData,) = hook.lastSettlementContext();
+        assertEq(extensionData, abi.encode(uint256(0)));
     }
 
-    function test_ManualReleasePassesFalseFlag() public {
-        verifier.setBalanceFunded(true);
+    function test_ManualReleasePassesEmptyExtension() public {
+        verifier.setExtensionData(abi.encode(uint256(1)));
         bytes32 hash = _signalDefault();
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(hash);
-        (,,,,, bool flag, bool manual) = hook.lastSettlementContext();
-        assertFalse(flag);
+        (,,,,,, bytes memory extensionData, bool manual) = hook.lastSettlementContext();
+        assertEq(extensionData, "");
         assertTrue(manual);
         assertEq(token.balanceOf(taker), INTENT_AMOUNT);
     }

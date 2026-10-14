@@ -23,14 +23,14 @@ contract UnifiedPaymentVerifierV4Test is UnifiedPaymentVerifierV3Test {
     }
 
     function _payloadSuffix() internal pure override returns (bytes memory) {
-        return abi.encode(false);
+        return "";
     }
 
-    function test_ReturnsBalanceFundedTrue() public {
+    function test_Old480BytePayloadReturnsTrueBoolAsExtensionWordZero() public {
         _checkBalanceFlag(true);
     }
 
-    function test_ReturnsBalanceFundedFalse() public {
+    function test_Old480BytePayloadReturnsFalseBoolAsExtensionWordZero() public {
         _checkBalanceFlag(false);
     }
 
@@ -54,16 +54,17 @@ contract UnifiedPaymentVerifierV4Test is UnifiedPaymentVerifierV3Test {
             assertTrue(result.success);
             assertEq(result.intentHash, intentHash);
             assertEq(result.releaseAmount, AMOUNT);
-            assertEq(result.balanceFunded, flag);
             assertEq(result.attestedReleaseAmount, AMOUNT + 1);
             assertEq(abi.encode(result.payment), abi.encode(_payment(paymentId)));
             assertEq(abi.encode(result.intent), abi.encode(_snapshot(intentHash)));
-            assertEq(extensionData, "");
+            // The old trailing bool is harmless: it is now exactly extension word 0.
+            assertEq(data.length, 480);
+            assertEq(extensionData, abi.encode(flag));
         }
     }
 
-    function test_RejectsPayloadWithoutBalanceFlag() public {
-        _rejectPayload("", bytes("UPV: Invalid payload length"));
+    function test_Accepts448BytePayloadWithEmptyExtension() public {
+        _checkExtension("");
     }
 
     function test_ReturnsSignedExtensionData() public {
@@ -80,7 +81,8 @@ contract UnifiedPaymentVerifierV4Test is UnifiedPaymentVerifierV3Test {
         caller.setIntent(LEGACY_INTENT, legacyCaller.getIntent(LEGACY_INTENT));
         orchestratorRegistry.addOrchestrator(address(caller));
         bytes32 paymentId = keccak256("extension");
-        bytes memory data = bytes.concat(abi.encode(_payment(paymentId), _snapshot(LEGACY_INTENT), true), extensionData);
+        bytes memory data = bytes.concat(abi.encode(_payment(paymentId), _snapshot(LEGACY_INTENT)), extensionData);
+        assertEq(data.length, 448 + extensionData.length);
         bytes memory proof = _encodeProof(verifier, LEGACY_INTENT, AMOUNT - 1, keccak256(data), data, WITNESS_KEY);
         UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(proof, (UnifiedPaymentVerifierV4.PaymentAttestation));
         attestation.metadata = hex"badbad";
@@ -91,7 +93,6 @@ contract UnifiedPaymentVerifierV4Test is UnifiedPaymentVerifierV3Test {
         assertEq(result.intentHash, LEGACY_INTENT);
         assertEq(result.releaseAmount, AMOUNT - 1);
         assertEq(result.attestedReleaseAmount, AMOUNT - 1);
-        assertTrue(result.balanceFunded);
         assertEq(abi.encode(result.payment), abi.encode(_payment(paymentId)));
         assertEq(abi.encode(result.intent), abi.encode(_snapshot(LEGACY_INTENT)));
         assertEq(returnedExtension, extensionData);
@@ -99,10 +100,10 @@ contract UnifiedPaymentVerifierV4Test is UnifiedPaymentVerifierV3Test {
 
     function test_ExtensionTamperingFails() public {
         bytes32 paymentId = keccak256("tampered-extension");
-        bytes memory data = bytes.concat(abi.encode(_payment(paymentId), _snapshot(LEGACY_INTENT), true), hex"010203");
+        bytes memory data = bytes.concat(abi.encode(_payment(paymentId), _snapshot(LEGACY_INTENT)), hex"010203");
         bytes memory proof = _encodeProof(verifier, LEGACY_INTENT, AMOUNT, keccak256(data), data, WITNESS_KEY);
         UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(proof, (UnifiedPaymentVerifierV4.PaymentAttestation));
-        attestation.data[481] = 0xff;
+        attestation.data[449] = 0xff;
         vm.expectRevert("UPV: Data hash mismatch");
         _call(IUnifiedVerifierCaller(address(legacyCaller)), verifier, LEGACY_INTENT, abi.encode(attestation));
         attestation.dataHash = keccak256(attestation.data);
@@ -111,24 +112,22 @@ contract UnifiedPaymentVerifierV4Test is UnifiedPaymentVerifierV3Test {
         assertFalse(nullifierRegistry.isNullified(_nullifier(paymentId)));
     }
 
-    function test_Rejects479BytePayload() public {
-        _rejectPayload(new bytes(31), bytes("UPV: Invalid payload length"));
+    function test_RejectsPayloadUnder448Bytes() public {
+        _rejectPayloadLength(0);
+        _rejectPayloadLength(447);
     }
 
-    function test_RejectsNonCanonicalFlag() public {
-        _rejectPayload(abi.encode(uint256(2)), "");
+    function test_ReturnsNonCanonicalFlagUninterpreted() public {
+        _checkExtension(abi.encode(uint256(2)));
     }
 
-    function _rejectPayload(bytes memory suffix, bytes memory reason) internal {
+    function _rejectPayloadLength(uint256 length) internal {
         for (uint256 i; i < 2; i++) {
             bytes32 intentHash = i == 0 ? LEGACY_INTENT : V2_INTENT;
-            bytes32 paymentId = keccak256(abi.encode("invalid-payload", i));
-            bytes memory data = bytes.concat(abi.encode(_payment(paymentId), _snapshot(intentHash)), suffix);
+            bytes memory data = new bytes(length);
             bytes memory proof = _encodeProof(verifier, intentHash, AMOUNT, keccak256(data), data, WITNESS_KEY);
-            if (reason.length == 0) vm.expectRevert();
-            else vm.expectRevert(reason);
+            vm.expectRevert("UPV: Invalid payload length");
             _call(IUnifiedVerifierCaller(i == 0 ? address(legacyCaller) : address(v2Caller)), verifier, intentHash, proof);
-            assertFalse(nullifierRegistry.isNullified(_nullifier(paymentId)));
         }
     }
 

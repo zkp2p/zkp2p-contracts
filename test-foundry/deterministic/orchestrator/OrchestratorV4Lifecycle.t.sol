@@ -92,7 +92,7 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
     }
 
     function test_SettlementNotifiesHookAndFundsFlowNormally() public {
-        verifier.setBalanceFunded(true);
+        verifier.setExtensionData(abi.encode(uint256(1)));
         orchestrator.setLifecycleHook(lifecycleHookMock);
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.referralFees = _twoReferralFees();
@@ -109,7 +109,8 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
             address recipient,
             uint256 releaseAmount,
             uint256 netAmount,
-            bool balanceFunded,
+            bytes32 conditionsHash,
+            bytes memory extensionData,
             bool isManualRelease
         ) = lifecycleHookMock.lastSettlementContext();
         assertEq(settledIntentHash, intentHash);
@@ -117,7 +118,8 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         assertEq(recipient, taker);
         assertEq(releaseAmount, INTENT_AMOUNT);
         assertEq(netAmount, INTENT_AMOUNT - 250_000);
-        assertTrue(balanceFunded);
+        assertEq(conditionsHash, bytes32(0));
+        assertEq(extensionData, abi.encode(uint256(1)));
         assertFalse(isManualRelease);
         assertEq(token.balanceOf(referrer) - referrerBefore, 150_000);
         assertEq(token.balanceOf(other) - otherBefore, 100_000);
@@ -160,8 +162,9 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(intentHash);
         assertEq(lifecycleHookMock.settlementCalls(), 1);
-        (,,,,, bool balanceFunded, bool isManualRelease) = lifecycleHookMock.lastSettlementContext();
-        assertFalse(balanceFunded);
+        (,,,,, bytes32 conditionsHash, bytes memory extensionData, bool isManualRelease) = lifecycleHookMock.lastSettlementContext();
+        assertEq(conditionsHash, bytes32(0));
+        assertEq(extensionData, "");
         assertTrue(isManualRelease);
         assertEq(token.balanceOf(taker), recipientBefore);
         assertEq(token.balanceOf(delegate) - hookRecipientBefore, netAmount);

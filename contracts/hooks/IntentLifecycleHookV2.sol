@@ -22,6 +22,8 @@ contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
 
     /* ============ Errors ============ */
 
+    error InvalidBalanceFundedFlag(uint256 value);
+    error ConditionsNotAttested(bytes32 intentHash);
     error ZeroAddress();
     error InvalidDependency(address dependency);
     error UnauthorizedOrchestrator(address caller);
@@ -89,9 +91,19 @@ contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
     function settleIntent(SettlementContext calldata _context)
         external override onlyOrchestrator returns (address deferralVault)
     {
+        bool balanceFunded;
+        if (!_context.isManualRelease) {
+            uint256 flag = _context.extensionData.length >= 32
+                ? abi.decode(_context.extensionData[:32], (uint256)) : 0;
+            if (flag > 1) revert InvalidBalanceFundedFlag(flag);
+            balanceFunded = flag == 1;
+            bytes32 attested = _context.extensionData.length >= 64
+                ? abi.decode(_context.extensionData[32:64], (bytes32)) : bytes32(0);
+            if (attested != _context.conditionsHash) revert ConditionsNotAttested(_context.intentHash);
+        }
         bool deferred = disputeProtectionPolicy.onIntentSettled(
             _context.intentHash, _context.releaseAmount, _context.netAmount,
-            _context.balanceFunded, _context.isManualRelease
+            balanceFunded, _context.isManualRelease
         );
         return deferred ? address(disputeProtectionPolicy.stakeVault()) : address(0);
     }

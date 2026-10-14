@@ -317,7 +317,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
     function test_O4FulfilsThroughUPV4WithExtensionAfterCutover() public {
         _activateLane46();
         bytes32 id = _signalO4();
-        _settleO4(id, _signedProof(id, PAYMENT_ID, successor.DOMAIN_SEPARATOR(), true, true, hex"ff01020304"));
+        _settleO4(id, _signedProof(id, PAYMENT_ID, successor.DOMAIN_SEPARATOR(), true, true, abi.encode(bytes32(0), keccak256("reserved"))));
         assertEq(token.balanceOf(other), INTENT_AMOUNT);
         assertEq(orchestratorV4.getIntent(id).owner, address(0));
     }
@@ -544,8 +544,11 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         private view returns (bytes memory)
     {
         bytes memory data = _attestationData(intentHash, paymentId);
-        if (v4) data = bytes.concat(data, abi.encode(balanceFunded));
-        assertEq(data.length, v4 ? 480 : 448);
+        assertEq(data.length, 448);
+        // Plain UPV4 proofs need no extension. When present, word 0 is the balance flag.
+        if (v4 && (balanceFunded || extensionData.length != 0)) {
+            data = bytes.concat(data, abi.encode(uint256(balanceFunded ? 1 : 0)));
+        }
         data = bytes.concat(data, extensionData);
         bytes32 dataHash = keccak256(data);
         bytes32 structHash = keccak256(

@@ -11,6 +11,7 @@ import {UnifiedPaymentVerifierV4} from "contracts/unifiedVerifier/UnifiedPayment
 import {OrchestratorV3} from "contracts/OrchestratorV3.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
 import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
+import {IntentLifecycleHookV2} from "contracts/hooks/IntentLifecycleHookV2.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 
 contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
@@ -45,7 +46,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
             bytes memory invalidProof = _signedProof(
                 id, bytes.concat(attestation.data, invalidExtensions[i]), INTENT_AMOUNT
             );
-            vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.ConditionsNotAttested.selector, id));
+            vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV2.ConditionsNotAttested.selector, id));
             orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(invalidProof, id, "", ""));
             assertEq(orchestrator.intentConditions(id), CONDITIONS);
             assertEq(orchestrator.getIntent(id).owner, taker);
@@ -56,7 +57,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
             assertEq(nullifiers.nullifierByIntentHash(id), bytes32(0));
         }
         bytes memory proof = _signedProof(
-            id, bytes.concat(attestation.data, abi.encode(CONDITIONS), hex"010203"), INTENT_AMOUNT
+            id, bytes.concat(attestation.data, abi.encode(CONDITIONS, keccak256("reserved"))), INTENT_AMOUNT
         );
         orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, id, "", ""));
         assertEq(orchestrator.intentConditions(id), bytes32(0));
@@ -89,7 +90,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
             _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, false),
             (UnifiedPaymentVerifierV4.PaymentAttestation)
         );
-        bytes memory proof = _signedProof(id, bytes.concat(attestation.data, hex"deadbeef0102"), INTENT_AMOUNT);
+        bytes memory proof = _signedProof(id, bytes.concat(attestation.data, abi.encode(bytes32(0), keccak256("reserved"))), INTENT_AMOUNT);
         orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, id, "", ""));
         assertEq(token.balanceOf(other), 0);
         _assertLock(id, other, NET);
@@ -107,7 +108,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         assertEq(attestation.data.length, 480);
         bytes memory proof = _signedProof(id, bytes.concat(attestation.data, abi.encode(CONDITIONS)), INTENT_AMOUNT);
         uint256 escrowBalance = token.balanceOf(address(escrow));
-        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.ConditionsNotAttested.selector, id));
+        vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV2.ConditionsNotAttested.selector, id));
         orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, id, "", ""));
         assertEq(orchestrator.intentConditions(id), bytes32(0));
         assertEq(orchestrator.getIntent(id).owner, taker);

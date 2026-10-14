@@ -367,22 +367,52 @@ MIT
 - [Documentation](https://docs.zkp2p.xyz)
 - [Website](https://zkp2p.xyz)
 
+### UPV4 wire format and return compatibility
+
+UPV4 accepts the same 448-byte `abi.encode(PaymentDetails, IntentSnapshot)` payload as UPV3,
+followed by optional signed extension bytes. The entire `data`, including the extension, is
+covered by `dataHash` and witness signatures. UPV4 returns the extension untouched and uninterpreted.
+Extension fields occupy dedicated 32-byte words: word 0 is `balanceFunded` (only 0 or 1),
+word 1 is the attested `conditionsHash`, and words 2+ are reserved and ignored by the current hook.
+Missing complete words read as zero. Plain payloads are 448 bytes, balance-funded payloads are
+480 bytes, and conditioned payloads are 512 bytes (word 0 may be 0 or 1).
+The old 480-byte encoding remains harmless: its trailing bool becomes extension word 0.
+
+The fully static result preserves the V1 `success`, `intentHash`, `releaseAmount` prefix,
+then returns the uncapped `attestedReleaseAmount`, verified `PaymentDetails`, and signed/validated
+`IntentSnapshot`. `balanceFunded` is not a result field. Dynamic extension bytes are a separate
+trailing return value; unsigned metadata is never returned. O3 reads the V1 prefix with or without
+extension bytes. O4 forwards the raw extension and the conditions hash saved before pruning to
+its snapshotted IntentLifecycleHookV2. The hook decodes and validates the extension because governance
+can replace hooks for future intents, while O4 is not upgradeable. Manual release forwards the saved
+conditions hash and empty extension; the hook skips extension validation and uses `balanceFunded = false`.
+
+IOrchestratorV4 keeps Intent and FulfillIntentParams ABI-identical to V3. Its SignalIntentParams
+keeps V3's fields in order and appends bytes32 conditionsHash after data. A nonzero hash requires
+both a current lifecycle hook (`ConditionsRequireLifecycleHook`) and a deposit gating service,
+which signs the appended hash. Zero preserves the plain V3 gating message byte-for-byte.
+The hook is snapshotted at signal and also handles settlement. The dynamic SettlementContext
+changes the IIntentLifecycleHookV2 ERC-165 interface id; both sides retain ERC-165 validation.
+
+The cross-repo attestor smoke remains gated by `ATTESTOR_POLICY_SMOKE_ROOT`. The attestation repo's
+script still emits the old 480-byte format until its PR updates; that format is compatible as above.
+
 ### O4 intent conditions
 
 `signalIntent(params)` accepts `conditionsHash` as the last field, after `data`.
-A nonzero hash requires a deposit gating service, which signs the existing 336-byte packed
+A nonzero hash requires a nonzero lifecycle hook and a deposit gating service, which signs the existing 336-byte packed
 message with the 32-byte hash appended (368 bytes total). `bytes32(0)` means no conditions
 and preserves the plain V3 gating message byte-for-byte. The added field changes O4's calldata
 selector and ERC-165 interface id. `intentConditions(intentHash)` exposes the hash until pruning.
 
-The hash is opaque on-chain. UPV4's signed `extensionData` word 0 is the attested conditions
-hash, zero when none. An absent extension or one shorter than 32 bytes attests zero. On every
-fulfillment path, the attested hash must equal `intentConditions(intentHash)` or revert with
-`ConditionsNotAttested(intentHash)` before funds move. Unconditioned intents accept the current
-480-byte attestations without extensions and extensions with word 0 equal to zero, but reject
-a nonzero attested hash. Conditioned intents require the exact hash. Extra bytes after word 0
-are accepted and reserved. Manual release ignores conditions. `intent.data` remains the
-post-intent hook payload.
+The hash is opaque to O4. UPV4's signed extension word 0 is the dedicated `balanceFunded`
+flag (0 or 1); word 1 is the attested conditions hash. Missing complete words mean zero.
+IntentLifecycleHookV2 rejects any other flag with `InvalidBalanceFundedFlag(value)` and, unless
+this is a manual release, requires word 1 to equal the pre-prune hash forwarded by O4 or reverts
+with `ConditionsNotAttested(intentHash)`, rolling back the entire fulfillment. The comparison is
+symmetric: an unconditioned intent rejects a nonzero attested hash. Words 2+ are ignored.
+Manual release ignores the extension and uses `balanceFunded = false`. Decoding belongs to the
+replaceable hook because O4 is not upgradeable. `intent.data` remains the post-intent hook payload.
 
 Off-chain convention v1 is
 `conditionsHash = keccak256(abi.encode(uint8(1), salt, payerIdHash))`,

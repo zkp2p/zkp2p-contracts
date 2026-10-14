@@ -1,11 +1,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
+import {LifecycleHookV2Mock} from "../../mocks/LifecycleHookV2Mock.sol";
 import {OrchestratorV4Fixture} from "../helpers/OrchestratorV4Fixture.sol";
+import {IIntentLifecycleHookV2} from "contracts/interfaces/IIntentLifecycleHookV2.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 
 contract OrchestratorV4ConditionsTest is OrchestratorV4Fixture {
+    LifecycleHookV2Mock internal lifecycleHookMock;
     bytes32 internal constant CONDITIONS = keccak256("conditions");
+
+    function setUp() public override {
+        super.setUp();
+        lifecycleHookMock = new LifecycleHookV2Mock();
+        orchestrator.setLifecycleHook(lifecycleHookMock);
+    }
 
     function test_ConditionsRequireGatingService() public {
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
@@ -35,24 +44,28 @@ contract OrchestratorV4ConditionsTest is OrchestratorV4Fixture {
         assertEq(token.balanceOf(taker), extensions.length * INTENT_AMOUNT);
     }
 
-    function test_UnconditionedIntentRejectsNonZeroAttestedHash() public {
-        bytes32 id = _signalDefault();
-        uint256 escrowBalance = token.balanceOf(address(escrow));
-        verifier.setExtensionData(abi.encode(CONDITIONS));
-        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.ConditionsNotAttested.selector, id));
-        _fulfill(id, INTENT_AMOUNT, CONVERSION_RATE);
-        assertEq(orchestrator.intentConditions(id), bytes32(0));
-        assertEq(orchestrator.getIntent(id).owner, taker);
-        assertEq(token.balanceOf(address(escrow)), escrowBalance);
-        assertEq(token.balanceOf(taker), 0);
+    function test_ConditionsRequireLifecycleHook() public {
+        _useGatedDeposit();
+        orchestrator.setLifecycleHook(IIntentLifecycleHookV2(address(0)));
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
+        params.conditionsHash = CONDITIONS;
+        params.gatingServiceSignature = _conditionsSignature(params, CONDITIONS);
+        uint256 counter = orchestrator.intentCounter();
+        vm.expectRevert(IOrchestratorV4.ConditionsRequireLifecycleHook.selector);
+        _signalCall(taker, params);
+        assertEq(orchestrator.intentCounter(), counter);
+        assertEq(escrow.getDeposit(depositId).outstandingIntentAmount, 0);
     }
 
-    function test_UnconditionedIntentAcceptsZeroAttestedHashWithTrailingBytes() public {
+    function test_UnconditionedIntentForwardsUninterpretedExtension() public {
         bytes32 id = _signalDefault();
-        verifier.setExtensionData(bytes.concat(abi.encode(bytes32(0)), hex"010203"));
+        bytes memory raw = abi.encode(uint256(2), CONDITIONS, keccak256("reserved"));
+        verifier.setExtensionData(raw);
         _fulfill(id, INTENT_AMOUNT, CONVERSION_RATE);
-        assertEq(orchestrator.getIntent(id).owner, address(0));
-        assertEq(token.balanceOf(taker), INTENT_AMOUNT);
+        (,,,,, bytes32 conditions, bytes memory forwarded, bool manual) = lifecycleHookMock.lastSettlementContext();
+        assertEq(conditions, bytes32(0));
+        assertEq(forwarded, raw);
+        assertFalse(manual);
     }
 
     function test_ConditionedSignalStoresHashAndPreservesHookData() public {
@@ -105,33 +118,21 @@ contract OrchestratorV4ConditionsTest is OrchestratorV4Fixture {
         orchestrator.signalIntent(params);
     }
 
-    function test_ConditionsEchoRequiredBeforeFundsMove() public {
+    function test_ForwardsRawExtensionAndPrePruneConditionsToSnapshottedHook() public {
         _useGatedDeposit();
         bytes32 id = _signalWithConditions(CONDITIONS);
-        uint256 escrowBalance = token.balanceOf(address(escrow));
-        bytes[4] memory extensions = [bytes(""), new bytes(31), abi.encode(bytes32(0)), abi.encode(keccak256("wrong"))];
-        for (uint256 i; i < extensions.length; ++i) {
-            verifier.setExtensionData(extensions[i]);
-            vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.ConditionsNotAttested.selector, id));
-            _fulfill(id, INTENT_AMOUNT, CONVERSION_RATE);
-            assertEq(orchestrator.intentConditions(id), CONDITIONS);
-            assertEq(orchestrator.getIntent(id).owner, taker);
-            assertEq(token.balanceOf(address(escrow)), escrowBalance);
-            assertEq(token.balanceOf(taker), 0);
-        }
-    }
-
-    function test_MatchingEchoAndReservedTrailingBytesAccepted() public {
-        _useGatedDeposit();
-        for (uint256 i; i < 2; ++i) {
-            bytes32 id = _signalWithConditions(CONDITIONS);
-            verifier.setExtensionData(
-                i == 0 ? abi.encode(CONDITIONS) : bytes.concat(abi.encode(CONDITIONS), hex"010203")
-            );
-            _fulfill(id, INTENT_AMOUNT, CONVERSION_RATE);
-            assertEq(orchestrator.intentConditions(id), bytes32(0));
-        }
-        assertEq(token.balanceOf(taker), 2 * INTENT_AMOUNT);
+        orchestrator.setLifecycleHook(IIntentLifecycleHookV2(address(0)));
+        bytes memory raw = hex"ff010203";
+        verifier.setExtensionData(raw);
+        _fulfill(id, INTENT_AMOUNT, CONVERSION_RATE);
+        (bytes32 settledId,,,,, bytes32 conditions, bytes memory forwarded, bool manual) = lifecycleHookMock.lastSettlementContext();
+        assertEq(settledId, id);
+        assertEq(conditions, CONDITIONS);
+        assertEq(forwarded, raw);
+        assertFalse(manual);
+        assertEq(lifecycleHookMock.settlementCalls(), 1);
+        assertEq(orchestrator.intentConditions(id), bytes32(0));
+        assertEq(orchestrator.getIntent(id).owner, address(0));
     }
 
     function test_CancelClearsConditions() public {
@@ -172,5 +173,9 @@ contract OrchestratorV4ConditionsTest is OrchestratorV4Fixture {
         orchestrator.releaseFundsToPayer(id);
         assertEq(token.balanceOf(taker), INTENT_AMOUNT);
         assertEq(orchestrator.intentConditions(id), bytes32(0));
+        (,,,,, bytes32 conditions, bytes memory forwarded, bool manual) = lifecycleHookMock.lastSettlementContext();
+        assertEq(conditions, CONDITIONS);
+        assertEq(forwarded, "");
+        assertTrue(manual);
     }
 }

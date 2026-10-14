@@ -26,18 +26,20 @@ interface IPaymentVerifierV2 {
 
     /// @dev Must stay fully static and preserve the V1 three-field prefix: OrchestratorV3 calls
     /// through IPaymentVerifier and reads only the first three words. Dynamic data must be a
-    /// separate trailing return value, never a field inside this struct.
+    /// separate trailing return value, never a field inside this struct. The balance flag is extension word 0,
+    /// not part of this result, so the V1 prefix remains unchanged.
     struct PaymentVerificationResultV2 {
         bool success;
         bytes32 intentHash;
         uint256 releaseAmount;
-        bool balanceFunded; // Attestation-signed: payment was funded from the payer's platform balance.
         uint256 attestedReleaseAmount; // Signed release amount before the intent cap.
         PaymentDetails payment;
         IntentSnapshot intent;
     }
 
     /// @notice Verifies a payment and returns all verified fields plus signed extension data (never unsigned metadata).
+    /// @dev Extension words: 0 = balanceFunded (0 or 1), 1 = conditionsHash, 2+ = reserved.
+    /// The verifier returns these bytes untouched; IntentLifecycleHookV2 decodes and validates them.
     function verifyPayment(IPaymentVerifier.VerifyPaymentData calldata _verifyPaymentData)
         external
         returns (PaymentVerificationResultV2 memory result, bytes memory extensionData);

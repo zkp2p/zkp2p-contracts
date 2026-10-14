@@ -721,10 +721,29 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
       ["success", "bool"],
       ["intentHash", "bytes32"],
       ["releaseAmount", "uint256"],
-      ["balanceFunded", "bool"],
       ["attestedReleaseAmount", "uint256"],
       ["payment", "tuple"],
       ["intent", "tuple"],
+    ]
+  );
+  const settlementContext = state.records
+    .get("IntentLifecycleHookV2")
+    .abi.find(
+      (/** @type {{name?: string}} */ entry) => entry.name === "settleIntent"
+    ).inputs[0].components;
+  assert.deepEqual(
+    settlementContext.map(
+      (/** @type {{name: string, type: string}} */ entry) => [entry.name, entry.type]
+    ),
+    [
+      ["intentHash", "bytes32"],
+      ["token", "address"],
+      ["recipient", "address"],
+      ["releaseAmount", "uint256"],
+      ["netAmount", "uint256"],
+      ["conditionsHash", "bytes32"],
+      ["extensionData", "bytes"],
+      ["isManualRelease", "bool"],
     ]
   );
   await activateLane46(state.fakeHre);

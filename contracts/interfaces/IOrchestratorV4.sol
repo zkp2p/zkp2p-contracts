@@ -135,11 +135,11 @@ interface IOrchestratorV4 {
     error InvalidLifecycleHook(address hook);
     error InvalidSignature();
     error ConditionsRequireGatingService();
+    error ConditionsRequireLifecycleHook();
     error SignatureExpired(uint256 expiration, uint256 currentTime);
 
     // Verification errors
     error PaymentVerificationFailed();
-    error ConditionsNotAttested(bytes32 intentHash);
     error HashMismatch(bytes32 expected, bytes32 actual);
 
     // Transfer errors
@@ -169,7 +169,7 @@ interface IOrchestratorV4 {
     /* ============ External Functions for Users ============ */
 
     /// @notice Signals an intent and locks its escrow funds, with optional attested conditions.
-    /// @dev A nonzero conditionsHash requires a deposit gating service and is appended to its signed message.
+    /// @dev A nonzero conditionsHash requires a lifecycle hook and deposit gating service and is appended to its signed message.
     /// A zero conditionsHash preserves the plain V3 gating message byte-for-byte.
     function signalIntent(SignalIntentParams calldata params) external;
 

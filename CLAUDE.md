@@ -72,7 +72,7 @@ Important ownership boundaries:
 
 - `OrchestratorV4` is OrchestratorV3 plus deferred settlement, and is not a proxy.
 - `DisputeProtectionPolicyV2` and `IntentLifecycleHookV2` serve only OrchestratorV4; OrchestratorV3 keeps `DisputeProtectionPolicy` and `IntentLifecycleHookV1`.
-- `UnifiedPaymentVerifierV4` returns the attestation-signed balance flag and serves both OrchestratorV3 and OrchestratorV4.
+- `UnifiedPaymentVerifierV4` returns signed extension bytes without decoding them and serves both OrchestratorV3 and OrchestratorV4.
 - `EscrowV2` owns deposits, locking, and release.
 - `OrchestratorV2` owns intent lifecycle and fee routing.
 - `OrchestratorV3` owns the V3 intent lifecycle and snapshots the
@@ -190,7 +190,8 @@ Current numbered lanes include:
   The cascade policy starts with protection on by default; opt-outs are not carried over; depositors opt out again on it.
   Staging order is lane 45 (reports stale intents), lane 46 `ENABLE_` with both `CONFIRM_` flags, then
   lane 46 `PREPARE_` expecting `active`; keep one build and avoid untagged runs until recording merges.
-  Downstream readiness means new-domain 480-byte UPV4 attestations for both orchestrators and O4 client
+  Downstream readiness means new-domain UPV4 attestations with a 448-byte payload and signed extension
+  words for both orchestrators and O4 client
   routing. RelayerRegistry is shared across orchestrators. Base emits an unsigned guarded atomic batch
   ending in `addOrchestrator(O4)`, with no O3 call; the postcondition runs only in the fork simulation.
   Historical activation: 2026-10-12 from `a6970aa` (32 actions); replacement activation: 2026-10-13 from
@@ -272,19 +273,33 @@ Follow the precision rules in [AGENTS.md](AGENTS.md#coding-style--naming-convent
 
 ### UPV4 return compatibility
 
-UPV4 accepts a 480-byte payment/snapshot/balance-flag prefix followed by optional signed
-extension bytes. The attestation service continues signing exactly 480 bytes; no downstream
-change is required. The entire payload, including extensions, is covered by `dataHash`.
-Its fully static result preserves the V1 `success`, `intentHash`, `releaseAmount` prefix,
-then returns `balanceFunded`, the uncapped `attestedReleaseAmount`, verified `PaymentDetails`
-and signed/validated `IntentSnapshot`. Dynamic extension bytes are a separate trailing return
-value; unsigned metadata is never returned. O3 reads the V1 prefix, and O4 uses the capped
-release amount and balance flag, and checks the signed extension's conditions hash for every intent.
+UPV4 accepts the same 448-byte `abi.encode(PaymentDetails, IntentSnapshot)` payload as UPV3,
+followed by optional signed extension bytes. The entire `data`, including the extension, is
+covered by `dataHash` and witness signatures. UPV4 returns the extension untouched and uninterpreted.
+Extension fields occupy dedicated 32-byte words: word 0 is `balanceFunded` (only 0 or 1),
+word 1 is the attested `conditionsHash`, and words 2+ are reserved and ignored by the current hook.
+Missing complete words read as zero. Plain payloads are 448 bytes, balance-funded payloads are
+480 bytes, and conditioned payloads are 512 bytes (word 0 may be 0 or 1).
+The old 480-byte encoding remains harmless: its trailing bool becomes extension word 0.
+
+The fully static result preserves the V1 `success`, `intentHash`, `releaseAmount` prefix,
+then returns the uncapped `attestedReleaseAmount`, verified `PaymentDetails`, and signed/validated
+`IntentSnapshot`. `balanceFunded` is not a result field. Dynamic extension bytes are a separate
+trailing return value; unsigned metadata is never returned. O3 reads the V1 prefix with or without
+extension bytes. O4 forwards the raw extension and the conditions hash saved before pruning to
+its snapshotted IntentLifecycleHookV2. The hook decodes and validates the extension because governance
+can replace hooks for future intents, while O4 is not upgradeable. Manual release forwards the saved
+conditions hash and empty extension; the hook skips extension validation and uses `balanceFunded = false`.
+
 IOrchestratorV4 keeps Intent and FulfillIntentParams ABI-identical to V3. Its SignalIntentParams
-keeps V3's fields in order and appends bytes32 conditionsHash after data. signalIntent accepts
-zero for no conditions, preserving the plain V3 gating message byte-for-byte; a nonzero hash
-requires a deposit gating service and is appended to its signed message. The added field changes
-O4's calldata selector and ERC-165 interface id. intentConditions exposes the hash until pruning.
+keeps V3's fields in order and appends bytes32 conditionsHash after data. A nonzero hash requires
+both a current lifecycle hook (`ConditionsRequireLifecycleHook`) and a deposit gating service,
+which signs the appended hash. Zero preserves the plain V3 gating message byte-for-byte.
+The hook is snapshotted at signal and also handles settlement. The dynamic SettlementContext
+changes the IIntentLifecycleHookV2 ERC-165 interface id; both sides retain ERC-165 validation.
+
+The cross-repo attestor smoke remains gated by `ATTESTOR_POLICY_SMOKE_ROOT`. The attestation repo's
+script still emits the old 480-byte format until its PR updates; that format is compatible as above.
 
 ### Deferred lifecycle compatibility
 

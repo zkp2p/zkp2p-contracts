@@ -61,7 +61,7 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
     }
 
     function _context(bytes32 id, bool balanceFunded) internal view returns (IIntentLifecycleHookV2.SettlementContext memory) {
-        return IIntentLifecycleHookV2.SettlementContext(id, address(token), other, INTENT_AMOUNT, NET, balanceFunded, false);
+        return IIntentLifecycleHookV2.SettlementContext(id, address(token), other, INTENT_AMOUNT, NET, bytes32(0), abi.encode(balanceFunded), false);
     }
 
     function _optOut() internal {
@@ -157,6 +157,67 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         stub.signal(hook, deferredId);
         assertEq(stub.settle(hook, _context(deferredId, false)), address(vault));
         assertEq(policy.getDisputeProtectionIntent(deferredId).lockedAmount, NET);
+    }
+
+    function test_InvalidBalanceFundedFlagReverts() public {
+        stub.signal(hook, ID);
+        IIntentLifecycleHookV2.SettlementContext memory context = _context(ID, false);
+        context.extensionData = abi.encode(uint256(2));
+        vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV2.InvalidBalanceFundedFlag.selector, 2));
+        stub.settle(hook, context);
+        assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.PENDING));
+    }
+
+    function test_MissingCompleteWordsMeanZero() public {
+        bytes[5] memory extensions = [bytes(""), bytes(hex"ff"), new bytes(31), abi.encode(uint256(0)), bytes.concat(abi.encode(uint256(0)), new bytes(31))];
+        for (uint256 i; i < extensions.length; ++i) {
+            bytes32 id = keccak256(abi.encode("missing", i));
+            _store(id, "");
+            stub.signal(hook, id);
+            IIntentLifecycleHookV2.SettlementContext memory context = _context(id, false);
+            context.extensionData = extensions[i];
+            assertEq(stub.settle(hook, context), address(vault));
+        }
+    }
+
+    function test_ConditionsMatchAndReservedWordsAreIgnored() public {
+        stub.signal(hook, ID);
+        IIntentLifecycleHookV2.SettlementContext memory context = _context(ID, true);
+        context.conditionsHash = keccak256("conditions");
+        context.extensionData = abi.encode(uint256(1), context.conditionsHash, type(uint256).max, uint256(2));
+        assertEq(stub.settle(hook, context), address(0));
+        assertEq(uint256(policy.getDisputeProtectionIntent(ID).collateralSource), uint256(P.CollateralSource.BYPASS));
+    }
+
+    function test_ConditionsMismatchIncludingMissingWordsReverts() public {
+        stub.signal(hook, ID);
+        IIntentLifecycleHookV2.SettlementContext memory context = _context(ID, false);
+        context.conditionsHash = keccak256("conditions");
+        bytes[5] memory extensions = [bytes(""), new bytes(31), abi.encode(uint256(1)), bytes.concat(abi.encode(uint256(1)), new bytes(31)), abi.encode(uint256(0), keccak256("wrong"))];
+        for (uint256 i; i < extensions.length; ++i) {
+            context.extensionData = extensions[i];
+            vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV2.ConditionsNotAttested.selector, ID));
+            stub.settle(hook, context);
+        }
+        assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.PENDING));
+    }
+
+    function test_UnconditionedIntentRejectsNonzeroAttestedConditions() public {
+        stub.signal(hook, ID);
+        IIntentLifecycleHookV2.SettlementContext memory context = _context(ID, false);
+        context.extensionData = abi.encode(uint256(0), keccak256("unexpected conditions"));
+        vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV2.ConditionsNotAttested.selector, ID));
+        stub.settle(hook, context);
+    }
+
+    function test_ManualReleaseIgnoresInvalidExtensionAndConditions() public {
+        stub.signal(hook, ID);
+        IIntentLifecycleHookV2.SettlementContext memory context = _context(ID, false);
+        context.isManualRelease = true;
+        context.conditionsHash = keccak256("conditions");
+        context.extensionData = abi.encode(uint256(2), keccak256("wrong"));
+        vm.expectCall(address(policy), abi.encodeCall(P.onIntentSettled, (ID, INTENT_AMOUNT, NET, false, true)));
+        assertEq(stub.settle(hook, context), address(0));
     }
 
     function test_FundForwardsToPolicy() public {

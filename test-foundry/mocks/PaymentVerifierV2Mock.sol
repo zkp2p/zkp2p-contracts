@@ -27,7 +27,6 @@ contract PaymentVerifierV2Mock is IPaymentVerifierV2 {
 
     uint256 internal constant PRECISE_UNIT = 1e18;
 
-    bool public balanceFunded;
     bytes internal returnedExtension;
 
     /// @notice Configures the signed extension returned by the mock.
@@ -36,10 +35,6 @@ contract PaymentVerifierV2Mock is IPaymentVerifierV2 {
     }
 
 
-    /// @notice Configures the signed balance flag returned by the mock.
-    function setBalanceFunded(bool _balanceFunded) external {
-        balanceFunded = _balanceFunded;
-    }
 
     bool public shouldVerifyPayment;
     bool public shouldReturnFalse;
@@ -68,7 +63,7 @@ contract PaymentVerifierV2Mock is IPaymentVerifierV2 {
         return intentHash;
     }
 
-    /// @notice Verifies a mock proof and returns the capped release and balance flag.
+    /// @notice Verifies a mock proof and returns the capped release and raw extension.
     function verifyPayment(
         IPaymentVerifier.VerifyPaymentData calldata _verifyPaymentData
     ) external view override returns (PaymentVerificationResultV2 memory result, bytes memory extensionData) {
@@ -92,7 +87,6 @@ contract PaymentVerifierV2Mock is IPaymentVerifierV2 {
         }
 
         if (shouldReturnFalse) {
-            result.balanceFunded = balanceFunded;
             return (result, returnedExtension);
         }
 
@@ -108,7 +102,6 @@ contract PaymentVerifierV2Mock is IPaymentVerifierV2 {
         result.success = true;
         result.intentHash = paymentDetails.intentHash;
         result.releaseAmount = releaseAmount;
-        result.balanceFunded = balanceFunded;
         return (result, returnedExtension);
     }
 

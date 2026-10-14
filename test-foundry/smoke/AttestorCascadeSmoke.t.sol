@@ -9,7 +9,8 @@ import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {UnifiedPaymentVerifierV4} from "contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol";
 
 /// @notice Opt-in cross-repo smoke; set ATTESTOR_POLICY_SMOKE_ROOT to a checkout with dependencies.
-/// @dev Outside deterministic/, so coverage never runs this FFI test.
+/// @dev Outside deterministic/, so coverage never runs this FFI test. The attestor script still emits
+/// the old 480-byte encoding until its PR updates; its trailing bool is compatible as extension word 0.
 contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
     function test_ServiceSignedProofSmoke() public {
         string memory attestor = vm.envOr("ATTESTOR_POLICY_SMOKE_ROOT", string(""));
@@ -27,12 +28,17 @@ contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
             bytes memory proof = _serviceProof(attestor, id, modes[index], index);
             UnifiedPaymentVerifierV4.PaymentAttestation memory attestation =
                 abi.decode(proof, (UnifiedPaymentVerifierV4.PaymentAttestation));
-            assertEq(attestation.data.length, 480);
-            (,, bool balanceFunded) = abi.decode(
-                attestation.data,
-                (IPaymentVerifierV2.PaymentDetails, IPaymentVerifierV2.IntentSnapshot, bool)
+            // Decode the 448-byte static payload independently of the optional extension words.
+            assertGe(attestation.data.length, 448);
+            assertEq((attestation.data.length - 448) % 32, 0);
+            (, IPaymentVerifierV2.IntentSnapshot memory snapshot) = abi.decode(
+                attestation.data, (IPaymentVerifierV2.PaymentDetails, IPaymentVerifierV2.IntentSnapshot)
             );
-            assertEq(balanceFunded, index == 0);
+            assertEq(snapshot.intentHash, id);
+            uint256 flag = _extensionWord(attestation.data, 0);
+            assertLe(flag, 1);
+            assertEq(flag, index == 0 ? 1 : 0);
+            assertEq(_extensionWord(attestation.data, 1), 0);
             assertEq(attestation.releaseAmount, index == 2 ? 45e6 : INTENT_AMOUNT);
             uint256 net = attestation.releaseAmount - attestation.releaseAmount * PROTOCOL_FEE / 1e18
                 - attestation.releaseAmount * REFERRAL_FEE / 1e18;
@@ -59,6 +65,14 @@ contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
             assertEq(token.balanceOf(other), paid);
             assertEq(token.balanceOf(address(vault)), vault.totalAccounted());
         }
+    }
+
+    function _extensionWord(bytes memory data, uint256 index) private pure returns (uint256 word) {
+        uint256 offset = 448 + index * 32;
+        if (data.length < offset + 32) return 0;
+        bytes memory encoded = new bytes(32);
+        for (uint256 i; i < 32; ++i) encoded[i] = data[offset + i];
+        return abi.decode(encoded, (uint256));
     }
 
     function _serviceProof(string memory attestor, bytes32 id, string memory mode, uint256 paymentId)

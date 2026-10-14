@@ -82,9 +82,11 @@ abstract contract DisputeProtectionStackV2Fixture is OrchestratorV4Fixture {
     function _proof(bytes32 id, IOrchestratorV4.Intent memory intent, uint256 amount, bool balanceFunded) internal view returns (bytes memory) {
         bytes memory data = abi.encode(
             IPaymentVerifierV2.PaymentDetails(intent.paymentMethod, PAYEE, amount / 10000, USD, block.timestamp * 1000, _paymentId(id)),
-            IPaymentVerifierV2.IntentSnapshot(id, intent.amount, intent.paymentMethod, USD, PAYEE, CONVERSION_RATE, intent.timestamp, 0),
-            balanceFunded
+            IPaymentVerifierV2.IntentSnapshot(id, intent.amount, intent.paymentMethod, USD, PAYEE, CONVERSION_RATE, intent.timestamp, 0)
         );
+        assertEq(data.length, 448);
+        // Explicit extension word 0; the payment/snapshot payload itself has no balance flag.
+        data = bytes.concat(data, abi.encode(uint256(balanceFunded ? 1 : 0)));
         return _signedProof(id, data, amount);
     }
 
