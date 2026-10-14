@@ -828,6 +828,9 @@ test("unsigned v5 bypass manifests validate and reject v4 and tampering", () => 
       Object.assign(m, { version: 4 });
     },
     (m) => {
+      Object.assign(m, { chainId: 31337 });
+    },
+    (m) => {
       m.transactions[0].to = address(99);
     },
     (m) => {
@@ -1009,6 +1012,7 @@ test("lane 46 classifies bypass policy activity across O4 registration", () => {
     });
   const configuration = [
     "DisputeProtectionEnabledUpdated",
+    "DisputeProtectionOptOutImported",
     "RiskWindowUpdated",
     "LifecycleHookAuthorizationUpdated",
     "OwnershipTransferStarted",
@@ -1414,6 +1418,14 @@ test("staging rotation waits for stale bypass intents", async () => {
     () => lane.assertStaleBypassIntentsDrained(readLogs, record, 100),
     /Stale bypass intents still open: 1/
   );
+  const lane45 = require("../deploy/45_deploy_bypass_dispute_stack.ts");
+  /** @type {string[]} */
+  const reports = [];
+  await lane45.reportOpenStaleBypassIntents(
+    readLogs, record, 100,
+    (/** @type {string} */ message) => reports.push(message)
+  );
+  assert.deepEqual(reports, [`Stale bypass intents still open: 1; ${hash(1)}`]);
   logs.push(settled);
   await assert.doesNotReject(() =>
     lane.assertStaleBypassIntentsDrained(readLogs, record, 100)
@@ -1467,4 +1479,87 @@ test("staging rows follow each registry mutation and register O4 last", () => {
       () => model.bypassRowStateAfter(wanted, invalid),
       /Invalid completed action count/
     );
+});
+
+test("Base preparation rejects missing recorded pins before chain access", async () => {
+  await withCleanLaneEnv(async () => {
+    process.env[lane.FLAGS.releaseReadySha] = "a".repeat(40);
+    await assert.rejects(
+      () => lane.prepareBaseCutoverBatch(
+        /** @type {any} */ (fakeHre("base")),
+        { assertArtifactGitState() {} }
+      ),
+      /Base batch preparation requires recorded pin: StakeVaultCascade/
+    );
+  });
+});
+
+test("Base preparation verifies every recorded fresh deployment pin", async () => {
+  const stack = require("../deployments/bypassDisputeStack.ts");
+  const pins = Object.fromEntries(
+    stack.BYPASS_DEPLOYMENT_NAMES.map((name, i) => [
+      name,
+      { address: address(100 + i), runtimeCodeHash: utils.keccak256("0x1234") },
+    ])
+  );
+  const original = stack.BYPASS_RECORDED_DEPLOYMENTS.base;
+  stack.BYPASS_RECORDED_DEPLOYMENTS.base = /** @type {any} */ (pins);
+  /** @type {string[]} */
+  const checked = [];
+  /** @type {any} */
+  const hre = {
+    deployments: {
+      get: async (/** @type {string} */ name) => ({
+        address: pins[name].address,
+        abi: [],
+        deployedBytecode: "0x1234",
+        solcInputHash: "build",
+      }),
+      getExtendedArtifact: async () => ({ solcInputHash: "build" }),
+    },
+    ethers: {
+      provider: {
+        getCode: async (
+          /** @type {string} */ target,
+          /** @type {number} */ block
+        ) => {
+          assert.equal(block, 100);
+          checked.push(target);
+          return "0x1234";
+        },
+      },
+    },
+  };
+  try {
+    await lane.assertBaseRecordedDeployments(hre, 100);
+    assert.deepEqual(
+      [...new Set(checked)], Object.values(pins).map((pin) => pin.address)
+    );
+    for (const name of stack.BYPASS_DEPLOYMENT_NAMES) {
+      const pin = pins[name];
+      delete pins[name];
+      await assert.rejects(
+        () => lane.assertBaseRecordedDeployments(hre, 100),
+        /requires recorded pin/
+      );
+      pins[name] = pin;
+    }
+    pins.OrchestratorV4.runtimeCodeHash = hash(99);
+    await assert.rejects(
+      () => lane.assertBaseRecordedDeployments(hre, 100),
+      /runtime bytecode hash mismatch/
+    );
+    pins.OrchestratorV4.runtimeCodeHash = utils.keccak256("0x1234");
+    const getRecord = hre.deployments.get;
+    hre.deployments.get = async (/** @type {string} */ name) => ({
+      ...await getRecord(name), address: address(999),
+    });
+    await assert.rejects(
+      () => lane.assertBaseRecordedDeployments(hre, 100),
+      /deployment address mismatch/
+    );
+  } finally {
+    if (original === undefined) delete stack.BYPASS_RECORDED_DEPLOYMENTS.base;
+    else stack.BYPASS_RECORDED_DEPLOYMENTS.base = original;
+  }
 });

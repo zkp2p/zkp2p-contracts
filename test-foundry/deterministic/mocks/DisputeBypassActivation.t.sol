@@ -55,7 +55,6 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
     OrchestratorV4 internal orchestratorV4;
 
     function setUp() public override {
-        vm.chainId(CHAIN_ID);
         super.setUp();
         safe = makeAddr("safe");
         witness = makeAddr("witness");
@@ -155,6 +154,37 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
             _executeBatch(guard, acceptVault, acceptPolicy);
             postcondition.assertPostconditions();
         }
+    }
+
+    function test_GuardAcceptsMatchingStoredChainIdsOnFork() public {
+        assertTrue(block.chainid != orchestrator.chainId());
+        assertEq(orchestratorV4.chainId(), orchestrator.chainId());
+        DisputeBypassCutoverGuard guard = _guard(_surface(), true, true);
+        guard.assertReady();
+        DisputeBypassCutoverPostcondition postcondition = new DisputeBypassCutoverPostcondition(_surface());
+        _executeBatch(guard, true, true);
+        postcondition.assertPostconditions();
+    }
+
+    function test_GuardRejectsMismatchedStoredChainIds() public {
+        orchestratorV4 = new OrchestratorV4(
+            address(this),
+            block.chainid,
+            address(escrowRegistry),
+            address(paymentVerifierRegistry),
+            address(relayerRegistry),
+            orchestrator.protocolFee(),
+            orchestrator.protocolFeeRecipient()
+        );
+        orchestratorV4.setLifecycleHook(freshHook);
+        orchestratorV4.transferOwnership(safe);
+        DisputeBypassCutoverGuard guard = _guard(_surface(), true, true);
+        _expectReady(
+            guard,
+            abi.encodeWithSelector(
+                DisputeBypassTrustSurfaceChecks.OrchestratorV4ChainIdMismatch.selector, block.chainid
+            )
+        );
     }
 
     function test_PostconditionRejectsBeforeBatchAndGuardRejectsAfterBatch() public {

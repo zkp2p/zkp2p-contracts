@@ -30,6 +30,10 @@ import {
 } from "../deployments/canonicalDeployment";
 import { verifySupersededStagingBinding } from "../deployments/bypassPaymentBinding";
 import { reduceBypassActivation } from "../deployments/bypassDisputeActivation";
+import {
+  stalePolicyScan,
+  reportOpenStaleBypassIntents,
+} from "../deployments/staleBypassIntents";
 import { waitForDeploymentDelay } from "../deployments/helpers";
 import {
   ACTIVE_PAYMENT_METHODS,
@@ -49,6 +53,7 @@ import {
   ownershipStepState,
 } from "./37_deploy_method_scoped_dispute_lifecycle_stack";
 
+export { reportOpenStaleBypassIntents } from "../deployments/staleBypassIntents";
 export { LANE_45_STEP_KINDS, classifyLane45Prefix };
 export const SUPPORTED_NETWORKS = new Set([
   "localhost",
@@ -82,9 +87,11 @@ export function classifyBypassPolicyActivity(
     );
   }
   classifyFreshStackActivity({
-    policyEvents: beforeCutover
-      ? events
-      : events.filter((event) => !lifecycleEvents.includes(event)),
+    policyEvents: events.filter(
+      (event) =>
+        event.name !== "DisputeProtectionOptOutImported" &&
+        !lifecycleEvents.includes(event)
+    ),
   });
 }
 
@@ -1059,6 +1066,11 @@ export async function readLane45State(
   network: BypassNetwork
 ): Promise<Lane45State> {
   await assertLiveSharedState(hre, network);
+  if (network === "base_staging") {
+    const block = await hre.ethers.provider.getBlockNumber();
+    const { record, readLogs } = await stalePolicyScan(hre, block);
+    await reportOpenStaleBypassIntents(readLogs, record, block);
+  }
   const state = await readFreshState(hre, await liveContext(hre, network));
   const completed = LANE_45_STEP_KINDS[network].map((step) => {
     if (

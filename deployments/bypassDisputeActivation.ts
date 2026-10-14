@@ -790,22 +790,7 @@ export function assertBypassGuardExpectationsUnchanged(
   if (changed.length)
     throw new Error(`Bypass guard expectations changed: ${changed.join(", ")}`);
 }
-export function openStaleBypassIntents(
-  events: { name: string; intentHash: string }[]
-): string[] {
-  const opened = new Set<string>();
-  const terminal = new Set<string>();
-  for (const event of events) {
-    const hash = event.intentHash.toLowerCase();
-    if (event.name === "DisputeProtectionIntentOpened") opened.add(hash);
-    if (
-      event.name === "DisputeProtectionIntentCancelled" ||
-      event.name === "DisputeProtectionIntentSettled"
-    )
-      terminal.add(hash);
-  }
-  return [...opened].filter((hash) => !terminal.has(hash));
-}
+export { openStaleBypassIntents } from "./staleBypassIntents";
 export function assertBypassAdvance(
   before: BypassActivationReduction,
   after: BypassActivationReduction

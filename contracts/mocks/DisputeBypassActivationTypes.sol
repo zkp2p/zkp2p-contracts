@@ -49,7 +49,7 @@ struct BypassTrustSurface {
     uint64[] riskWindows;
 }
 
-interface IBypassActivationOrchestratorV4 is IActivationOrchestrator {
+interface IBypassActivationOrchestrator is IActivationOrchestrator {
     /// @notice Returns the orchestrator signing chain ID.
     function chainId() external view returns (uint256);
 }
@@ -259,7 +259,7 @@ abstract contract DisputeBypassTrustSurfaceChecks {
     }
 
     function _assertOrchestratorV4Surface() private view {
-        IBypassActivationOrchestratorV4 targetOrchestrator = IBypassActivationOrchestratorV4(expected.orchestratorV4);
+        IBypassActivationOrchestrator targetOrchestrator = IBypassActivationOrchestrator(expected.orchestratorV4);
         address actualAddress = targetOrchestrator.owner();
         if (actualAddress != expected.safe) revert OrchestratorV4OwnerMismatch(actualAddress);
         bool actualBool = targetOrchestrator.paused();
@@ -283,7 +283,9 @@ abstract contract DisputeBypassTrustSurfaceChecks {
             revert OrchestratorV4AllowMultipleIntentsMismatch(actualBool);
         }
         actualUint256 = targetOrchestrator.chainId();
-        if (actualUint256 != block.chainid) revert OrchestratorV4ChainIdMismatch(actualUint256);
+        if (actualUint256 != IBypassActivationOrchestrator(expected.orchestrator).chainId()) {
+            revert OrchestratorV4ChainIdMismatch(actualUint256);
+        }
         actualAddress = targetOrchestrator.lifecycleHook();
         if (actualAddress != expected.freshHook) revert OrchestratorV4LifecycleHookMismatch(actualAddress);
     }

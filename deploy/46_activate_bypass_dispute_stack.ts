@@ -1,11 +1,12 @@
 import { spawnSync } from "child_process";
 import { resolve } from "path";
 import { utils } from "ethers";
-import type { BigNumber, Contract, providers } from "ethers";
+import type { BigNumber, Contract } from "ethers";
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
 import type { DeployFunction, Deployment } from "hardhat-deploy/types";
 import {
   BYPASS_DEPLOYMENT_NAMES,
+  BYPASS_RECORDED_DEPLOYMENTS,
   BYPASS_EXPECTED_LIVE,
   BYPASS_PREDECESSOR_DEPLOYMENT_NAMES,
   LANE_46_TAG,
@@ -14,7 +15,6 @@ import {
   isBypassLiveNetwork,
   paymentMethodHash,
   isSupersededStagingRecord,
-  BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS,
 } from "../deployments/bypassDisputeStack";
 import type { BypassNetwork } from "../deployments/bypassDisputeStack";
 import {
@@ -27,7 +27,6 @@ import {
   bypassActivationActions,
   bypassTrustSurfaceTuple,
   reduceBypassActivation,
-  openStaleBypassIntents,
 } from "../deployments/bypassDisputeActivation";
 import type {
   BypassActivationNetwork,
@@ -43,6 +42,13 @@ import {
 } from "../deployments/bypassActivationBatchManifest";
 import type { BypassActivationBatchManifest } from "../deployments/bypassActivationBatchManifest";
 import { assertDeploymentMatchesChain } from "../deployments/canonicalDeployment";
+import {
+  pagedLogs,
+  readOpenStaleBypassIntents,
+  stalePolicyScan,
+  assertStaleBypassIntentsDrained,
+} from "../deployments/staleBypassIntents";
+export { assertStaleBypassIntentsDrained } from "../deployments/staleBypassIntents";
 import { waitForDeploymentDelay } from "../deployments/helpers";
 import {
   DISPUTABLE_PAYMENT_METHODS,
@@ -158,39 +164,6 @@ function readConcurrency(): number {
     "BYPASS_READ_CONCURRENCY must be an integer from 1 to 64"
   );
   return value;
-}
-async function pagedLogs(
-  hre: HardhatRuntimeEnvironment,
-  filter: Omit<providers.Filter, "fromBlock" | "toBlock">,
-  from: number,
-  to: number
-): Promise<providers.Log[]> {
-  if (from > to) return [];
-  async function readRange(
-    start: number,
-    end: number
-  ): Promise<providers.Log[]> {
-    try {
-      return await hre.ethers.provider.getLogs({
-        ...filter,
-        fromBlock: start,
-        toBlock: end,
-      });
-    } catch (error) {
-      if (start === end) throw error;
-      const middle = start + Math.floor((end - start) / 2);
-      const left = await readRange(start, middle);
-      const right = await readRange(middle + 1, end);
-      return left.concat(right);
-    }
-  }
-  const logs = await readRange(from, to);
-  return logs.sort(
-    (a, b) =>
-      a.blockNumber - b.blockNumber ||
-      a.transactionIndex - b.transactionIndex ||
-      a.logIndex - b.logIndex
-  );
 }
 
 type RecordPin = {
@@ -524,74 +497,6 @@ async function authorizedHooks(
     authorized.set(lower(args.hook), args.isAuthorized);
   }
   return [...authorized].filter(([, enabled]) => enabled).map(([hook]) => hook);
-}
-type ReadStaleLogs = (
-  filter: providers.Filter
-) => Promise<Array<Pick<providers.Log, "topics" | "data">>>;
-async function readOpenStaleBypassIntents(
-  readLogs: ReadStaleLogs,
-  staleRecord: Deployment,
-  toBlock: number
-): Promise<string[]> {
-  const iface = new utils.Interface(staleRecord.abi);
-  const logs = await readLogs({
-    address: staleRecord.address,
-    fromBlock: deploymentBlock(staleRecord),
-    toBlock,
-  });
-  const events = logs
-    .map((log) => iface.parseLog(log))
-    .filter((event) =>
-      [
-        "DisputeProtectionIntentOpened",
-        "DisputeProtectionIntentCancelled",
-        "DisputeProtectionIntentSettled",
-      ].includes(event.name)
-    )
-    .map((event) => ({
-      name: event.name,
-      intentHash: String(event.args.intentHash),
-    }));
-  return openStaleBypassIntents(events);
-}
-export async function assertStaleBypassIntentsDrained(
-  readLogs: ReadStaleLogs,
-  staleRecord: Deployment,
-  toBlock: number
-): Promise<void> {
-  const open = await readOpenStaleBypassIntents(readLogs, staleRecord, toBlock);
-  requireState(
-    open.length === 0,
-    `Stale bypass intents still open: ${open.length}; ${open.join(", ")}`
-  );
-}
-async function stalePolicyScan(
-  hre: HardhatRuntimeEnvironment,
-  toBlock: number
-) {
-  const record = await hre.deployments.get("DisputeProtectionPolicyBypass");
-  const pin =
-    BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS.DisputeProtectionPolicyBypass;
-  requireState(
-    lower(record.address) === lower(pin.address),
-    "Stale bypass policy address mismatch"
-  );
-  requireState(
-    lower(
-      hre.ethers.utils.keccak256(
-        await hre.ethers.provider.getCode(pin.address, toBlock)
-      )
-    ) === lower(pin.runtimeCodeHash),
-    "Stale bypass policy runtime bytecode hash mismatch"
-  );
-  const readLogs: ReadStaleLogs = (filter) =>
-    pagedLogs(
-      hre,
-      { address: filter.address },
-      Number(filter.fromBlock),
-      Number(filter.toBlock)
-    );
-  return { record, readLogs };
 }
 async function assertStagingDrain(
   hre: HardhatRuntimeEnvironment,
@@ -1122,6 +1027,27 @@ export type BasePreparationOverrides = {
   installArtifactPair?: typeof installSafeArtifactPair;
   simulate?: typeof runPinnedSimulation;
 };
+function requireBaseRecordedPins(): void {
+  for (const name of BYPASS_DEPLOYMENT_NAMES) {
+    const pin = BYPASS_RECORDED_DEPLOYMENTS.base?.[name];
+    requireState(
+      !!pin?.address && !!pin.runtimeCodeHash,
+      `Base batch preparation requires recorded pin: ${name}`
+    );
+  }
+}
+
+export async function assertBaseRecordedDeployments(
+  hre: HardhatRuntimeEnvironment,
+  blockTag: number
+): Promise<void> {
+  requireBaseRecordedPins();
+  for (const name of BYPASS_DEPLOYMENT_NAMES) {
+    const record = await hre.deployments.get(name);
+    await assertBypassDeploymentRecord(hre, "base", name, record, blockTag);
+  }
+}
+
 export async function prepareBaseCutoverBatch(
   hre: HardhatRuntimeEnvironment,
   overrides: BasePreparationOverrides = {}
@@ -1131,6 +1057,7 @@ export async function prepareBaseCutoverBatch(
     /^[0-9a-f]{40}$/.test(sourceSha),
     `Base batch preparation requires an exact ${FLAGS.releaseReadySha}`
   );
+  requireBaseRecordedPins();
   const repositoryRoot = overrides.repositoryRoot || resolve(__dirname, "..");
   (overrides.assertArtifactGitState || assertBypassArtifactGitState)(
     repositoryRoot,
@@ -1143,6 +1070,7 @@ export async function prepareBaseCutoverBatch(
     "BASE_FORK_RPC_URL is required for Base batch preparation"
   );
   const proofBlockNumber = await hre.ethers.provider.getBlockNumber();
+  await assertBaseRecordedDeployments(hre, proofBlockNumber);
   await assertBypassActivationSharedState(hre, "base", proofBlockNumber);
   const proofSnapshot = await readBypassActivationSnapshot(
     hre,

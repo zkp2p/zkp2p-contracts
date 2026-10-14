@@ -31,6 +31,7 @@ export const BYPASS_ACTIVATION_PROTECTED_PATHS: readonly string[] = [
   "deploy/46_*",
   "deployments/bypassDisputeStack.ts",
   "deployments/bypassDisputeActivation.ts",
+  "deployments/staleBypassIntents.ts",
   "deployments/bypassActivationBatchManifest.ts",
   "deployments/activationBatchManifest.ts",
   "deployments/methodScopedActivation.ts",
