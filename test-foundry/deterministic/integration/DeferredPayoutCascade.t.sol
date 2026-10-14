@@ -17,6 +17,18 @@ import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
     bytes32 internal constant CONDITIONS = keccak256("signed conditions");
 
+    function test_V1DataWithoutGatingServiceRejectedByOrchestrator() public {
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
+        params.lifecycleHookData = abi.encode(uint8(1), CONDITIONS);
+        bytes32 id = _intentHash(orchestrator.intentCounter());
+        vm.expectRevert(IOrchestratorV4.LifecycleHookDataRequiresGatingService.selector);
+        _signalCall(taker, params);
+        assertEq(orchestrator.getIntent(id).owner, address(0));
+        assertEq(orchestrator.getIntentLifecycleHookData(id), "");
+        assertEq(escrow.getDeposit(depositId).outstandingIntentAmount, 0);
+        assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
+    }
+
     function test_ConditionedBalanceFundedSettlement() public {
         _conditionedSettlement(true, false);
     }

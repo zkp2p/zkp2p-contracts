@@ -87,8 +87,9 @@ contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
         }
     }
 
-    /// @inheritdoc IIntentLifecycleHookV2
-    function conditionsHashOf(bytes calldata _lifecycleHookData) external pure override returns (bytes32) {
+    /// @notice Decodes the v1 conditions hash, returning zero for empty data and reverting on malformed data.
+    /// @dev Off-chain convenience; not part of the lifecycle hook interface OrchestratorV4 checks.
+    function conditionsHashOf(bytes calldata _lifecycleHookData) external pure returns (bytes32) {
         return _conditionsHashOf(_lifecycleHookData);
     }
 

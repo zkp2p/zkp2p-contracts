@@ -16,12 +16,31 @@ contract OrchestratorV4HookDataTest is OrchestratorV4Fixture {
         orchestrator.setLifecycleHook(lifecycleHookMock);
     }
 
-    function test_OpaqueDataDoesNotRequireGatingService() public {
+    function test_NonEmptyDataRequiresGatingService() public {
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.lifecycleHookData = HOOK_DATA;
+        bytes32 id = _intentHash(orchestrator.intentCounter());
+        uint256 counter = orchestrator.intentCounter();
+        vm.expectRevert(IOrchestratorV4.LifecycleHookDataRequiresGatingService.selector);
+        _signalCall(taker, params);
+        assertEq(orchestrator.intentCounter(), counter);
+        assertEq(orchestrator.getIntent(id).owner, address(0));
+        assertEq(orchestrator.getIntentLifecycleHookData(id), "");
+        assertEq(escrow.getDeposit(depositId).outstandingIntentAmount, 0);
+        assertEq(lifecycleHookMock.signaledCalls(), 0);
+    }
+
+    function test_EmptyDataWithoutGatingServiceSignalsPlainly() public {
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
+        assertEq(escrow.getDepositGatingService(depositId, METHOD), address(0));
+        assertEq(params.lifecycleHookData, "");
+        assertEq(params.gatingServiceSignature, "");
         bytes32 id = _signal(taker, params);
-        assertEq(orchestrator.getIntentLifecycleHookData(id), HOOK_DATA);
-        assertEq(lifecycleHookMock.lastSignaledLifecycleHookData(), HOOK_DATA);
+        assertEq(orchestrator.getIntent(id).owner, taker);
+        assertEq(orchestrator.getIntentLifecycleHookData(id), "");
+        assertEq(escrow.getDeposit(depositId).outstandingIntentAmount, INTENT_AMOUNT);
+        assertEq(lifecycleHookMock.lastSignaledLifecycleHookData(), "");
+        assertEq(lifecycleHookMock.signaledCalls(), 1);
     }
 
     function test_PlainSignalDoesNotWriteHookDataStorage() public {

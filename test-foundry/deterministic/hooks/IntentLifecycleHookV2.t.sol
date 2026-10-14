@@ -341,7 +341,7 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
     function test_SupportsInterface() public {
         bytes4 expected = IIntentLifecycleHookV2.onIntentSignaled.selector
             ^ IIntentLifecycleHookV2.onIntentCancelled.selector ^ IIntentLifecycleHookV2.settleIntent.selector
-            ^ IIntentLifecycleHookV2.onDeferredPayoutFunded.selector ^ IIntentLifecycleHookV2.conditionsHashOf.selector;
+            ^ IIntentLifecycleHookV2.onDeferredPayoutFunded.selector;
         assertTrue(hook.supportsInterface(expected));
         assertTrue(hook.supportsInterface(0x01ffc9a7));
         assertFalse(hook.supportsInterface(0xffffffff));

@@ -95,13 +95,6 @@ contract LifecycleHookV2Mock is ERC165, IIntentLifecycleHookV2 {
         fundedCalls++;
     }
 
-    /// @inheritdoc IIntentLifecycleHookV2
-    function conditionsHashOf(bytes calldata _lifecycleHookData) external pure override returns (bytes32) {
-        if (_lifecycleHookData.length == 0) return bytes32(0);
-        (, bytes32 hash) = abi.decode(_lifecycleHookData, (uint8, bytes32));
-        return hash;
-    }
-
     /// @notice Reports ERC-165 and IIntentLifecycleHookV2 support.
     function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
         return interfaceId == type(IIntentLifecycleHookV2).interfaceId || super.supportsInterface(interfaceId);

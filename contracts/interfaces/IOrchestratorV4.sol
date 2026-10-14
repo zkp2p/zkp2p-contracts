@@ -135,6 +135,7 @@ interface IOrchestratorV4 {
     error InvalidLifecycleHook(address hook);
     error InvalidSignature();
     error LifecycleHookDataRequiresHook();
+    error LifecycleHookDataRequiresGatingService();
     error SignatureExpired(uint256 expiration, uint256 currentTime);
 
     // Verification errors
@@ -168,7 +169,8 @@ interface IOrchestratorV4 {
     /* ============ External Functions for Users ============ */
 
     /// @notice Signals an intent and locks its escrow funds, with optional opaque lifecycle hook data.
-    /// @dev Non-empty data requires a lifecycle hook and appends keccak256(lifecycleHookData) to the gating message.
+    /// @dev Non-empty data requires a lifecycle hook and a gating service for the deposit's payment method.
+    /// Its keccak256(lifecycleHookData) is appended to the gating message covered by the service's signature.
     /// Empty data preserves the plain V3 gating message byte-for-byte. Only the lifecycle hook interprets this data.
     function signalIntent(SignalIntentParams calldata params) external;
 

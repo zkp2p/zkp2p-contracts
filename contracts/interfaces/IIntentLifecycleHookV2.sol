@@ -18,10 +18,6 @@ interface IIntentLifecycleHookV2 {
     /// @dev V1 data is exactly abi.encode(uint8(1), bytes32 conditionsHash) with a nonzero hash; empty means none.
     function onIntentSignaled(bytes32 _intentHash, bytes calldata _lifecycleHookData) external;
 
-    /// @notice Decodes the v1 conditions hash, returning zero for empty data and reverting on malformed data.
-    /// @dev The hook is stateless by design; per-intent lifecycle hook data lives in the orchestrator.
-    function conditionsHashOf(bytes calldata _lifecycleHookData) external pure returns (bytes32);
-
     /// @notice Cancels the intent's policy record.
     function onIntentCancelled(bytes32 _intentHash) external;
 

@@ -600,8 +600,9 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (_intent.conversionRate < minConversionRate) revert RateBelowMinimum(_intent.conversionRate, minConversionRate);
 
         address intentGatingService = IEscrow(_intent.escrow).getDepositGatingService(_intent.depositId, _intent.paymentMethod);
-        if (_intent.lifecycleHookData.length != 0 && address(lifecycleHook) == address(0)) {
-            revert LifecycleHookDataRequiresHook();
+        if (_intent.lifecycleHookData.length != 0) {
+            if (address(lifecycleHook) == address(0)) revert LifecycleHookDataRequiresHook();
+            if (intentGatingService == address(0)) revert LifecycleHookDataRequiresGatingService();
         }
         if (intentGatingService != address(0)) {
             // Check if signature has expired

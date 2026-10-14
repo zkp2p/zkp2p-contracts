@@ -390,19 +390,23 @@ attestation comparison and extension validation and uses `balanceFunded = false`
 
 IOrchestratorV4 keeps Intent and FulfillIntentParams ABI-identical to V3. Its SignalIntentParams
 keeps V3's fields in order and appends `bytes lifecycleHookData` after `data`. Non-empty data requires
-a current lifecycle hook (`LifecycleHookDataRequiresHook`) and appends `keccak256(lifecycleHookData)`
-to the gating message. Empty data preserves the plain V3 message byte-for-byte and is never written to
-the hook-data mapping. `getIntentLifecycleHookData(intentHash)` returns the bytes until pruning.
+a current lifecycle hook (`LifecycleHookDataRequiresHook`) and a gating service for the deposit's
+payment method (`LifecycleHookDataRequiresGatingService`). O4 appends `keccak256(lifecycleHookData)`
+to the gating message and verifies the service's signature. Empty data needs no gating service,
+preserves the plain V3 message byte-for-byte and is never written to the hook-data mapping.
+`getIntentLifecycleHookData(intentHash)` returns the bytes until pruning.
 
 IntentLifecycleHookV2 accepts empty data or exactly 64 bytes of `abi.encode(uint8(1), bytes32 conditionsHash)`
 with a nonzero hash; malformed data reverts with `InvalidLifecycleHookData`. After whitelist and policy
-admission, v1 data requires a deposit gating service (`ConditionsRequireGatingService`); O4 has already
-verified its signature covering the data hash. The hook's pure `conditionsHashOf(bytes)` helper decodes
-this format for readers using the snapshotted hook. Settlement compares extension word 1 with this
+admission, the hook retains its v1 gating-service check (`ConditionsRequireGatingService`) as a backstop;
+O4 has already required the service and verified its signature covering the data hash. The concrete hook's
+pure `conditionsHashOf(bytes)` helper is an off-chain convenience for readers using the snapshotted hook,
+not part of the interface O4 checks. Settlement compares extension word 1 with this
 expected hash (zero for empty data), symmetrically, unless manually released. A mismatch reverts with
 `ConditionsNotAttested(intentHash)`. The hook is snapshotted at signal and also handles settlement.
-The new signal callback, helper and dynamic SettlementContext change the IIntentLifecycleHookV2
-ERC-165 interface id; both sides retain ERC-165 validation.
+IIntentLifecycleHookV2 contains only the four lifecycle callbacks: `onIntentSignaled`,
+`onIntentCancelled`, `settleIntent` and `onDeferredPayoutFunded`. Its ERC-165 interface id is the XOR
+of exactly those four selectors, excluding `conditionsHashOf`; both sides retain ERC-165 validation.
 
 The cross-repo attestor smoke remains gated by `ATTESTOR_POLICY_SMOKE_ROOT`. The attestation repo's
 script still emits the old 480-byte format until its PR updates; that format is compatible as above.
@@ -411,8 +415,10 @@ script still emits the old 480-byte format until its PR updates; that format is 
 
 `signalIntent(params)` accepts `bytes lifecycleHookData` as the last field, after `data`.
 O4 stores and forwards these bytes without interpreting them. Non-empty data requires a current hook
-and appends its 32-byte `keccak256(lifecycleHookData)` to the existing 336-byte packed gating message
-(368 bytes total). Empty bytes mean no hook data and preserve the plain V3 gating message byte-for-byte.
+(`LifecycleHookDataRequiresHook`) and a gating service for the deposit's payment method
+(`LifecycleHookDataRequiresGatingService`). O4 appends the 32-byte `keccak256(lifecycleHookData)` to
+the existing 336-byte packed gating message (368 bytes total) and verifies the service's signature.
+Empty bytes mean no hook data, need no gating service and preserve the plain V3 gating message byte-for-byte.
 The field changes O4's calldata selector and ERC-165 interface id.
 `getIntentLifecycleHookData(intentHash)` exposes the bytes until fulfillment, manual release, cancellation,
 escrow pruning or orphan cleanup. Empty data never writes the mapping. `intent.data` remains the separate
@@ -421,8 +427,9 @@ post-intent hook payload.
 The stateless IntentLifecycleHookV2 validates v1 hook data as exactly
 `abi.encode(uint8(1), bytes32 conditionsHash)` (64 bytes, nonzero hash), and requires a deposit gating
 service even for whitelisted takers. All per-intent storage belongs to O4. To read a hash, get the data
-from O4 and call `conditionsHashOf(data)` on `getIntentLifecycleHook(intentHash)`; empty returns zero,
-malformed data reverts with `InvalidLifecycleHookData`.
+from O4 and use the concrete IntentLifecycleHookV2 ABI at `getIntentLifecycleHook(intentHash)` to
+call `conditionsHashOf(data)`; empty returns zero, malformed data reverts with `InvalidLifecycleHookData`.
+This off-chain convenience is not part of IIntentLifecycleHookV2 or the interface O4 checks.
 
 UPV4's signed extension word 0 is the dedicated `balanceFunded` flag (0 or 1); word 1 is the attested
 conditions hash. Missing complete words mean zero. IntentLifecycleHookV2 rejects any other flag with
