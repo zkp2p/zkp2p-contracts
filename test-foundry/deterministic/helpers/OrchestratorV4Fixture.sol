@@ -267,6 +267,28 @@ abstract contract OrchestratorV4Fixture is Test {
         return abi.encodePacked(r, s, v);
     }
 
+    function _conditionsSignature(IOrchestratorV4.SignalIntentParams memory params, bytes32 conditionsHash)
+        internal view returns (bytes memory)
+    {
+        bytes memory message = abi.encodePacked(
+            address(orchestrator), params.escrow, params.depositId, params.amount, taker, params.to,
+            params.paymentMethod, params.fiatCurrency, params.conversionRate, _referralHash(params.referralFees),
+            params.signatureExpiration, CHAIN_ID, conditionsHash
+        );
+        assertEq(message.length, 368);
+        bytes32 digest = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", keccak256(message)));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(gatingServiceKey, digest);
+        return abi.encodePacked(r, s, v);
+    }
+
+    function _signalWithConditions(bytes32 conditionsHash) internal returns (bytes32 hash) {
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
+        params.gatingServiceSignature = _conditionsSignature(params, conditionsHash);
+        hash = _intentHash(orchestrator.intentCounter());
+        vm.prank(taker);
+        orchestrator.signalIntentWithConditions(params, conditionsHash);
+    }
+
     function _gatedParams(uint256 gatedDepositId, uint256 signerKey, address signedCaller, uint256 expiration)
         internal
         view

@@ -14,6 +14,64 @@ import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.s
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 
 contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
+    bytes32 internal constant CONDITIONS = keccak256("signed conditions");
+
+    function test_ConditionedBalanceFundedSettlement() public {
+        _conditionedSettlement(true, false);
+    }
+
+    function test_ConditionedStakeSettlement() public {
+        _conditionedSettlement(false, true);
+    }
+
+    function test_ConditionedDeferredSettlement() public {
+        _conditionedSettlement(false, false);
+    }
+
+    function _conditionedSettlement(bool balanceFunded, bool staked) internal {
+        vm.startPrank(depositor);
+        depositId = _createDeposit(gatingService, delegate);
+        vm.stopPrank();
+        if (staked) _stake(vault, taker, INTENT_AMOUNT);
+        bytes32 id = _signalWithConditions(CONDITIONS);
+        UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(
+            _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, balanceFunded),
+            (UnifiedPaymentVerifierV4.PaymentAttestation)
+        );
+        bytes[3] memory invalidExtensions = [bytes(""), new bytes(31), abi.encode(keccak256("wrong"))];
+        uint256 escrowBalance = token.balanceOf(address(escrow));
+        uint256 vaultBalance = token.balanceOf(address(vault));
+        for (uint256 i; i < invalidExtensions.length; ++i) {
+            bytes memory invalidProof = _signedProof(
+                id, bytes.concat(attestation.data, invalidExtensions[i]), INTENT_AMOUNT
+            );
+            vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.ConditionsNotAttested.selector, id));
+            orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(invalidProof, id, "", ""));
+            assertEq(orchestrator.intentConditions(id), CONDITIONS);
+            assertEq(orchestrator.getIntent(id).owner, taker);
+            assertEq(token.balanceOf(address(escrow)), escrowBalance);
+            assertEq(token.balanceOf(address(vault)), vaultBalance);
+            assertEq(token.balanceOf(other), 0);
+            assertEq(token.balanceOf(protocolFeeRecipient), 0);
+            assertEq(nullifiers.nullifierByIntentHash(id), bytes32(0));
+        }
+        bytes memory proof = _signedProof(
+            id, bytes.concat(attestation.data, abi.encode(CONDITIONS), hex"010203"), INTENT_AMOUNT
+        );
+        orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, id, "", ""));
+        assertEq(orchestrator.intentConditions(id), bytes32(0));
+        assertEq(orchestrator.getIntent(id).owner, address(0));
+        assertEq(token.balanceOf(other), balanceFunded || staked ? NET : 0);
+        P.CollateralSource source = balanceFunded ? P.CollateralSource.BYPASS
+            : staked ? P.CollateralSource.STAKE : P.CollateralSource.DEFERRED_PAYOUT;
+        assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(source));
+        if (balanceFunded) _assertLock(id, address(0), 0);
+        else if (staked) _assertLock(id, taker, INTENT_AMOUNT);
+        else _assertLock(id, other, NET);
+        assertEq(token.balanceOf(address(vault)), balanceFunded ? 0 : staked ? INTENT_AMOUNT : NET);
+        _assertFees();
+    }
+
     function test_BalanceFundedPaysNowWithoutLock() public {
         bytes32 id = _signalDefault();
         _settle(id, INTENT_AMOUNT, true);

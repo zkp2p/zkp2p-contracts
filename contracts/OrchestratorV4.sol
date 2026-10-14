@@ -62,6 +62,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     mapping(bytes32 => address) internal intentManagerFeeRecipient;
     mapping(bytes32 => uint256) internal intentManagerFee;
 
+    mapping(bytes32 => bytes32) public intentConditions;
+
     // Optional pre-intent hooks configured per escrow + depositId.
     mapping(address => mapping(uint256 => IPreIntentHook)) internal depositPreIntentHooks;
 
@@ -120,8 +122,22 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         nonReentrant
         whenNotPaused
     {
+        _signalIntent(_params, bytes32(0));
+    }
+
+    /// @notice Signals an intent with opaque conditions vouched for by the deposit's gating service.
+    function signalIntentWithConditions(SignalIntentParams calldata _params, bytes32 _conditionsHash)
+        external
+        nonReentrant
+        whenNotPaused
+    {
+        if (_conditionsHash == bytes32(0)) revert ZeroValue();
+        _signalIntent(_params, _conditionsHash);
+    }
+
+    function _signalIntent(SignalIntentParams calldata _params, bytes32 _conditionsHash) internal {
         // Checks
-        _validateSignalIntent(_params);
+        _validateSignalIntent(_params, _conditionsHash);
         _executeHookIfSet(depositPreIntentHooks[_params.escrow][_params.depositId], _params);
 
         // Effects
@@ -136,6 +152,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (managerFee > MAX_MANAGER_FEE) revert FeeExceedsMaximum(managerFee, MAX_MANAGER_FEE);  // policy cap (e.g., 5%)
         intentManagerFeeRecipient[intentHash] = managerFeeRecipient;
         intentManagerFee[intentHash] = managerFee;
+        intentConditions[intentHash] = _conditionsHash;
 
         Intent storage storedIntent = intents[intentHash];
         storedIntent.owner = msg.sender;
@@ -254,7 +271,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         address verifier = paymentVerifierRegistry.getVerifier(intent.paymentMethod);
         if (verifier == address(0)) revert PaymentMethodDoesNotExist(intent.paymentMethod);
         
-        (IPaymentVerifierV2.PaymentVerificationResultV2 memory verificationResult, ) = IPaymentVerifierV2(verifier).verifyPayment(
+        (IPaymentVerifierV2.PaymentVerificationResultV2 memory verificationResult, bytes memory extensionData) = IPaymentVerifierV2(verifier).verifyPayment(
             IPaymentVerifier.VerifyPaymentData({
                 intentHash: _params.intentHash,
                 paymentProof: _params.paymentProof,
@@ -263,6 +280,13 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         );
         if (!verificationResult.success) revert PaymentVerificationFailed();
         if (verificationResult.intentHash != _params.intentHash) revert HashMismatch(_params.intentHash, verificationResult.intentHash);
+
+        bytes32 conditionsHash = intentConditions[_params.intentHash];
+        if (conditionsHash != bytes32(0)) {
+            if (extensionData.length < 32 || abi.decode(extensionData, (bytes32)) != conditionsHash) {
+                revert ConditionsNotAttested(_params.intentHash);
+            }
+        }
 
         // Effects
         _pruneIntent(_params.intentHash);
@@ -544,7 +568,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     /**
      * @notice Validates an intent before it is signaled.
      */
-    function _validateSignalIntent(SignalIntentParams calldata _intent) internal view {
+    function _validateSignalIntent(SignalIntentParams calldata _intent, bytes32 _conditionsHash) internal view {
         // Check if account can have multiple intents
         bool canHaveMultipleIntents = relayerRegistry.isWhitelistedRelayer(msg.sender) || allowMultipleIntents;
         if (!canHaveMultipleIntents && accountIntents[msg.sender].length > 0) {
@@ -582,13 +606,14 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (_intent.conversionRate < minConversionRate) revert RateBelowMinimum(_intent.conversionRate, minConversionRate);
 
         address intentGatingService = IEscrow(_intent.escrow).getDepositGatingService(_intent.depositId, _intent.paymentMethod);
+        if (_conditionsHash != bytes32(0) && intentGatingService == address(0)) revert ConditionsRequireGatingService();
         if (intentGatingService != address(0)) {
             // Check if signature has expired
             if (block.timestamp > _intent.signatureExpiration) {
                 revert SignatureExpired(_intent.signatureExpiration, block.timestamp);
             }
 
-            if (!_isValidIntentGatingSignature(_intent, intentGatingService, msg.sender)) {
+            if (!_isValidIntentGatingSignature(_intent, intentGatingService, msg.sender, _conditionsHash)) {
                 revert InvalidSignature();
             }
         }
@@ -665,6 +690,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         delete intents[_intentHash];
         delete intentManagerFeeRecipient[_intentHash];
         delete intentManagerFee[_intentHash];
+        delete intentConditions[_intentHash];
 
         emit IntentPruned(_intentHash);
     }
@@ -812,7 +838,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     function _isValidIntentGatingSignature(
         SignalIntentParams calldata _intent,
         address _intentGatingService,
-        address _caller
+        address _caller,
+        bytes32 _conditionsHash
     )
         internal
         view
@@ -832,6 +859,10 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
             _intent.signatureExpiration,
             chainId
         );
+
+        if (_conditionsHash != bytes32(0)) {
+            message = abi.encodePacked(message, _conditionsHash);
+        }
 
         bytes32 verifierPayload = keccak256(message).toEthSignedMessageHash();
         return _intentGatingService.isValidSignatureNow(verifierPayload, _intent.gatingServiceSignature);

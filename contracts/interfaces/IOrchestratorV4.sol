@@ -134,10 +134,12 @@ interface IOrchestratorV4 {
     error InvalidPreIntentHook(address hook);
     error InvalidLifecycleHook(address hook);
     error InvalidSignature();
+    error ConditionsRequireGatingService();
     error SignatureExpired(uint256 expiration, uint256 currentTime);
 
     // Verification errors
     error PaymentVerificationFailed();
+    error ConditionsNotAttested(bytes32 intentHash);
     error HashMismatch(bytes32 expected, bytes32 actual);
 
     // Transfer errors
@@ -161,10 +163,16 @@ interface IOrchestratorV4 {
     /// @notice Returns the hook snapshotted for the intent.
     function getIntentLifecycleHook(bytes32 intentHash) external view returns (IIntentLifecycleHookV2);
 
+    /// @notice Returns the opaque conditions hash, or zero for an unconditioned or pruned intent.
+    function intentConditions(bytes32 intentHash) external view returns (bytes32);
+
     /* ============ External Functions for Users ============ */
 
     /// @notice Signals an intent and locks its escrow funds.
     function signalIntent(SignalIntentParams calldata params) external;
+
+    /// @notice Signals an intent with nonzero conditions signed by its deposit gating service.
+    function signalIntentWithConditions(SignalIntentParams calldata params, bytes32 conditionsHash) external;
 
     /// @notice Sets the deposit pre-intent hook as depositor or delegate.
     function setDepositPreIntentHook(address escrow, uint256 depositId, IPreIntentHook hook) external;

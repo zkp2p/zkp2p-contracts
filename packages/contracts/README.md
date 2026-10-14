@@ -366,3 +366,22 @@ MIT
 - [GitHub Repository](https://github.com/zkp2p/zkp2p-contracts)
 - [Documentation](https://docs.zkp2p.xyz)
 - [Website](https://zkp2p.xyz)
+
+### O4 intent conditions
+
+`signalIntentWithConditions(params, conditionsHash)` requires a nonzero hash and a deposit gating
+service. The gating service signs the existing 336-byte packed message with the 32-byte hash
+appended (368 bytes total). `signalIntent(params)` retains its original calldata and signature
+format. `intentConditions(intentHash)` exposes the hash until the intent is pruned.
+
+The hash is opaque on-chain. For conditioned fulfillment, UPV4's signed `extensionData` word 0
+must echo the conditions hash; later bytes are reserved. Missing, short, or mismatched echoes
+revert before funds move on every settlement path. Unconditioned intents ignore extensions,
+and manual release ignores conditions. `intent.data` remains the post-intent hook payload.
+
+Off-chain convention v1 is
+`conditionsHash = keccak256(abi.encode(uint8(1), salt, payerIdHash))`,
+where `salt` and `payerIdHash` are both `bytes32`.
+Use a cryptographically random salt for each intent so phone-number UPI IDs cannot be
+brute-forced from the public hash. Keep the salt off-chain with the conditions supplied to
+the gating service and attestor.

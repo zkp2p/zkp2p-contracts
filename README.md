@@ -986,14 +986,16 @@ MIT
 ### UPV4 return compatibility
 
 UPV4 accepts a 480-byte payment/snapshot/balance-flag prefix followed by optional signed
-extension bytes. The attestation service continues signing exactly 480 bytes; no downstream
-change is required. The entire payload, including extensions, is covered by `dataHash`.
+extension bytes. Unconditioned attestations may continue signing exactly 480 bytes. Conditioned O4
+intents require the attestor to append the signed conditions hash. The entire payload, including
+extensions, is covered by `dataHash`.
 Its fully static result preserves the V1 `success`, `intentHash`, `releaseAmount` prefix,
 then returns `balanceFunded`, the uncapped `attestedReleaseAmount`, verified `PaymentDetails`
 and signed/validated `IntentSnapshot`. Dynamic extension bytes are a separate trailing return
 value; unsigned metadata is never returned. O3 reads the V1 prefix, and O4 uses the capped
-release amount and balance flag while ignoring the additional data. IOrchestratorV4 owns its
-Intent, SignalIntentParams and FulfillIntentParams structs with the same ABI layouts as V3.
+release amount and balance flag, and checks the signed extension for conditioned intents.
+IOrchestratorV4 owns its Intent, SignalIntentParams and FulfillIntentParams structs with the
+same ABI layouts as V3.
 
 ### Deferred lifecycle compatibility
 
@@ -1002,3 +1004,22 @@ O4 accepts zero or a hook advertising IIntentLifecycleHookV2; V2 admission requi
 registered caller advertising IOrchestratorV4. Both advertise IERC165 and reject
 0xffffffff. The protocol interfaces contain only their own functions, excluding
 supportsInterface. OrchestratorV3 and IntentLifecycleHookV1 remain unchanged.
+
+### O4 intent conditions
+
+`signalIntentWithConditions(params, conditionsHash)` requires a nonzero hash and a deposit gating
+service. The gating service signs the existing 336-byte packed message with the 32-byte hash
+appended (368 bytes total). `signalIntent(params)` retains its original calldata and signature
+format. `intentConditions(intentHash)` exposes the hash until the intent is pruned.
+
+The hash is opaque on-chain. For conditioned fulfillment, UPV4's signed `extensionData` word 0
+must echo the conditions hash; later bytes are reserved. Missing, short, or mismatched echoes
+revert before funds move on every settlement path. Unconditioned intents ignore extensions,
+and manual release ignores conditions. `intent.data` remains the post-intent hook payload.
+
+Off-chain convention v1 is
+`conditionsHash = keccak256(abi.encode(uint8(1), salt, payerIdHash))`,
+where `salt` and `payerIdHash` are both `bytes32`.
+Use a cryptographically random salt for each intent so phone-number UPI IDs cannot be
+brute-forced from the public hash. Keep the salt off-chain with the conditions supplied to
+the gating service and attestor.

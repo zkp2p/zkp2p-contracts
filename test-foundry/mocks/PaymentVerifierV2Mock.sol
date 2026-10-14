@@ -28,6 +28,13 @@ contract PaymentVerifierV2Mock is IPaymentVerifierV2 {
     uint256 internal constant PRECISE_UNIT = 1e18;
 
     bool public balanceFunded;
+    bytes internal returnedExtension;
+
+    /// @notice Configures the signed extension returned by the mock.
+    function setExtensionData(bytes calldata extensionData) external {
+        returnedExtension = extensionData;
+    }
+
 
     /// @notice Configures the signed balance flag returned by the mock.
     function setBalanceFunded(bool _balanceFunded) external {
@@ -86,7 +93,7 @@ contract PaymentVerifierV2Mock is IPaymentVerifierV2 {
 
         if (shouldReturnFalse) {
             result.balanceFunded = balanceFunded;
-            return (result, "");
+            return (result, returnedExtension);
         }
 
         uint256 releaseAmount = paymentDetails.amount;
@@ -102,7 +109,7 @@ contract PaymentVerifierV2Mock is IPaymentVerifierV2 {
         result.intentHash = paymentDetails.intentHash;
         result.releaseAmount = releaseAmount;
         result.balanceFunded = balanceFunded;
-        return (result, "");
+        return (result, returnedExtension);
     }
 
     function _fetchSnapshot(bytes32 intentHash) internal view returns (Snapshot memory snapshot) {
