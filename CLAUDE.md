@@ -176,17 +176,35 @@ Current numbered lanes include:
   feeds, then hands ownership to `MULTI_SIG.base`. It was executed on Base on
   2026-10-01 from `88be796` and is still mounted; tagged reruns only verify.
 
-- `45`: bypass dispute stack and UPV4 (tag + network flag on live networks; resumable deploy-only steps).
-  First executed on Base staging 2026-10-11. The staging dispute trio was redeployed through the same lane on
-  2026-10-13 from `285bc5c` with the stake-owner policy bytecode; the first trio is abandoned. UPV4 and its
-  record are unchanged. Base pending and unchanged.
-- `46`: bypass/UPV4 activation (staging EOA actions; guarded atomic Base Safe batch). First executed on Base
-  staging 2026-10-12. The redeployed staging trio was activated through the same lane on 2026-10-13 from
-  `285bc5c`: add the fresh writer, switch O3's hook and remove the abandoned writer. Both 2026-10-13 runs used
-  staging replacement routing that existed only at `285bc5c` and is deleted; lanes 45/46 match `314298e`
-  again. The August predecessor (the lane-39 policy), UPV4 and all 14 payment routes, currencies and method
-  order remain unchanged. The block-52531092 snapshot reduced to `active`; records, pins, evidence and outputs
-  select the fresh trio. Base pending and unchanged.
+- `45`: cascade stack and O4 deploy-only preparation, retargeted in source and not executed on either
+  network. Deploys zero-delay `StakeVaultCascade`, `CascadeDisputeProtectionPolicy`, `IntentLifecycleHookV2`,
+  UPV4 and O4; sets O4's HookV2, matches O3's other configuration and hands ownership to the Safe on Base. O4 remains
+  unregistered. Only the pinned superseded staging UPV4 address/runtime may be deleted and redeployed at
+  a fresh address; pre-cutover binding checks use that pin independently of the mutable record.
+  Historical staging deployment: 2026-10-11 from `f9eab7f`; replacement stake-owner trio: 2026-10-13 from
+  `285bc5c`, with UPV4 unchanged. The first trio is abandoned, with no protected intent, stake or live permission.
+- `46`: cascade activation, retargeted in source and not executed on either network. O3 keeps its August
+  hook on Base/local; staging restores it first. Adds the cascade dispute writer, routes all methods to
+  fresh UPV4, makes it the sole NRV2 writer and registers O4 last. Existing dispute writers remain passive.
+  Every PENDING stale-policy intent blocks verifier rotation and later actions, regardless of stake mode.
+  Opt-outs are inherited by read-through from the pinned August predecessor; no mirroring or inventory gate.
+  Staging order is lane 45 (reports stale intents), lane 46 `ENABLE_` with both `CONFIRM_` flags, then
+  lane 46 `PREPARE_` expecting `active`; keep one build and avoid untagged runs until recording merges.
+  Downstream readiness means new-domain 480-byte UPV4 attestations for both orchestrators and O4 client
+  routing. RelayerRegistry is shared across orchestrators. Base emits an unsigned guarded atomic batch
+  ending in `addOrchestrator(O4)`, with no O3 call; the postcondition runs only in the fork simulation.
+  Historical activation: 2026-10-12 from `a6970aa` (32 actions); replacement activation: 2026-10-13 from
+  `285bc5c` (add writer, switch O3 hook, remove abandoned writer). The two replacement runs took ten
+  transactions, nonces 16340–16349; block 52531092 reduced to `active`. Their temporary executor was
+  deleted and the lanes then restored to `314298e`, before this cascade retargeting. The August writer,
+  UPV4 and all 14 routes/currencies/order were unchanged. Base has executed neither lane.
+  Recording must save the five fresh records and address/runtime pins, update the committed-record test
+  when staging UPV4's JSON changes, restore staging aliases/evidence/predecessor identities to main's
+  August O3 selection, regenerate outputs with the O4 stack by name and update docs. Base records pins
+  after lane 45 before lane-46 preparation and flips `BYPASS_PAYMENT_BINDING_RECORDED.base` after activation.
+  Canonical aliases describe O3; O4 uses `StakeVaultCascade` and its other records by name. Current staging
+  aliases/evidence remain bypass until recording; local aliases are MethodScopedStaked. Each live step,
+  recording PR and later RC publication needs separate approval. Restart localhost before a second full deploy.
 
 There is no `26` script. Numbered files are identities, not proof that every
 script should execute. A numbered script is immutable after any production
