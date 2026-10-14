@@ -425,6 +425,24 @@ contract StakeVault is IStakeVault, Ownable2Step, ReentrancyGuard {
         );
     }
 
+    /**
+     * @notice CONTROLLER ONLY: Pays free stake only to the stake owner itself.
+     * @dev The controller decides when and how much to pay out. Accounting is reduced before the token transfer.
+     * @param _stakeOwner Owner whose free stake is paid to its own address.
+     * @param _amount Amount of free stake to pay out.
+     */
+    function payOutStake(address _stakeOwner, uint256 _amount) external override onlyController nonReentrant {
+        if (_stakeOwner == address(0)) revert ZeroAddress();
+        if (_amount == 0) revert ZeroAmount();
+        uint256 available = freeStake(_stakeOwner);
+        if (available < _amount) revert InsufficientFreeStake(_stakeOwner, available, _amount);
+
+        stakeBalance[_stakeOwner] -= _amount;
+        totalStaked -= _amount;
+        emit StakePaidOut(_stakeOwner, _amount, stakeBalance[_stakeOwner]);
+        stakeToken.safeTransfer(_stakeOwner, _amount);
+    }
+
     /* ============ Controller Governance ============ */
 
     /**

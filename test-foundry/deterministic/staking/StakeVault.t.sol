@@ -43,6 +43,7 @@ contract ReentrantToken is ERC20 {
 }
 
 contract StakeVaultTest is Test {
+    event StakePaidOut(address indexed stakeOwner, uint256 amount, uint256 newStakeBalance);
     event LockFunded(bytes32 indexed lockId, address indexed stakeOwner, uint256 amount, uint256 newStakeBalance);
 
     uint64 internal constant CONTROLLER_DELAY = 1 days;
@@ -739,6 +740,66 @@ contract StakeVaultTest is Test {
         vault.withdrawStake(20e6);
         assertEq(vault.stakeBalance(safeA), 80e6);
         assertEq(vault.lockedStake(safeA), 80e6);
+    }
+
+    function test_PayOutStakeTransfersFreeStakeToOwner() public {
+        _deposit(safeA, 100e6);
+        uint256 balanceBefore = token.balanceOf(safeA);
+        uint256 totalStakedBefore = vault.totalStaked();
+
+        vm.expectEmit(true, false, false, true, address(vault));
+        emit StakePaidOut(safeA, 40e6, 60e6);
+        vm.prank(controller);
+        vault.payOutStake(safeA, 40e6);
+
+        assertEq(token.balanceOf(safeA), balanceBefore + 40e6);
+        assertEq(vault.stakeBalance(safeA), 60e6);
+        assertEq(vault.totalStaked(), totalStakedBefore - 40e6);
+    }
+
+    function test_PayOutStakeOnlyController() public {
+        _deposit(safeA, 100e6);
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.UnauthorizedController.selector, attacker));
+        vm.prank(attacker);
+        vault.payOutStake(safeA, 40e6);
+    }
+
+    function test_PayOutStakeRejectsLockedStake() public {
+        _deposit(safeA, 100e6);
+        vm.prank(controller);
+        vault.lockStake(safeA, keccak256("locked-payout"), 70e6, NEVER_MATURES);
+
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.InsufficientFreeStake.selector, safeA, 30e6, 31e6));
+        vm.prank(controller);
+        vault.payOutStake(safeA, 31e6);
+    }
+
+    function test_PayOutStakeRejectsZero() public {
+        vm.expectRevert(IStakeVault.ZeroAmount.selector);
+        vm.prank(controller);
+        vault.payOutStake(safeA, 0);
+
+        vm.expectRevert(IStakeVault.ZeroAddress.selector);
+        vm.prank(controller);
+        vault.payOutStake(address(0), 1);
+    }
+
+    function test_PayOutStakeFromFundedLockAfterUnlock() public {
+        bytes32 lockId = keccak256("funded-payout");
+        uint256 balanceBefore = token.balanceOf(safeA);
+        token.transfer(controller, 50e6);
+
+        vm.startPrank(controller);
+        token.transfer(address(vault), 50e6);
+        vault.fundLock(safeA, lockId, 50e6, NEVER_MATURES);
+        vault.unlockStake(lockId);
+        vault.payOutStake(safeA, 50e6);
+        vm.stopPrank();
+
+        assertEq(token.balanceOf(safeA), balanceBefore + 50e6);
+        assertEq(vault.stakeBalance(safeA), 0);
+        assertEq(vault.totalStaked(), 0);
+        assertEq(vault.totalAccounted(), token.balanceOf(address(vault)));
     }
 
     function _deposit(address _stakeOwner, uint256 _amount) internal {

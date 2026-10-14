@@ -48,6 +48,7 @@ interface IStakeVault {
 
     event StakeDeposited(address indexed stakeOwner, uint256 amount, uint256 newStakeBalance);
     event StakeWithdrawn(address indexed stakeOwner, uint256 amount, uint256 newStakeBalance);
+    event StakePaidOut(address indexed stakeOwner, uint256 amount, uint256 newStakeBalance);
     event TakerAuthorizationUpdated(address indexed stakeOwner, address indexed taker, bool authorized);
     event StakeOwnerSelected(address indexed taker, address indexed previousStakeOwner, address indexed newStakeOwner);
     event StakeLocked(
@@ -102,6 +103,14 @@ interface IStakeVault {
     function resizeLock(bytes32 _lockId, uint256 _newAmount, uint64 _newMaturesAt) external;
     function unlockStake(bytes32 _lockId) external;
     function resolveLock(bytes32 _lockId, Claim[] calldata _claims) external;
+
+    /**
+     * @notice Pays free stake only to the stake owner itself.
+     * @dev The controller decides when and how much to pay out.
+     * @param _stakeOwner Owner whose free stake is paid to its own address.
+     * @param _amount Amount of free stake to pay out.
+     */
+    function payOutStake(address _stakeOwner, uint256 _amount) external;
 
     function initializeController(address _controller) external;
     function proposeController(address _controller) external;
