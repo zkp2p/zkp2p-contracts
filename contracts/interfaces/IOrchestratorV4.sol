@@ -1,0 +1,154 @@
+// SPDX-License-Identifier: MIT
+
+pragma solidity ^0.8.18;
+
+import { IOrchestratorV3 } from "./IOrchestratorV3.sol";
+import { IIntentLifecycleHookV2 } from "./IIntentLifecycleHookV2.sol";
+import { IPreIntentHook } from "./IPreIntentHook.sol";
+
+/**
+ * @title IOrchestratorV4
+ * @notice Interface for the V4 orchestrator with deferred settlement.
+ * @dev Deferred payouts skip post-intent hooks; intent.data is never read by the protocol.
+ */
+interface IOrchestratorV4 {
+
+    /* ============ Events ============ */
+
+    event IntentPayoutDeferred(bytes32 indexed intentHash, address indexed recipient, address indexed vault, uint256 amount);
+
+    event IntentSignaled(
+        bytes32 indexed intentHash,
+        address indexed escrow,
+        uint256 indexed depositId,
+        bytes32 paymentMethod,
+        address owner,
+        address to,
+        uint256 amount,
+        bytes32 fiatCurrency,
+        uint256 conversionRate,
+        uint256 timestamp
+    );
+
+    event IntentPruned(
+        bytes32 indexed intentHash
+    );
+
+    event IntentFulfilled(
+        bytes32 indexed intentHash,
+        address indexed fundsTransferredTo,
+        uint256 amount,
+        bool isManualRelease
+    );
+
+    event IntentReferralFeeDistributed(
+        bytes32 indexed intentHash,
+        address indexed feeRecipient,
+        uint256 feeAmount
+    );
+    event IntentManagerFeeSnapshotted(bytes32 indexed intentHash, address indexed feeRecipient, uint256 fee);
+    event DepositPreIntentHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
+    event LifecycleHookUpdated(address indexed previousHook, address indexed newHook);
+    event IntentLifecycleHookSnapshotted(bytes32 indexed intentHash, address indexed lifecycleHook);
+    event AllowMultipleIntentsUpdated(bool allowMultiple);
+
+    event RelayerRegistryUpdated(address indexed relayerRegistry);
+    event EscrowRegistryUpdated(address indexed escrowRegistry);
+
+    event ProtocolFeeUpdated(uint256 protocolFee);
+    event ProtocolFeeRecipientUpdated(address indexed protocolFeeRecipient);
+
+    /* ============ Standardized Custom Errors ============ */
+
+    // Zero value errors
+    error ZeroAddress();
+    error ZeroValue();
+
+    // Authorization errors
+    error UnauthorizedEscrowCaller(address caller);
+    error UnauthorizedCaller(address caller, address authorized);
+    error UnauthorizedCallerOrDelegate(address caller, address owner, address delegate);
+
+    // Not found errors
+    error IntentNotFound(bytes32 intentHash);
+    error PaymentMethodDoesNotExist(bytes32 paymentMethod);
+    error PaymentMethodNotSupported(bytes32 paymentMethod);
+    error CurrencyNotSupported(bytes32 paymentMethod, bytes32 currency);
+
+    // Whitelist errors
+    error PaymentMethodNotWhitelisted(bytes32 paymentMethod);
+    error EscrowNotWhitelisted(address escrow);
+
+    // Amount and fee errors
+    error AmountBelowMin(uint256 amount, uint256 min);
+    error AmountAboveMax(uint256 amount, uint256 max);
+    error AmountExceedsLimit(uint256 amount, uint256 limit);
+    error FeeExceedsMaximum(uint256 fee, uint256 maximum);
+    error RateBelowMinimum(uint256 rate, uint256 minRate);
+
+    // Validation errors
+    error AccountHasActiveIntent(address account, bytes32 existingIntent);
+    error InvalidPostIntentHook(address hook);
+    error InvalidPreIntentHook(address hook);
+    error InvalidLifecycleHook(address hook);
+    error InvalidSignature();
+    error SignatureExpired(uint256 expiration, uint256 currentTime);
+
+    // Verification errors
+    error PaymentVerificationFailed();
+    error HashMismatch(bytes32 expected, bytes32 actual);
+
+    // Transfer errors
+    error TransferFailed(address recipient, uint256 amount);
+    error EscrowLockFailed();
+
+    /// @notice Returns the supported deferred-settlement lifecycle interface id.
+    function lifecycleHookInterfaceId() external pure returns (bytes4);
+
+    /* ============ View Functions ============ */
+
+    /// @notice Returns the active intent.
+    function getIntent(bytes32 intentHash) external view returns (IOrchestratorV3.Intent memory);
+
+    /// @notice Returns active intent hashes owned by the account.
+    function getAccountIntents(address account) external view returns (bytes32[] memory);
+
+    /// @notice Returns the configured deposit pre-intent hook.
+    function getDepositPreIntentHook(address escrow, uint256 depositId) external view returns (IPreIntentHook);
+
+    /// @notice Returns the hook selected for future intents.
+    function lifecycleHook() external view returns (IIntentLifecycleHookV2);
+
+    /// @notice Returns the hook snapshotted for the intent.
+    function getIntentLifecycleHook(bytes32 intentHash) external view returns (IIntentLifecycleHookV2);
+
+    /* ============ External Functions for Users ============ */
+
+    /// @notice Signals an intent and locks its escrow funds.
+    function signalIntent(IOrchestratorV3.SignalIntentParams calldata params) external;
+
+    /// @notice Sets the deposit pre-intent hook as depositor or delegate.
+    function setDepositPreIntentHook(address escrow, uint256 depositId, IPreIntentHook hook) external;
+
+    /// @notice Sets a compatible lifecycle hook for future intents; zero disables callbacks.
+    function setLifecycleHook(IIntentLifecycleHookV2 hook) external;
+
+    /// @notice Cancels the caller's intent and unlocks its funds.
+    function cancelIntent(bytes32 intentHash) external;
+
+    /// @notice Verifies payment and settles immediately or defers the net payout.
+    function fulfillIntent(IOrchestratorV3.FulfillIntentParams calldata params) external;
+
+    /// @notice Manually settles an intent as its depositor.
+    function releaseFundsToPayer(bytes32 intentHash) external;
+
+    /* ============ External Functions for Escrow ============ */
+
+    /// @notice Prunes intents belonging to the calling escrow.
+    function pruneIntents(bytes32[] calldata intentIds) external;
+
+    /* ============ External Functions for Anyone ============ */
+
+    /// @notice Prunes intents no longer present on their escrow.
+    function cleanupOrphanedIntents(bytes32[] calldata intentHashes) external;
+}
