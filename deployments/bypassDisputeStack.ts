@@ -14,17 +14,19 @@ export const LANE_46_TAG = "46_activate_bypass_dispute_stack";
 
 // Record order follows the resumable deployment steps, not the artifact table.
 export const BYPASS_DEPLOYMENT_NAMES = [
-  "StakeVaultBypass",
-  "DisputeProtectionPolicyBypass",
-  "IntentLifecycleHookV1Bypass",
+  "StakeVaultCascade",
+  "CascadeDisputeProtectionPolicy",
+  "IntentLifecycleHookV2",
   "UnifiedPaymentVerifierV4",
+  "OrchestratorV4",
 ] as const;
 export type BypassDeploymentName = (typeof BYPASS_DEPLOYMENT_NAMES)[number];
 export const BYPASS_ARTIFACT_NAMES: Record<BypassDeploymentName, string> = {
-  StakeVaultBypass: "StakeVault",
-  DisputeProtectionPolicyBypass: "DisputeProtectionPolicy",
-  IntentLifecycleHookV1Bypass: "IntentLifecycleHookV1",
+  StakeVaultCascade: "StakeVault",
+  CascadeDisputeProtectionPolicy: "CascadeDisputeProtectionPolicy",
+  IntentLifecycleHookV2: "IntentLifecycleHookV2",
   UnifiedPaymentVerifierV4: "UnifiedPaymentVerifierV4",
+  OrchestratorV4: "OrchestratorV4",
 };
 /** Recorded after execution; Base is added by its own recording PR after
  * lane 45 runs there. */
@@ -33,30 +35,48 @@ export const BYPASS_RECORDED_DEPLOYMENTS: Partial<
     BypassNetwork,
     Record<BypassDeploymentName, { address: string; runtimeCodeHash: string }>
   >
-> = {
-  base_staging: {
-    StakeVaultBypass: {
-      address: "0x6b32df91EB92637F64bA444996702fC9582C87a1",
-      runtimeCodeHash:
-        "0x3ce00cf0a7e325a116e87ea330c8997b94df705e4e0653d3de9484fca614356e",
-    },
-    DisputeProtectionPolicyBypass: {
-      address: "0x1a9C442E3Ae99fB08313242fCdA601431027B39C",
-      runtimeCodeHash:
-        "0x496cfd95e23692cb7e282cfe7911797d16056b973d2bacfb44ff30c179c719e0",
-    },
-    IntentLifecycleHookV1Bypass: {
-      address: "0xec27Cc47370267c843177375c3Fe43D29D498bB4",
-      runtimeCodeHash:
-        "0x42574848f3e7e0bda80a2715bbe10a6317134211e4de6c2455baaed4ef792f61",
-    },
-    UnifiedPaymentVerifierV4: {
-      address: "0x3fe38Afdfa85A9E14D9b0ae5A5B2E577A8a71DA7",
-      runtimeCodeHash:
-        "0xd4492805a7f86aca9419a84156f4ffe64bdc2f82854f83e7d17c0e5f79049a5c",
-    },
+> = {};
+
+export const BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS = {
+  StakeVaultBypass: {
+    address: "0x6b32df91EB92637F64bA444996702fC9582C87a1",
+    runtimeCodeHash:
+      "0x3ce00cf0a7e325a116e87ea330c8997b94df705e4e0653d3de9484fca614356e",
+  },
+  DisputeProtectionPolicyBypass: {
+    address: "0x1a9C442E3Ae99fB08313242fCdA601431027B39C",
+    runtimeCodeHash:
+      "0x496cfd95e23692cb7e282cfe7911797d16056b973d2bacfb44ff30c179c719e0",
+  },
+  IntentLifecycleHookV1Bypass: {
+    address: "0xec27Cc47370267c843177375c3Fe43D29D498bB4",
+    runtimeCodeHash:
+      "0x42574848f3e7e0bda80a2715bbe10a6317134211e4de6c2455baaed4ef792f61",
+  },
+  UnifiedPaymentVerifierV4: {
+    address: "0x3fe38Afdfa85A9E14D9b0ae5A5B2E577A8a71DA7",
+    runtimeCodeHash:
+      "0xd4492805a7f86aca9419a84156f4ffe64bdc2f82854f83e7d17c0e5f79049a5c",
   },
 };
+
+export const BYPASS_PAYMENT_BINDING_RECORDED: Record<BypassNetwork, boolean> = {
+  base: false,
+  base_staging: true,
+};
+
+export function isSupersededStagingRecord(
+  network: string,
+  name: string,
+  address: string
+): boolean {
+  return (
+    network === "base_staging" &&
+    name === "UnifiedPaymentVerifierV4" &&
+    address.toLowerCase() ===
+      BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS.UnifiedPaymentVerifierV4.address.toLowerCase()
+  );
+}
 
 /** A record's solcInputHash depends on the deploying checkout's build cache
  * history, so it cannot gate later verification from a clean build. Recorded
@@ -68,6 +88,11 @@ export async function assertBypassDeploymentRecord(
   record: Deployment,
   blockTag?: string | number
 ): Promise<void> {
+  if (isSupersededStagingRecord(network, name, record.address)) {
+    throw new Error(
+      `${name} is the superseded staging deployment; run lane 45`
+    );
+  }
   await assertDeploymentMatchesChain(
     hre,
     record,
@@ -97,13 +122,14 @@ export async function assertBypassDeploymentRecord(
   }
 }
 
-export function recordedBypassLifecycleHookRuntimeHash(
+export function supersededBypassLifecycleHookRuntimeHash(
   network: string,
   address: string
 ): string | undefined {
-  const pin = isBypassLiveNetwork(network)
-    ? BYPASS_RECORDED_DEPLOYMENTS[network]?.IntentLifecycleHookV1Bypass
-    : undefined;
+  const pin =
+    network === "base_staging"
+      ? BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS.IntentLifecycleHookV1Bypass
+      : undefined;
   return pin && address.toLowerCase() === pin.address.toLowerCase()
     ? pin.runtimeCodeHash
     : undefined;
@@ -116,8 +142,12 @@ export const BYPASS_PREDECESSOR_DEPLOYMENT_NAMES = {
   hook: "IntentLifecycleHookV1MethodScopedStaked",
 } as const;
 
-type ContractPin = { address: string; runtimeCodeHash: string };
+export type ContractPin = { address: string; runtimeCodeHash: string };
 export type BypassLivePins = {
+  retiredVerifier: ContractPin;
+  initialO3Hook: ContractPin;
+  retainedDisputeWriters: string[];
+  allowMultipleIntents: boolean;
   chainId: number;
   deployer: string;
   stakeToken: string;
@@ -184,6 +214,18 @@ export const BYPASS_EXPECTED_LIVE: Record<BypassNetwork, BypassLivePins> = {
       runtimeCodeHash:
         "0x2b479a570ddea7a990f2cae8fa95eb3b8599fc8b367332b8dab92f7d0cebf7e0",
     },
+    retiredVerifier: {
+      address: "0xC6F4a193576C60892a47e111Bb5706c30162502B",
+      runtimeCodeHash:
+        "0x7636c79f0f46cf88c7122767e553264f1898fa253ea214f6a1c3187b0f0a4bcf",
+    },
+    initialO3Hook: {
+      address: "0x5Dd6C675a7406fE8C9f0D93394a36fd6e8c50031",
+      runtimeCodeHash:
+        "0x2b479a570ddea7a990f2cae8fa95eb3b8599fc8b367332b8dab92f7d0cebf7e0",
+    },
+    retainedDisputeWriters: ["0xbF4B769dB70DBEc89b6b2c44988304a7aD2de4Fc"],
+    allowMultipleIntents: true,
     paymentMethods: [
       "alipay",
       "chime",
@@ -252,6 +294,16 @@ export const BYPASS_EXPECTED_LIVE: Record<BypassNetwork, BypassLivePins> = {
       runtimeCodeHash:
         "0xb9ce42108c706f9241aeb41ffdc0da6b7584e8482183055452098b2f16c7abfd",
     },
+    retiredVerifier:
+      BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS.UnifiedPaymentVerifierV4,
+    initialO3Hook:
+      BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS.IntentLifecycleHookV1Bypass,
+    retainedDisputeWriters: [
+      "0x484fA07F085eb66bb7C2b649Ea9d5894b2B6681c",
+      BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS.DisputeProtectionPolicyBypass
+        .address,
+    ],
+    allowMultipleIntents: false,
     paymentMethods: [
       "zelle",
       "monzo",
@@ -324,6 +376,11 @@ function deploymentSteps(network: BypassNetwork): string[] {
     ...BYPASS_EXPECTED_LIVE[network].paymentMethods.map(
       (method) => `add-verifier-method:${method}`
     ),
+    "deploy-orchestrator",
+    "set-orchestrator-hook",
+    ...(BYPASS_EXPECTED_LIVE[network].allowMultipleIntents
+      ? ["set-allow-multiple-intents"]
+      : []),
   ];
 }
 
@@ -334,6 +391,7 @@ export const LANE_45_STEP_KINDS: Record<BypassNetwork, readonly string[]> = {
     "transfer-vault-owner",
     "transfer-policy-owner",
     "transfer-verifier-owner",
+    "transfer-orchestrator-owner",
   ],
 };
 

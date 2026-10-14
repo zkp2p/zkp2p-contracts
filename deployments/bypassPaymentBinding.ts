@@ -4,25 +4,19 @@ import {
   assertBypassDeploymentRecord,
   BYPASS_EXPECTED_LIVE,
   BYPASS_RECORDED_DEPLOYMENTS,
+  BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS,
+  BYPASS_PAYMENT_BINDING_RECORDED,
+  isBypassLiveNetwork,
+  isSupersededStagingRecord,
+  type ContractPin,
   expectedPaymentMethodCurrencies,
   type BypassNetwork,
 } from "./bypassDisputeStack";
 
-const { getActiveDisputeDeploymentName } =
-  require("./activeDisputeStack.cjs") as {
-    getActiveDisputeDeploymentName(
-      network: string,
-      canonicalName: string
-    ): string;
-  };
-
-/** The bypass hook requires UPV4 routing. The recorded alias flip is the single
- * switch for a live network's payment binding; recording PRs flip it per network
- * after lane 46 executes. */
 export function bypassPaymentBindingRecorded(network: string): boolean {
   return (
-    getActiveDisputeDeploymentName(network, "IntentLifecycleHookV1") ===
-    "IntentLifecycleHookV1Bypass"
+    isBypassLiveNetwork(network) &&
+    BYPASS_PAYMENT_BINDING_RECORDED[network] === true
   );
 }
 
@@ -45,6 +39,67 @@ export async function verifyBypassPaymentBinding(
   hre: HardhatRuntimeEnvironment,
   network: BypassNetwork
 ): Promise<void> {
+  const record = await hre.deployments.get("UnifiedPaymentVerifierV4");
+  if (BYPASS_RECORDED_DEPLOYMENTS[network]?.UnifiedPaymentVerifierV4) {
+    await assertBypassDeploymentRecord(
+      hre,
+      network,
+      "UnifiedPaymentVerifierV4",
+      record
+    );
+  } else if (
+    isSupersededStagingRecord(
+      network,
+      "UnifiedPaymentVerifierV4",
+      record.address
+    )
+  ) {
+    await assertVerifierPin(
+      hre,
+      BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS.UnifiedPaymentVerifierV4
+    );
+  } else {
+    await assertBypassDeploymentRecord(
+      hre,
+      network,
+      "UnifiedPaymentVerifierV4",
+      record
+    );
+  }
+  await verifyPaymentBinding(hre, network, record.address, true);
+}
+
+async function assertVerifierPin(
+  hre: HardhatRuntimeEnvironment,
+  pin: ContractPin
+): Promise<void> {
+  requireState(
+    hre.ethers.utils.keccak256(
+      await hre.ethers.provider.getCode(pin.address)
+    ) === pin.runtimeCodeHash,
+    "UnifiedPaymentVerifierV4 runtime bytecode hash mismatch"
+  );
+}
+
+export async function verifySupersededStagingBinding(
+  hre: HardhatRuntimeEnvironment,
+  retiredVerifier: ContractPin
+): Promise<void> {
+  await assertVerifierPin(hre, retiredVerifier);
+  await verifyPaymentBinding(
+    hre,
+    "base_staging",
+    retiredVerifier.address,
+    false
+  );
+}
+
+async function verifyPaymentBinding(
+  hre: HardhatRuntimeEnvironment,
+  network: BypassNetwork,
+  verifierAddress: string,
+  checkRecords: boolean
+): Promise<void> {
   const { ethers, deployments } = hre;
   const pins = BYPASS_EXPECTED_LIVE[network];
   const expected = EXPECTED_LIVE[network];
@@ -52,10 +107,6 @@ export async function verifyBypassPaymentBinding(
     (await ethers.provider.getNetwork()).chainId === 8453,
     "Payment binding chain id mismatch"
   );
-  const verifierPin =
-    BYPASS_RECORDED_DEPLOYMENTS[network]?.UnifiedPaymentVerifierV4;
-  requireState(!!verifierPin, "UPV4 recorded deployment pin missing");
-
   const records: Array<[string, string, string]> = [
     [
       "NullifierRegistryV2",
@@ -80,27 +131,22 @@ export async function verifyBypassPaymentBinding(
     ],
   ];
   for (const [name, address, runtimeCodeHash] of records) {
-    const record = await deployments.get(name);
-    requireState(
-      same(record.address, address),
-      `${name} deployment address mismatch`
-    );
+    if (checkRecords) {
+      const record = await deployments.get(name);
+      requireState(
+        same(record.address, address),
+        `${name} deployment address mismatch`
+      );
+    }
     requireState(
       ethers.utils.keccak256(await ethers.provider.getCode(address)) ===
         runtimeCodeHash,
       `${name} runtime bytecode hash mismatch`
     );
   }
-  const verifierRecord = await deployments.get("UnifiedPaymentVerifierV4");
-  await assertBypassDeploymentRecord(
-    hre,
-    network,
-    "UnifiedPaymentVerifierV4",
-    verifierRecord
-  );
   const verifier = await ethers.getContractAt(
     "UnifiedPaymentVerifierV4",
-    verifierRecord.address
+    verifierAddress
   );
   const registry = await ethers.getContractAt(
     "PaymentVerifierRegistry",
@@ -122,11 +168,10 @@ export async function verifyBypassPaymentBinding(
     "OrchestratorRegistry",
     expected.orchestratorRegistry
   );
-  const legacyRecord = await deployments.get("NullifierRegistry");
-  const legacy = await ethers.getContractAt(
-    "NullifierRegistry",
-    legacyRecord.address
-  );
+  const legacyAddress = checkRecords
+    ? (await deployments.get("NullifierRegistry")).address
+    : await nullifier.legacyNullifierRegistry();
+  const legacy = await ethers.getContractAt("NullifierRegistry", legacyAddress);
   for (const [name, contract] of [
     ["UPV4", verifier],
     ["NullifierRegistryV2", nullifier],
@@ -158,11 +203,11 @@ export async function verifyBypassPaymentBinding(
     "UPV4 method order mismatch"
   );
   requireState(
-    same(await nullifier.legacyNullifierRegistry(), legacyRecord.address),
+    same(await nullifier.legacyNullifierRegistry(), legacyAddress),
     "Legacy nullifier registry mismatch"
   );
   requireState(
-    ordered(await nullifier.getWriters(), [verifierRecord.address]),
+    ordered(await nullifier.getWriters(), [verifierAddress]),
     "NullifierRegistryV2 writers mismatch"
   );
   requireState(
@@ -203,7 +248,7 @@ export async function verifyBypassPaymentBinding(
       `Payment currencies mismatch: ${name}`
     );
     requireState(
-      same(await registry.getVerifier(method), verifierRecord.address),
+      same(await registry.getVerifier(method), verifierAddress),
       `Payment verifier route mismatch: ${name}`
     );
   }

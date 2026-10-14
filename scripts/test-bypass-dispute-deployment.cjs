@@ -91,18 +91,20 @@ async function withEnvironment(values, run) {
   }
 }
 
-test("lane 45 exports its bypass identity, live flags, and zero controller delay", () => {
+test("lane 45 exports its cascade identity, live flags, and zero controller delay", () => {
   assert.deepEqual(BYPASS_DEPLOYMENT_NAMES, [
-    "StakeVaultBypass",
-    "DisputeProtectionPolicyBypass",
-    "IntentLifecycleHookV1Bypass",
+    "StakeVaultCascade",
+    "CascadeDisputeProtectionPolicy",
+    "IntentLifecycleHookV2",
     "UnifiedPaymentVerifierV4",
+    "OrchestratorV4",
   ]);
   assert.deepEqual(BYPASS_ARTIFACT_NAMES, {
-    StakeVaultBypass: "StakeVault",
-    DisputeProtectionPolicyBypass: "DisputeProtectionPolicy",
-    IntentLifecycleHookV1Bypass: "IntentLifecycleHookV1",
+    StakeVaultCascade: "StakeVault",
+    CascadeDisputeProtectionPolicy: "CascadeDisputeProtectionPolicy",
+    IntentLifecycleHookV2: "IntentLifecycleHookV2",
     UnifiedPaymentVerifierV4: "UnifiedPaymentVerifierV4",
+    OrchestratorV4: "OrchestratorV4",
   });
   assert.deepEqual(lane45.default.tags, [
     "45_deploy_bypass_dispute_stack",
@@ -140,6 +142,8 @@ test("lane 45 pins exact live step order and classifies only contiguous prefixes
     "add-verifier-method:mercury",
     "add-verifier-method:upi",
     "add-verifier-method:xmoney",
+    "deploy-orchestrator",
+    "set-orchestrator-hook",
   ]);
   assert.deepEqual(lane45.LANE_45_STEP_KINDS.base, [
     "deploy-vault",
@@ -163,9 +167,13 @@ test("lane 45 pins exact live step order and classifies only contiguous prefixes
     "add-verifier-method:upi",
     "add-verifier-method:xmoney",
     "add-verifier-method:monobank",
+    "deploy-orchestrator",
+    "set-orchestrator-hook",
+    "set-allow-multiple-intents",
     "transfer-vault-owner",
     "transfer-policy-owner",
     "transfer-verifier-owner",
+    "transfer-orchestrator-owner",
   ]);
   for (const network of /** @type {const} */ (["base_staging", "base"])) {
     const steps = lane45.LANE_45_STEP_KINDS[network];
@@ -216,6 +224,32 @@ test("lane 45 pins exact live step order and classifies only contiguous prefixes
 });
 
 test("lane 45 pins live catalogs, currencies, risk windows, and governance", () => {
+  const {
+    BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS: superseded,
+  } = require("../deployments/bypassDisputeStack.ts");
+  const base = BYPASS_EXPECTED_LIVE.base;
+  const staging = BYPASS_EXPECTED_LIVE.base_staging;
+  assert.deepEqual(base.retiredVerifier, base.unifiedPaymentVerifierV3);
+  assert.deepEqual(base.initialO3Hook, base.predecessorHook);
+  assert.deepEqual(base.retainedDisputeWriters, [
+    base.predecessorPolicy.address,
+  ]);
+  assert.equal(base.allowMultipleIntents, true);
+  assert.deepEqual(
+    staging.retiredVerifier,
+    superseded.UnifiedPaymentVerifierV4
+  );
+  assert.deepEqual(
+    staging.initialO3Hook,
+    superseded.IntentLifecycleHookV1Bypass
+  );
+  assert.deepEqual(staging.retainedDisputeWriters, [
+    staging.predecessorPolicy.address,
+    superseded.DisputeProtectionPolicyBypass.address,
+  ]);
+  assert.equal(staging.allowMultipleIntents, false);
+  for (const pins of [base, staging])
+    assert.equal("optOutPredecessorPolicy" in pins, false);
   assert.deepEqual(
     BYPASS_EXPECTED_LIVE.base.paymentMethods,
     getActivePaymentMethods("base")
@@ -688,40 +722,38 @@ test("local lane 46 rejects an extra nullifier writer without changing state", a
   assert.deepEqual(await routingSnapshot(state), before);
 });
 
-test("recorded bypass deployment pins match the executed staging stack only", () => {
+test("superseded staging pins preserve the executed stack identities", () => {
   const {
-    BYPASS_RECORDED_DEPLOYMENTS,
-    recordedBypassLifecycleHookRuntimeHash,
+    BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS,
+    supersededBypassLifecycleHookRuntimeHash,
   } = require("../deployments/bypassDisputeStack.ts");
-  assert.deepEqual(BYPASS_RECORDED_DEPLOYMENTS, {
-    base_staging: {
-      StakeVaultBypass: {
-        address: "0x6b32df91EB92637F64bA444996702fC9582C87a1",
-        runtimeCodeHash:
-          "0x3ce00cf0a7e325a116e87ea330c8997b94df705e4e0653d3de9484fca614356e",
-      },
-      DisputeProtectionPolicyBypass: {
-        address: "0x1a9C442E3Ae99fB08313242fCdA601431027B39C",
-        runtimeCodeHash:
-          "0x496cfd95e23692cb7e282cfe7911797d16056b973d2bacfb44ff30c179c719e0",
-      },
-      IntentLifecycleHookV1Bypass: {
-        address: "0xec27Cc47370267c843177375c3Fe43D29D498bB4",
-        runtimeCodeHash:
-          "0x42574848f3e7e0bda80a2715bbe10a6317134211e4de6c2455baaed4ef792f61",
-      },
-      UnifiedPaymentVerifierV4: {
-        address: "0x3fe38Afdfa85A9E14D9b0ae5A5B2E577A8a71DA7",
-        runtimeCodeHash:
-          "0xd4492805a7f86aca9419a84156f4ffe64bdc2f82854f83e7d17c0e5f79049a5c",
-      },
+  assert.deepEqual(BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS, {
+    StakeVaultBypass: {
+      address: "0x6b32df91EB92637F64bA444996702fC9582C87a1",
+      runtimeCodeHash:
+        "0x3ce00cf0a7e325a116e87ea330c8997b94df705e4e0653d3de9484fca614356e",
+    },
+    DisputeProtectionPolicyBypass: {
+      address: "0x1a9C442E3Ae99fB08313242fCdA601431027B39C",
+      runtimeCodeHash:
+        "0x496cfd95e23692cb7e282cfe7911797d16056b973d2bacfb44ff30c179c719e0",
+    },
+    IntentLifecycleHookV1Bypass: {
+      address: "0xec27Cc47370267c843177375c3Fe43D29D498bB4",
+      runtimeCodeHash:
+        "0x42574848f3e7e0bda80a2715bbe10a6317134211e4de6c2455baaed4ef792f61",
+    },
+    UnifiedPaymentVerifierV4: {
+      address: "0x3fe38Afdfa85A9E14D9b0ae5A5B2E577A8a71DA7",
+      runtimeCodeHash:
+        "0xd4492805a7f86aca9419a84156f4ffe64bdc2f82854f83e7d17c0e5f79049a5c",
     },
   });
-  const pins = BYPASS_RECORDED_DEPLOYMENTS.base_staging;
+  const pins = BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS;
   assert.ok(pins);
   const hook = pins.IntentLifecycleHookV1Bypass;
   assert.equal(
-    recordedBypassLifecycleHookRuntimeHash(
+    supersededBypassLifecycleHookRuntimeHash(
       "base_staging",
       hook.address.toLowerCase()
     ),
@@ -729,14 +761,14 @@ test("recorded bypass deployment pins match the executed staging stack only", ()
   );
   for (const network of ["base", "hardhat", "localhost", "unknown"])
     assert.equal(
-      recordedBypassLifecycleHookRuntimeHash(network, hook.address),
+      supersededBypassLifecycleHookRuntimeHash(network, hook.address),
       undefined
     );
-  for (const name of BYPASS_DEPLOYMENT_NAMES.filter(
+  for (const name of Object.keys(pins).filter(
     (name) => name !== "IntentLifecycleHookV1Bypass"
   ))
     assert.equal(
-      recordedBypassLifecycleHookRuntimeHash(
+      supersededBypassLifecycleHookRuntimeHash(
         "base_staging",
         pins[name].address
       ),
@@ -745,8 +777,8 @@ test("recorded bypass deployment pins match the executed staging stack only", ()
 });
 
 test(
-  "recorded bypass pins agree with the committed staging records and " +
-    "dispute-stack evidence",
+  "recorded pins are empty and superseded staging pins match " +
+    "the committed Bypass records",
   () => {
     const {
       BYPASS_DEPLOYMENT_NAMES,
@@ -759,8 +791,9 @@ test(
       .networks.base_staging;
     const selections =
       require("../deployments/active-dispute-stack.json").networks;
-    const pins = BYPASS_RECORDED_DEPLOYMENTS.base_staging;
-    assert.ok(pins);
+    const pins =
+      require("../deployments/bypassDisputeStack.ts").BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS;
+    assert.deepEqual(BYPASS_RECORDED_DEPLOYMENTS, {});
 
     const { keccak256 } = require("ethers").utils;
     const stagingRecords = {
@@ -772,7 +805,7 @@ test(
       IntentLifecycleHookV1MethodScopedStaked: require("../deployments/base_staging/IntentLifecycleHookV1MethodScopedStaked.json"),
     };
 
-    for (const name of BYPASS_DEPLOYMENT_NAMES) {
+    for (const name of Object.keys(pins)) {
       /** @type {{ address: string, runtimeCodeHash: string }} */
       const pin = pins[name];
       assert.equal(
@@ -859,66 +892,139 @@ test("recorded bypass records use address and runtime pins across build caches",
     BYPASS_RECORDED_DEPLOYMENTS,
     assertBypassDeploymentRecord,
   } = require("../deployments/bypassDisputeStack.ts");
-  const pins = BYPASS_RECORDED_DEPLOYMENTS.base_staging;
-  assert.ok(pins);
-  for (const name of BYPASS_DEPLOYMENT_NAMES) {
-    const pin = pins[name];
-    const previousHash = pin.runtimeCodeHash;
-    const record = {
-      address: pin.address,
-      abi: [],
-      deployedBytecode: "0x6000",
-      solcInputHash: "deploying-cache",
-    };
-    /** @type {Array<string | number | undefined>} */
-    const blocks = [];
-    const fake = /** @type {any} */ ({
-      deployments: {
-        /** @param {string} artifact */
-        getExtendedArtifact: async (artifact) => {
-          assert.equal(artifact, BYPASS_ARTIFACT_NAMES[name]);
-          return { deployedBytecode: "0x6000", solcInputHash: "clean-cache" };
-        },
+  const pins = Object.fromEntries(
+    BYPASS_DEPLOYMENT_NAMES.map((name, i) => [
+      name,
+      {
+        address: ethers.utils.getAddress(
+          `0x${(i + 1).toString(16).padStart(40, "0")}`
+        ),
+        runtimeCodeHash: ethers.utils.keccak256("0x6000"),
       },
-      ethers: {
-        provider: {
-          /** @param {string} address @param {string | number} [block] */
-          getCode: async (address, block) => {
-            assert.equal(address, record.address);
-            blocks.push(block);
-            return "0x6000";
+    ])
+  );
+  BYPASS_RECORDED_DEPLOYMENTS.base_staging = pins;
+  try {
+    for (const name of BYPASS_DEPLOYMENT_NAMES) {
+      const pin = pins[name];
+      const previousHash = pin.runtimeCodeHash;
+      const record = {
+        address: pin.address,
+        abi: [],
+        deployedBytecode: "0x6000",
+        solcInputHash: "deploying-cache",
+      };
+      /** @type {Array<string | number | undefined>} */
+      const blocks = [];
+      const fake = /** @type {any} */ ({
+        deployments: {
+          /** @param {string} artifact */
+          getExtendedArtifact: async (artifact) => {
+            assert.equal(artifact, BYPASS_ARTIFACT_NAMES[name]);
+            return { deployedBytecode: "0x6000", solcInputHash: "clean-cache" };
           },
         },
-      },
-    });
-    try {
-      pin.runtimeCodeHash = ethers.utils.keccak256("0x6000");
-      await assertBypassDeploymentRecord(
-        fake,
-        "base_staging",
-        name,
-        record,
-        123
-      );
-      assert.ok(blocks.length > 0 && blocks.every((block) => block === 123));
-      record.address = ethers.constants.AddressZero;
-      await assert.rejects(
-        assertBypassDeploymentRecord(fake, "base_staging", name, record),
-        /deployment address mismatch/
-      );
-      record.address = pin.address;
-      pin.runtimeCodeHash = ethers.utils.keccak256("0x6001");
-      await assert.rejects(
-        assertBypassDeploymentRecord(fake, "base_staging", name, record),
-        /runtime bytecode hash mismatch/
-      );
-      for (const network of ["base", "hardhat"])
-        await assert.rejects(
-          assertBypassDeploymentRecord(fake, network, name, record),
-          /lacks canonical deployment evidence/
+        ethers: {
+          provider: {
+            /** @param {string} address @param {string | number} [block] */
+            getCode: async (address, block) => {
+              assert.equal(address, record.address);
+              blocks.push(block);
+              return "0x6000";
+            },
+          },
+        },
+      });
+      try {
+        pin.runtimeCodeHash = ethers.utils.keccak256("0x6000");
+        await assertBypassDeploymentRecord(
+          fake,
+          "base_staging",
+          name,
+          record,
+          123
         );
-    } finally {
-      pin.runtimeCodeHash = previousHash;
+        assert.ok(blocks.length > 0 && blocks.every((block) => block === 123));
+        record.address = ethers.constants.AddressZero;
+        await assert.rejects(
+          assertBypassDeploymentRecord(fake, "base_staging", name, record),
+          /deployment address mismatch/
+        );
+        record.address = pin.address;
+        pin.runtimeCodeHash = ethers.utils.keccak256("0x6001");
+        await assert.rejects(
+          assertBypassDeploymentRecord(fake, "base_staging", name, record),
+          /runtime bytecode hash mismatch/
+        );
+        for (const network of ["base", "hardhat"])
+          await assert.rejects(
+            assertBypassDeploymentRecord(fake, network, name, record),
+            /lacks canonical deployment evidence/
+          );
+      } finally {
+        pin.runtimeCodeHash = previousHash;
+      }
     }
+  } finally {
+    delete BYPASS_RECORDED_DEPLOYMENTS.base_staging;
   }
+});
+
+test("supersededBypassLifecycleHookRuntimeHash resolves only the staging stale hook", () => {
+  const {
+    BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS: pins,
+    supersededBypassLifecycleHookRuntimeHash: resolve,
+    isSupersededStagingRecord,
+  } = require("../deployments/bypassDisputeStack.ts");
+  const hook = pins.IntentLifecycleHookV1Bypass;
+  assert.equal(
+    resolve("base_staging", hook.address.toLowerCase()),
+    hook.runtimeCodeHash
+  );
+  for (const network of ["base", "hardhat", "localhost"])
+    assert.equal(resolve(network, hook.address), undefined);
+  assert.equal(
+    resolve("base_staging", ethers.constants.AddressZero),
+    undefined
+  );
+  assert.equal(
+    isSupersededStagingRecord(
+      "base_staging",
+      "UnifiedPaymentVerifierV4",
+      pins.UnifiedPaymentVerifierV4.address
+    ),
+    true
+  );
+  assert.equal(
+    isSupersededStagingRecord(
+      "base",
+      "UnifiedPaymentVerifierV4",
+      pins.UnifiedPaymentVerifierV4.address
+    ),
+    false
+  );
+  assert.equal(
+    isSupersededStagingRecord(
+      "base_staging",
+      "IntentLifecycleHookV2",
+      hook.address
+    ),
+    false
+  );
+});
+
+test("fresh record validation rejects the superseded staging verifier before artifact reads", async () => {
+  const {
+    assertBypassDeploymentRecord,
+    BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS: pins,
+  } = require("../deployments/bypassDisputeStack.ts");
+  await assert.rejects(
+    assertBypassDeploymentRecord(
+      {},
+      "base_staging",
+      "UnifiedPaymentVerifierV4",
+      { address: pins.UnifiedPaymentVerifierV4.address }
+    ),
+    /UnifiedPaymentVerifierV4 is the superseded staging deployment; run lane 45/
+  );
 });

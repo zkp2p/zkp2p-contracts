@@ -16,6 +16,7 @@ moduleAlias.addAlias("@utils", process.cwd() + "/utils");
 
 console.log = () => {};
 
+const assert = require("node:assert/strict");
 const hre = /** @type {any} */ (require("hardhat"));
 const { ethers } = hre;
 const groupsDeploymentModule = require("../deployments/activeDeploymentLanes/30_deploy_v3_lifecycle_stack.ts");
@@ -24,6 +25,7 @@ if (!deployGroupsStack.skip)
   throw new Error("V3 groups wrapper must define skip");
 const skipGroupsStack = deployGroupsStack.skip;
 const {
+  assertRecognizedLiveLifecycleHook,
   guardManagedDisputeLifecycleHook,
   validateManagedDisputeHookSnapshot,
 } = require("../deployments/managedDisputeLifecycleHook.ts");
@@ -448,8 +450,11 @@ async function run() {
       passed =
         passed &&
         (await guardManagedDisputeLifecycleHook(unknownState.fakeHre)) ===
-          false &&
-        (await skipGroupsStack(unknownState.fakeHre)) === false;
+          false;
+      await assert.rejects(
+        () => skipGroupsStack(unknownState.fakeHre),
+        /Unrecognized OrchestratorV3 lifecycle hook/
+      );
     } finally {
       unknown.restore();
       if (previousCutover === undefined)
@@ -548,13 +553,96 @@ async function run() {
     return;
   }
 
-  if (scenario === "managed-hook-recorded-bypass-successor") {
+  if (scenario === "managed-hook-unrecognized-live") {
+    for (const networkName of /** @type {Array<"base_staging" | "base">} */ ([
+      "base_staging",
+      "base",
+    ])) {
+      const state = await fixture();
+      const managed = await installManagedHookState(state, networkName, {
+        kind: "unknown",
+      });
+      const flag =
+        networkName === "base_staging"
+          ? "ENABLE_STAGING_V3_GROUPS_CUTOVER"
+          : "ENABLE_BASE_V3_GROUPS_CUTOVER";
+      const previousFlag = process.env[flag];
+      process.env[flag] = "true";
+      try {
+        const whitelistHook = await deployContract("WhitelistLifecycleHook", [
+          (await state.fakeHre.deployments.get("OrchestratorRegistry")).address,
+          (await state.fakeHre.deployments.get("WhitelistPolicy")).address,
+        ]);
+        state.deployments.set("WhitelistLifecycleHook", {
+          address: whitelistHook.address,
+        });
+        const orchestrator = await ethers.getContractAt(
+          "OrchestratorV3",
+          (
+            await state.fakeHre.deployments.get("OrchestratorV3")
+          ).address
+        );
+        const nonce = await ethers.provider.getTransactionCount(state.deployer);
+        const currentHook = await orchestrator.lifecycleHook();
+        const batchCount = safeBatchCollector.count();
+        assert.notEqual(currentHook, whitelistHook.address);
+        await assert.rejects(
+          () => skipGroupsStack(state.fakeHre),
+          /Unrecognized OrchestratorV3 lifecycle hook/
+        );
+        await assert.rejects(
+          () => deployGroupsStack(state.fakeHre),
+          /Unrecognized OrchestratorV3 lifecycle hook/
+        );
+        assert.equal(
+          await ethers.provider.getTransactionCount(state.deployer),
+          nonce
+        );
+        assert.equal(await orchestrator.lifecycleHook(), currentHook);
+        assert.equal(safeBatchCollector.count(), batchCount);
+
+        if (networkName === "base_staging") {
+          state.deployments.set("WhitelistLifecycleHook", {
+            address: managed.currentHook,
+          });
+          await assert.doesNotReject(() =>
+            assertRecognizedLiveLifecycleHook(state.fakeHre)
+          );
+        }
+      } finally {
+        managed.restore();
+        if (previousFlag === undefined) delete process.env[flag];
+        else process.env[flag] = previousFlag;
+      }
+    }
+
+    for (const networkName of /** @type {Array<"hardhat" | "localhost">} */ ([
+      "hardhat",
+      "localhost",
+    ])) {
+      const state = await fixture();
+      const managed = await installManagedHookState(state, networkName, {
+        kind: "unknown",
+      });
+      try {
+        await assert.doesNotReject(() =>
+          assertRecognizedLiveLifecycleHook(state.fakeHre)
+        );
+      } finally {
+        managed.restore();
+      }
+    }
+    process.stdout.write("0x01");
+    return;
+  }
+
+  if (scenario === "managed-hook-superseded-bypass-successor") {
     const assert = require("node:assert/strict");
     const {
-      BYPASS_RECORDED_DEPLOYMENTS,
+      BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS,
     } = require("../deployments/bypassDisputeStack.ts");
     const pin =
-      BYPASS_RECORDED_DEPLOYMENTS.base_staging?.IntentLifecycleHookV1Bypass;
+      BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS.IntentLifecycleHookV1Bypass;
     assert.ok(pin);
     const record = require("../deployments/base_staging/IntentLifecycleHookV1Bypass.json");
     assert.equal(record.address.toLowerCase(), pin.address.toLowerCase());
