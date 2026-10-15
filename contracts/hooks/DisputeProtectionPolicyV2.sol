@@ -12,7 +12,7 @@ import {IStakeVault} from "../interfaces/IStakeVault.sol";
 
 /**
  * @title DisputeProtectionPolicyV2
- * @notice Selects bypass, existing stake, or deferred payout collateral at settlement.
+ * @notice Selects existing stake or deferred payout collateral at settlement.
  * @dev Deferred payouts are stake locks funded by the payout. The token must have no transfer callbacks
  * (canonical USDC only). StakeVault owns collateral accounting; the dedicated dispute registry owns replay state.
  * TRUST: Registered orchestrators must invoke callbacks only for their own validated intents and escrows.
@@ -21,10 +21,10 @@ import {IStakeVault} from "../interfaces/IStakeVault.sol";
  * predecessor hooks authorized and orchestrators registered until their snapshotted intents drain, and drain
  * active locks before moving vault control unless the successor explicitly adopts their state.
  * Protection applies only to stake-token deposits with a nonzero attested window supplied by the hook.
- * There are no per-method windows or paused admissions. The hook supplies live whitelist bypass, which
- * emits a settlement event without writing storage. Non-stake tokens return without a record or event.
- * Relayer registration alone does not qualify for bypass. Manual releases never reach this policy.
- * Protected settlements lock gross stake or defer the net payout until now plus the attested window.
+ * There are no per-method windows or paused admissions. Whitelisted takers, manual releases and zero
+ * windows settle in the hook without any policy call or event. Non-stake tokens return without a record
+ * or event. Protected settlements lock gross stake or defer the net payout until now plus the attested
+ * window; only these STAKE and DEFERRED_PAYOUT settlements emit DisputeProtectionIntentSettled.
  */
 contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, ReentrancyGuard {
     /* ============ Constants ============ */
@@ -101,17 +101,10 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
         if (_params.releaseAmount == 0 || _params.netAmount == 0) {
             revert InvalidSettlementAmount(_params.releaseAmount, _params.netAmount);
         }
-        if (_params.bypass) {
-            emit DisputeProtectionIntentSettled(
-                _params.intentHash, _params.taker, _params.depositor, _params.recipient, _params.paymentMethod,
-                riskWindow, CollateralSource.BYPASS, address(0), _params.releaseAmount, 0, _currentTimestamp()
-            );
-            return false;
-        }
         return _settleProtectedIntent(_params);
     }
 
-    /// @dev Apply the reentrancy guard only where state changes; bypass never writes policy storage.
+    /// @dev Apply the reentrancy guard only to protected settlements that change state.
     function _settleProtectedIntent(SettleParams calldata _params) internal nonReentrant returns (bool deferred) {
         DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_params.intentHash];
         intent.taker = _params.taker;

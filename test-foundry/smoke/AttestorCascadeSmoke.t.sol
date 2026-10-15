@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
+import {Vm} from "forge-std/Vm.sol";
+
 import {IPaymentVerifierV2} from "contracts/interfaces/IPaymentVerifierV2.sol";
 
 import {DisputeProtectionStackV2Fixture} from "../deterministic/helpers/DisputeProtectionStackV2Fixture.sol";
@@ -19,11 +21,18 @@ contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
             return;
         }
         assertEq(block.chainid, 31337);
-        string[3] memory modes = [string("balance"), "personal", "goods"];
+        string[4] memory modes = [string("balance"), "personal", "goods", "personal"];
         uint256 paid;
         for (uint256 index; index < modes.length; index++) {
             if (index == 1) _stake(vault, taker, INTENT_AMOUNT);
             assertEq(vault.freeStake(taker), index == 1 ? INTENT_AMOUNT : 0);
+            bool whitelisted = index == 3;
+            if (whitelisted) {
+                address[] memory takers = new address[](1);
+                takers[0] = taker;
+                vm.prank(depositor);
+                whitelist.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), takers);
+            }
             bytes32 id = _signalDefault();
             bytes memory proof = _serviceProof(attestor, id, modes[index], index);
             UnifiedPaymentVerifierV4.PaymentAttestation memory attestation =
@@ -41,20 +50,27 @@ contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
             assertEq(attestation.releaseAmount, index == 2 ? 45e6 : INTENT_AMOUNT);
             uint256 net = attestation.releaseAmount - attestation.releaseAmount * PROTOCOL_FEE / 1e18
                 - attestation.releaseAmount * REFERRAL_FEE / 1e18;
+            if (whitelisted) vm.mockCallRevert(address(protection), bytes(""), bytes("policy called"));
+            vm.recordLogs();
             orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, id, ""));
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            if (window == 0 || whitelisted) {
+                for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].emitter != address(protection));
+            }
+            vm.clearMockedCalls();
             P.DisputeProtectionIntent memory record = protection.getDisputeProtectionIntent(id);
             (address lockOwner, uint256 lockedAmount,) = vault.locks(id);
-            if (window == 0) {
+            if (window == 0 || whitelisted) {
                 assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.NONE));
             } else {
                 assertEq(record.riskWindow, window);
                 assertEq(record.releaseEligibleAt, block.timestamp + window);
             }
-            if (index == 0) {
+            if (index == 0 || whitelisted) {
                 assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.NONE));
                 assertEq(lockOwner, address(0));
                 assertEq(lockedAmount, 0);
-                assertEq(token.balanceOf(address(vault)), 0);
+                if (!whitelisted) assertEq(token.balanceOf(address(vault)), 0);
                 paid += net;
             } else if (index == 1) {
                 assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.STAKE));

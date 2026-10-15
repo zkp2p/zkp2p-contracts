@@ -79,18 +79,16 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
 
     event DisputeProtectionIntentSettled(bytes32 indexed intentHash, address indexed taker, address indexed depositor, address recipient, bytes32 paymentMethod, uint64 riskWindow, P.CollateralSource collateralSource, address stakeOwner, uint256 releaseAmount, uint256 lockedAmount, uint64 releaseEligibleAt);
 
-    function _expectSettlement(P.CollateralSource source) internal {
-        bool deferred = source == P.CollateralSource.DEFERRED_PAYOUT;
+    function _expectDeferredSettlement() internal {
         vm.expectEmit(true, true, true, true, address(policy));
         emit DisputeProtectionIntentSettled(
-            ID, taker, depositor, other, METHOD, 14 days, source,
-            deferred ? other : address(0), INTENT_AMOUNT, deferred ? NET : 0,
-            uint64(block.timestamp + (deferred ? 14 days : 0))
+            ID, taker, depositor, other, METHOD, 14 days, P.CollateralSource.DEFERRED_PAYOUT,
+            other, INTENT_AMOUNT, NET, uint64(block.timestamp + 14 days)
         );
     }
 
     function _assertDeferred() internal {
-        _expectSettlement(P.CollateralSource.DEFERRED_PAYOUT);
+        _expectDeferredSettlement();
         assertEq(stub.settle(hook, _context(ID, 14 days)), address(vault));
         assertEq(uint256(policy.getDisputeProtectionIntent(ID).collateralSource), uint256(P.CollateralSource.DEFERRED_PAYOUT));
     }
@@ -104,11 +102,15 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         vm.stopPrank();
         stub.signal(hook, ID, "");
         assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
-        _expectSettlement(P.CollateralSource.BYPASS);
+        vm.mockCallRevert(address(policy), bytes(""), bytes("policy called"));
+        vm.recordLogs();
         vm.record();
         assertEq(stub.settle(hook, _context(ID, 14 days)), address(0));
-        (, bytes32[] memory writes) = vm.accesses(address(policy));
+        (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(policy));
+        assertEq(reads.length, 0);
         assertEq(writes.length, 0);
+        assertEq(vm.getRecordedLogs().length, 0);
+        vm.clearMockedCalls();
         P.DisputeProtectionIntent memory record = policy.getDisputeProtectionIntent(ID);
         assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.NONE));
         assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.NONE));
@@ -209,8 +211,9 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         _assertSignalSucceedsForAllTakerKinds();
     }
 
-    function test_ZeroWindowPaysNowWithoutPolicyCallOrRecord() public {
+    function test_ZeroWindowPaysNowWithoutPolicyOrWhitelistCall() public {
         stub.signal(hook, ID, "");
+        vm.mockCallRevert(address(whitelist), bytes(""), bytes("whitelist called"));
         vm.mockCallRevert(address(policy), bytes(""), bytes("policy called"));
         vm.recordLogs();
         assertEq(stub.settle(hook, _context(ID, 0)), address(0));
@@ -268,11 +271,15 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         relayerRegistry.addRelayer(taker);
         _whitelistTaker();
         stub.signal(hook, ID, "");
-        _expectSettlement(P.CollateralSource.BYPASS);
+        vm.mockCallRevert(address(policy), bytes(""), bytes("policy called"));
+        vm.recordLogs();
         vm.record();
         assertEq(stub.settle(hook, _context(ID, 14 days)), address(0));
-        (, bytes32[] memory writes) = vm.accesses(address(policy));
+        (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(policy));
+        assertEq(reads.length, 0);
         assertEq(writes.length, 0);
+        assertEq(vm.getRecordedLogs().length, 0);
+        vm.clearMockedCalls();
         P.DisputeProtectionIntent memory record = policy.getDisputeProtectionIntent(ID);
         assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.NONE));
         assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.NONE));
@@ -296,7 +303,7 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         IIntentLifecycleHookV2.SettlementContext memory context = _context(ID, 14 days);
         context.data = data;
         context.extensionData = abi.encode(uint256(14 days));
-        _expectSettlement(P.CollateralSource.DEFERRED_PAYOUT);
+        _expectDeferredSettlement();
         assertEq(stub.settle(hook, context), address(vault));
     }
 
@@ -417,7 +424,9 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         assertEq(policy.getDisputeProtectionIntent(deferredId).lockedAmount, NET);
     }
 
-    function test_AttestedWindowRequiredForNonManualSettlement() public {
+    function test_AttestedWindowRequiredBeforeWhitelistRead() public {
+        _whitelistTaker();
+        vm.mockCallRevert(address(whitelist), bytes(""), bytes("whitelist called"));
         bytes[3] memory extensions = [bytes(""), bytes(hex"ff"), new bytes(31)];
         for (uint256 i; i < extensions.length; ++i) {
             IIntentLifecycleHookV2.SettlementContext memory context = _context(ID, 14 days);
@@ -427,10 +436,13 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         }
     }
 
-    function test_WindowAboveMaximumRevertsBeforeNarrowing() public {
+    function test_WindowAboveMaximumRevertsBeforeConditionsAndWhitelistRead() public {
+        _whitelistTaker();
+        vm.mockCallRevert(address(whitelist), bytes(""), bytes("whitelist called"));
         uint256[3] memory windows = [uint256(180 days + 1), uint256(type(uint64).max) + 1, type(uint256).max];
         for (uint256 i; i < windows.length; ++i) {
             IIntentLifecycleHookV2.SettlementContext memory context = _context(ID, windows[i]);
+            context.data = _conditionsData();
             vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV2.InvalidDisputeWindow.selector, windows[i]));
             stub.settle(hook, context);
         }
@@ -488,12 +500,45 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         stub.settle(hook, context);
     }
 
+    function test_WhitelistedTakerStillValidatesConditionsBeforeWhitelistRead() public {
+        _whitelistTaker();
+        vm.mockCallRevert(address(whitelist), bytes(""), bytes("whitelist called"));
+        IIntentLifecycleHookV2.SettlementContext memory context = _context(ID, 14 days);
+        context.data = _conditionsData();
+        bytes[3] memory extensions = [abi.encode(uint256(14 days)), bytes.concat(abi.encode(uint256(14 days)), new bytes(31)), abi.encode(uint256(14 days), keccak256("wrong"))];
+        for (uint256 i; i < extensions.length; ++i) {
+            context.extensionData = extensions[i];
+            vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV2.ConditionsNotAttested.selector, ID));
+            stub.settle(hook, context);
+        }
+        context.data = "";
+        context.extensionData = abi.encode(uint256(14 days), keccak256("unexpected"));
+        vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV2.ConditionsNotAttested.selector, ID));
+        stub.settle(hook, context);
+    }
+
+    function test_WhitelistedTakerWithMatchingConditionsSkipsPolicy() public {
+        _useGatedDeposit();
+        _whitelistTaker();
+        stub.signal(hook, ID, _conditionsData());
+        IIntentLifecycleHookV2.SettlementContext memory context = _context(ID, 180 days);
+        context.data = _conditionsData();
+        context.extensionData = abi.encode(uint256(180 days), keccak256("conditions"));
+        vm.mockCallRevert(address(policy), bytes(""), bytes("policy called"));
+        vm.recordLogs();
+        assertEq(stub.settle(hook, context), address(0));
+        assertEq(vm.getRecordedLogs().length, 0);
+        vm.clearMockedCalls();
+        assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
+    }
+
     function test_ManualReleaseIgnoresInvalidExtensionAndConditions() public {
         stub.signal(hook, ID, "");
         IIntentLifecycleHookV2.SettlementContext memory context = _context(ID, 14 days);
         context.isManualRelease = true;
         context.data = abi.encodePacked(keccak256("conditions"));
         context.extensionData = abi.encode(type(uint256).max, keccak256("wrong"));
+        vm.mockCallRevert(address(whitelist), bytes(""), bytes("whitelist called"));
         relayerRegistry.addRelayer(taker);
         vm.mockCallRevert(address(policy), bytes(""), bytes("policy called"));
         assertEq(stub.settle(hook, context), address(0));

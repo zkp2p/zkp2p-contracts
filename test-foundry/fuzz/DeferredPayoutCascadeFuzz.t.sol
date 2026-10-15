@@ -2,6 +2,8 @@
 pragma solidity ^0.8.18;
 
 import {Test} from "forge-std/Test.sol";
+import {Vm} from "forge-std/Vm.sol";
+import {DisputeProtectionStackV2Fixture} from "../deterministic/helpers/DisputeProtectionStackV2Fixture.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicyV2.sol";
@@ -35,45 +37,43 @@ contract DeferredPayoutCascadeFuzzTest is Test {
         disputes.addWritePermission(address(policy));
     }
 
-    function testFuzz_LockedAmountMatchesPath(uint256 releaseAmount, uint256 freeStake, bool whitelisted, uint256 protocolBps, uint256 referralBps) public {
+    function testFuzz_LockedAmountMatchesPath(uint256 releaseAmount, uint256 freeStake, uint256 protocolBps, uint256 referralBps) public {
         releaseAmount = bound(releaseAmount, 1, 1e12);
         freeStake = bound(freeStake, 0, 2e12);
-        uint256 net = _settle(releaseAmount, freeStake, whitelisted, protocolBps, referralBps);
-        uint256 expected = whitelisted ? 0 : freeStake >= releaseAmount ? releaseAmount : net;
-        P.CollateralSource source = whitelisted ? P.CollateralSource.NONE : freeStake >= releaseAmount ? P.CollateralSource.STAKE : P.CollateralSource.DEFERRED_PAYOUT;
+        uint256 net = _settle(releaseAmount, freeStake, protocolBps, referralBps);
+        uint256 expected = freeStake >= releaseAmount ? releaseAmount : net;
+        P.CollateralSource source = freeStake >= releaseAmount ? P.CollateralSource.STAKE : P.CollateralSource.DEFERRED_PAYOUT;
         P.DisputeProtectionIntent memory record = policy.getDisputeProtectionIntent(ID);
         assertEq(record.lockedAmount, expected);
         assertEq(uint256(record.collateralSource), uint256(source));
         (address owner, uint256 amount,) = vault.locks(ID);
         assertEq(amount, expected);
-        assertEq(owner, whitelisted ? address(0) : freeStake >= releaseAmount ? TAKER : RECIPIENT);
+        assertEq(owner, freeStake >= releaseAmount ? TAKER : RECIPIENT);
         assertEq(token.balanceOf(RECIPIENT), source == P.CollateralSource.DEFERRED_PAYOUT ? 0 : net);
     }
 
-    function testFuzz_VaultBalanceCoversAccounting(uint256 releaseAmount, uint256 freeStake, bool whitelisted, uint256 protocolBps, uint256 referralBps) public {
+    function testFuzz_VaultBalanceCoversAccounting(uint256 releaseAmount, uint256 freeStake, uint256 protocolBps, uint256 referralBps) public {
         releaseAmount = bound(releaseAmount, 1, 1e12);
         freeStake = bound(freeStake, 0, 2e12);
-        _settle(releaseAmount, freeStake, whitelisted, protocolBps, referralBps);
+        _settle(releaseAmount, freeStake, protocolBps, referralBps);
         P.DisputeProtectionIntent memory record = policy.getDisputeProtectionIntent(ID);
-        if (!whitelisted) {
-            vm.warp(record.releaseEligibleAt);
-            policy.releaseMaturedDisputeProtectionIntent(ID);
-            _accounting();
-            if (record.collateralSource == P.CollateralSource.DEFERRED_PAYOUT) {
-                vm.prank(TAKER);
-                policy.claimFor(ID);
-            } else {
-                vm.prank(TAKER);
-                vault.withdrawStake(freeStake);
-            }
-            _accounting();
+        vm.warp(record.releaseEligibleAt);
+        policy.releaseMaturedDisputeProtectionIntent(ID);
+        _accounting();
+        if (record.collateralSource == P.CollateralSource.DEFERRED_PAYOUT) {
+            vm.prank(TAKER);
+            policy.claimFor(ID);
+        } else {
+            vm.prank(TAKER);
+            vault.withdrawStake(freeStake);
         }
+        _accounting();
     }
 
     function testFuzz_AttestedWindowSetsMaturity(uint64 window, bool staked) public {
         window = uint64(bound(window, 1, 180 days));
         if (staked) _deposit(TAKER, 100e6);
-        bool deferred = policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(token), METHOD, 100e6, 99e6, window, false));
+        bool deferred = policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(token), METHOD, 100e6, 99e6, window));
         P.DisputeProtectionIntent memory record = policy.getDisputeProtectionIntent(ID);
         assertEq(deferred, !staked);
         assertEq(record.riskWindow, window);
@@ -84,7 +84,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
     function testFuzz_ClaimForNeverExceedsLocked(uint256 releaseAmount, uint256 freeStake, uint256 protocolBps, uint256 referralBps, uint256 seed) public {
         releaseAmount = bound(releaseAmount, 1, 1e12);
         freeStake = bound(freeStake, 0, releaseAmount - 1);
-        uint256 net = _settle(releaseAmount, freeStake, false, protocolBps, referralBps);
+        uint256 net = _settle(releaseAmount, freeStake, protocolBps, referralBps);
         vm.warp(policy.getDisputeProtectionIntent(ID).releaseEligibleAt);
         policy.releaseMaturedDisputeProtectionIntent(ID);
         _accounting();
@@ -95,7 +95,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
             uint256 relocked = bound(seed, 0, available);
             bytes32 lockId = keccak256(abi.encode("relock", step));
             if (relocked != 0) {
-                assertFalse(policy.onIntentSettled(P.SettleParams(lockId, RECIPIENT, TAKER, DEPOSITOR, address(token), METHOD, relocked, relocked, WINDOW, false)));
+                assertFalse(policy.onIntentSettled(P.SettleParams(lockId, RECIPIENT, TAKER, DEPOSITOR, address(token), METHOD, relocked, relocked, WINDOW)));
                 _accounting();
             }
             paid += _claim(net - paid, step % 2 == 0 ? TAKER : RECIPIENT);
@@ -116,14 +116,14 @@ contract DeferredPayoutCascadeFuzzTest is Test {
         assertEq(vault.freeStake(RECIPIENT), releaseAmount);
     }
 
-    function _settle(uint256 gross, uint256 freeStake, bool whitelisted, uint256 protocolBps, uint256 referralBps) internal returns (uint256 net) {
+    function _settle(uint256 gross, uint256 freeStake, uint256 protocolBps, uint256 referralBps) internal returns (uint256 net) {
         protocolBps = bound(protocolBps, 0, 6000);
         referralBps = bound(referralBps, 0, 6000 - protocolBps);
         uint256 protocolFee = gross * protocolBps / 10000;
         uint256 referralFee = gross * referralBps / 10000;
         net = gross - protocolFee - referralFee;
         if (freeStake != 0) _deposit(TAKER, freeStake);
-        bool deferred = policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(token), METHOD, gross, net, WINDOW, whitelisted));
+        bool deferred = policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(token), METHOD, gross, net, WINDOW));
         _accounting();
         token.transfer(address(0x44), protocolFee);
         token.transfer(address(0x55), referralFee);
@@ -159,5 +159,34 @@ contract DeferredPayoutCascadeFuzzTest is Test {
 
     function _accounting() internal view {
         assertGe(token.balanceOf(address(vault)), vault.totalAccounted());
+    }
+}
+
+contract WhitelistedPayoutFuzzTest is DisputeProtectionStackV2Fixture {
+    function testFuzz_WhitelistedWindowedSettlementSkipsPolicy(uint64 window, uint256 stake) public {
+        window = uint64(bound(window, 1, 180 days));
+        stake = bound(stake, 0, 2 * INTENT_AMOUNT);
+        if (stake != 0) _stake(vault, taker, stake);
+        address[] memory takers = new address[](1);
+        takers[0] = taker;
+        vm.prank(depositor);
+        whitelist.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), takers);
+        bytes32 id = _signalDefault();
+        vm.mockCallRevert(address(protection), bytes(""), bytes("policy called"));
+        vm.recordLogs();
+        vm.record();
+        _settle(id, INTENT_AMOUNT, window);
+        (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(protection));
+        assertEq(reads.length, 0);
+        assertEq(writes.length, 0);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].emitter != address(protection));
+        vm.clearMockedCalls();
+        assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
+        assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.NONE));
+        assertEq(token.balanceOf(other), NET);
+        assertEq(vault.freeStake(taker), stake);
+        assertEq(vault.lockedStake(taker), 0);
+        assertEq(vault.lockedStake(other), 0);
     }
 }

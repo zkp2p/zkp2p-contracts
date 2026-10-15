@@ -24,9 +24,10 @@ import {IEscrowV2} from "../interfaces/IEscrowV2.sol";
 /// length or version decoding: the conditions version lives in the attestor-side hash preimage,
 /// and each intent's data is interpreted only by its snapshotted hook.
 /// Non-manual settlements require extension word 0: disputeWindow in seconds, bounded by 180 days.
-/// Zero pays now; nonzero windows select collateral unless the taker is allowed by an enabled
-/// deposit/payment-method whitelist. Relayer registration alone does not bypass collateral.
-/// Whitelist state is read live at settlement: disabling it or removing the taker restores the cascade.
+/// After window and conditions validation, zero windows and whitelisted takers pay now without any
+/// policy call, record or event. Nonzero windows otherwise select collateral.
+/// Whitelist state is read live only for nonzero windows: disabling it or removing the taker restores
+/// the cascade. Relayer registration alone does not bypass collateral.
 /// Whitelisting the recipient does not qualify. Manual releases skip the policy and attestation checks.
 /// At signal, only whitelist admission and the conditions gating-service requirement are checked.
 contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
@@ -110,10 +111,12 @@ contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
             ? abi.decode(_context.extensionData[32:64], (bytes32)) : bytes32(0);
         if (attested != expected) revert ConditionsNotAttested(_context.intentHash);
         if (window == 0) return address(0);
-        bool bypass = whitelistPolicy.enabled(_context.escrow, _context.depositId, _context.paymentMethod)
-            && whitelistPolicy.isTakerAllowed(
-                _context.escrow, _context.depositId, _context.paymentMethod, _context.taker
-            );
+        if (
+            whitelistPolicy.enabled(_context.escrow, _context.depositId, _context.paymentMethod)
+                && whitelistPolicy.isTakerAllowed(
+                    _context.escrow, _context.depositId, _context.paymentMethod, _context.taker
+                )
+        ) return address(0);
         bool deferred = disputeProtectionPolicy.onIntentSettled(IDisputeProtectionPolicyV2.SettleParams({
             intentHash: _context.intentHash,
             taker: _context.taker,
@@ -123,8 +126,7 @@ contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
             paymentMethod: _context.paymentMethod,
             releaseAmount: _context.releaseAmount,
             netAmount: _context.netAmount,
-            riskWindow: uint64(window),
-            bypass: bypass
+            riskWindow: uint64(window)
         }));
         return deferred ? address(disputeProtectionPolicy.stakeVault()) : address(0);
     }

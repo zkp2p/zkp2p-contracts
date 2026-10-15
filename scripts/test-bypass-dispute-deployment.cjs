@@ -703,7 +703,7 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
     ["intentHash", "bytes32"], ["taker", "address"], ["recipient", "address"],
     ["depositor", "address"], ["token", "address"], ["paymentMethod", "bytes32"],
     ["releaseAmount", "uint256"], ["netAmount", "uint256"],
-    ["riskWindow", "uint64"], ["bypass", "bool"],
+    ["riskWindow", "uint64"],
   ]);
   assert.equal(policyAbi.find((/** @type {{name?: string}} */ entry) => entry.name === "DisputeProtectionIntentSettled")
     .inputs.some((/** @type {{name?: string}} */ entry) => entry.name === "isManualRelease"), false);

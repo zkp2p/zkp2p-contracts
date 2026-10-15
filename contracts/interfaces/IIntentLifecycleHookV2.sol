@@ -31,10 +31,11 @@ interface IIntentLifecycleHookV2 {
     /// @dev Signed extension words: 0 = disputeWindow (uint256 seconds), 1 = conditionsHash, 2+ = reserved.
     /// Non-manual settlement requires word 0 and rejects windows above 180 days. Missing word 1 reads as zero.
     /// Manual release ignores the extension and skips the policy. Window zero validates conditions then pays now
-    /// without calling the policy. Nonzero windows use stake or deferred payouts only for stake-token deposits.
-    /// Whitelisted takers bypass collateral; relayer registration alone does not. Whitelisting requires the
-    /// deposit/payment-method whitelist to be enabled and the taker allowed at settlement; disabling it or
-    /// removing the taker after signal restores the cascade for nonzero windows.
+    /// without calling the policy. For nonzero windows only, the hook reads the live deposit/payment-method
+    /// whitelist: an enabled whitelist with the taker allowed returns pay now without any policy call, record
+    /// or event, after window and conditions validation. Disabling it or removing the taker after signal
+    /// restores the cascade. Relayer registration alone does not bypass collateral. Remaining nonzero windows
+    /// use stake or deferred payouts only for stake-token deposits.
     /// Data interpretation lives in each intent's snapshotted hook because OrchestratorV4 is not upgradeable.
     /// @return deferralVault Zero to pay out now; otherwise the vault that must receive netAmount before onDeferredPayoutFunded.
     function settleIntent(SettlementContext calldata _context) external returns (address deferralVault);

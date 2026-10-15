@@ -323,27 +323,29 @@ releaseAmount, netAmount, data, extensionData, isManualRelease }`. O4 reads inte
 `taker = intent.owner`, `recipient = intent.to`, and `data = intent.data`; `depositor = deposit.depositor`
 and `token = address(deposit.token)` come from its pre-unlock deposit read. The hook retains escrow/depositId
 for whitelist checks and passes depositor/token and the intent identities and amounts to the policy's
-`onIntentSettled(SettleParams)`, including the attested `uint64 riskWindow` and `bypass` set only for
-whitelisted takers. A whitelisted taker means the deposit/payment-method whitelist is enabled and
+`onIntentSettled(SettleParams)`, including the attested `uint64 riskWindow`, only when the window is nonzero
+and the taker is not whitelisted. A whitelisted taker means the deposit/payment-method whitelist is enabled and
 `isTakerAllowed` returns true for the taker, not the recipient. Registered relayer takers follow the same
 rule: relayer registration alone does not bypass collateral. The hook does not query the relayer registry;
 O4 still uses it for its own admission gating. Whitelist state is read live at settlement. Disabling it or
-removing the taker after signal restores collateral for nonzero windows. Manual release and window zero
-return pay now without calling the policy; zero-window settlement still validates conditions.
+removing the taker after signal restores collateral for nonzero windows. Manual release, window zero and
+whitelisted takers return pay now without any policy call, record or event. Manual release returns first;
+all other settlements require word 0, enforce the 180-day cap and validate conditions before the window-zero
+and whitelisted early returns. The whitelist is read only for nonzero windows.
 
 Lanes 45/46 use bypass batch manifest version 6, which omits fresh-policy windows and admissions pause.
 Historical O3 predecessor checks remain separate; old manifest versions are rejected.
 
 DisputeProtectionPolicyV2 has no signal/cancel records, per-method windows, admissions pause, or
 per-deposit opt-outs. It uses the supplied depositor and token without reading escrow. A non-stake-token
-deposit pays now with no record or policy event. Whitelist bypass emits `DisputeProtectionIntentSettled`
-with source `BYPASS` and no storage writes. Otherwise the policy snapshots the attested window, locks gross
-stake (`STAKE`) or defers the net payout (`DEFERRED_PAYOUT`), and sets `releaseEligibleAt = now + window`.
+deposit pays now with no record or policy event. Whitelisted takers never reach the policy, like window zero.
+For protected settlements the policy snapshots the attested window, locks gross stake (`STAKE`) or defers
+the net payout (`DEFERRED_PAYOUT`), and sets `releaseEligibleAt = now + window`.
 It rejects windows above its `MAX_RISK_WINDOW` (180 days) as defence in depth. Statuses remain `NONE`,
-`AWAITING_FUNDING`, `SETTLED`, `RELEASED`, and `DISPUTED`. Collateral ordinals remain `NONE=0`, `BYPASS=1`,
-`STAKE=2`, `DEFERRED_PAYOUT=3`; `MANUAL_RELEASE` is removed. The settled event includes all participant
-identities, method, window, collateral source, stake owner, amounts and eligibility time, with no manual
-flag. O4's `IntentFulfilled` carries `isManualRelease`. Only matured collateral releases emit
+`AWAITING_FUNDING`, `SETTLED`, `RELEASED`, and `DISPUTED`. Collateral ordinals are `NONE=0`, `STAKE=1`,
+`DEFERRED_PAYOUT=2`. `DisputeProtectionIntentSettled` fires only for `STAKE` and `DEFERRED_PAYOUT` and keeps
+all participant identities, method, window, collateral source, stake owner, amounts and eligibility time,
+with no manual flag. O4's `IntentFulfilled` carries `isManualRelease`. Only matured collateral releases emit
 `DisputeProtectionIntentReleased`. No Opened or Cancelled event is emitted.
 
 IntentLifecycleHookV2 reads `bytes32(data)`: clients send empty data for no conditions or

@@ -5,8 +5,8 @@ import {IStakeVault} from "./IStakeVault.sol";
 
 interface IDisputeProtectionPolicyV2 {
     enum DisputeProtectionIntentStatus { NONE, AWAITING_FUNDING, SETTLED, RELEASED, DISPUTED }
-    /// @dev BYPASS covers takers allowed by an enabled deposit/payment-method whitelist.
-    enum CollateralSource { NONE, BYPASS, STAKE, DEFERRED_PAYOUT }
+    /// @dev Whitelisted takers settle in the hook without calling this policy or creating a record.
+    enum CollateralSource { NONE, STAKE, DEFERRED_PAYOUT }
 
     struct DisputeProtectionIntent {
         address taker;            // intent.owner; may call claimFor on a deferred payout
@@ -19,10 +19,11 @@ interface IDisputeProtectionPolicyV2 {
         uint64 riskWindow;        // attested window supplied at settlement
         uint64 releaseEligibleAt;
         uint256 releaseAmount;    // gross amount released from Escrow
-        uint256 lockedAmount;     // gross for STAKE, net for DEFERRED_PAYOUT, 0 for BYPASS
+        uint256 lockedAmount;     // gross for STAKE, net for DEFERRED_PAYOUT
         uint256 claimedAmount;    // DEFERRED_PAYOUT only: total pushed by claimFor
     }
 
+    /// @notice Emitted only for STAKE or DEFERRED_PAYOUT settlements.
     event DisputeProtectionIntentSettled(bytes32 indexed intentHash, address indexed taker, address indexed depositor, address recipient, bytes32 paymentMethod, uint64 riskWindow, CollateralSource collateralSource, address stakeOwner, uint256 releaseAmount, uint256 lockedAmount, uint64 releaseEligibleAt);
     event DeferredPayoutFunded(bytes32 indexed intentHash, address indexed recipient, uint256 amount, uint64 releaseEligibleAt);
     event DisputeProtectionIntentReleased(bytes32 indexed intentHash, address indexed stakeOwner, uint256 releasedAmount);
@@ -55,15 +56,12 @@ interface IDisputeProtectionPolicyV2 {
         uint256 releaseAmount;
         uint256 netAmount;
         uint64 riskWindow;
-        /// @dev Taker allowed by an enabled deposit/payment-method whitelist at settlement.
-        /// Relayer registration alone does not qualify. Manual release never calls the policy.
-        bool bypass;
     }
 
     /// @notice Records a protected settlement, selects collateral, and returns whether payout funding is required.
     /// @dev Uses the depositor and token captured before escrow unlock; never reads escrow. Non-stake tokens
-    /// return false with no record or event. Bypass emits settlement without writing storage. Protected records
-    /// snapshot the attested window; manual release and window zero are handled by the hook.
+    /// and zero windows return false with no record or event. Protected records snapshot the attested window.
+    /// The hook handles manual releases, zero windows and live whitelisted takers without any policy call or event.
     function onIntentSettled(SettleParams calldata _params) external returns (bool deferred);
     /// @notice Accounts for a deferred payout transferred to the vault.
     function onDeferredPayoutFunded(bytes32 _intentHash) external;

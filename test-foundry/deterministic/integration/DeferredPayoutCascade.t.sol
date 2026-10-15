@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
+import {Vm} from "forge-std/Vm.sol";
+
 import {DisputeProtectionStackV2Fixture} from "../helpers/DisputeProtectionStackV2Fixture.sol";
 import {IDisputeProtectionPolicyV2 as P} from "contracts/interfaces/IDisputeProtectionPolicyV2.sol";
 import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionPolicy.sol";
@@ -121,8 +123,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         _whitelistTaker();
         bytes32 id = _signalDefault();
         assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
-        _expectSettlement(id, P.CollateralSource.BYPASS);
-        _settle(id, INTENT_AMOUNT, RISK_WINDOW);
+        _settleWhitelistedWithoutPolicy(id);
         assertEq(token.balanceOf(other), NET);
         assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.NONE));
         _assertLock(id, address(0), 0);
@@ -150,13 +151,11 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
 
     event DisputeProtectionIntentSettled(bytes32 indexed intentHash, address indexed taker, address indexed depositor, address recipient, bytes32 paymentMethod, uint64 riskWindow, P.CollateralSource collateralSource, address stakeOwner, uint256 releaseAmount, uint256 lockedAmount, uint64 releaseEligibleAt);
 
-    function _expectSettlement(bytes32 id, P.CollateralSource source) internal {
-        bool deferred = source == P.CollateralSource.DEFERRED_PAYOUT;
+    function _expectDeferredSettlement(bytes32 id) internal {
         vm.expectEmit(true, true, true, true, address(protection));
         emit DisputeProtectionIntentSettled(
-            id, taker, depositor, other, METHOD, RISK_WINDOW, source,
-            deferred ? other : address(0), INTENT_AMOUNT, deferred ? NET : 0,
-            uint64(block.timestamp + (deferred ? RISK_WINDOW : 0))
+            id, taker, depositor, other, METHOD, RISK_WINDOW, P.CollateralSource.DEFERRED_PAYOUT,
+            other, INTENT_AMOUNT, NET, uint64(block.timestamp + RISK_WINDOW)
         );
     }
 
@@ -172,8 +171,22 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         whitelist.configureDeposit(address(escrow), depositId, METHOD, true, ids, new address[](0));
     }
 
+    function _settleWhitelistedWithoutPolicy(bytes32 id) internal {
+        vm.mockCallRevert(address(protection), bytes(""), bytes("policy called"));
+        vm.recordLogs();
+        vm.record();
+        _settle(id, INTENT_AMOUNT, RISK_WINDOW);
+        (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(protection));
+        assertEq(reads.length, 0);
+        assertEq(writes.length, 0);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].emitter != address(protection));
+        vm.clearMockedCalls();
+        assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
+    }
+
     function _assertDeferredSettlement(bytes32 id) internal {
-        _expectSettlement(id, P.CollateralSource.DEFERRED_PAYOUT);
+        _expectDeferredSettlement(id);
         _settle(id, INTENT_AMOUNT, RISK_WINDOW);
         assertEq(token.balanceOf(other), 0);
         _assertLock(id, other, NET);
@@ -186,8 +199,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         _stake(vault, taker, INTENT_AMOUNT - 1);
         bytes32 id = _signalDefault();
         assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
-        _expectSettlement(id, P.CollateralSource.BYPASS);
-        _settle(id, INTENT_AMOUNT, RISK_WINDOW);
+        _settleWhitelistedWithoutPolicy(id);
         assertEq(token.balanceOf(other), NET);
         _assertLock(id, address(0), 0);
         assertEq(vault.lockedStake(taker), 0);

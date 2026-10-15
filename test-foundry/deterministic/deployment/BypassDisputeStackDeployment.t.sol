@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
+import {Vm} from "forge-std/Vm.sol";
+
 import {OrchestratorV3Fixture} from "../helpers/OrchestratorV3Fixture.sol";
 import {OrchestratorV4} from "contracts/OrchestratorV4.sol";
 import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicyV2.sol";
@@ -363,6 +365,25 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         assertEq(token.balanceOf(other), INTENT_AMOUNT);
         assertEq(token.balanceOf(address(freshVault)), 0);
         assertEq(freshVault.lockedStake(other), 0);
+        assertEq(uint256(freshPolicy.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.NONE));
+    }
+
+    function test_O4WhitelistedTakerSkipsPolicyAfterCutover() public {
+        _activateLane46();
+        address[] memory takers = new address[](1);
+        takers[0] = taker;
+        vm.prank(depositor);
+        whitelist.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), takers);
+        bytes32 id = _signalO4();
+        vm.mockCallRevert(address(freshPolicy), bytes(""), bytes("policy called"));
+        vm.recordLogs();
+        _settleO4(id, _signedProof(id, PAYMENT_ID, successor.DOMAIN_SEPARATOR(), true, RISK_WINDOW));
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].emitter != address(freshPolicy));
+        vm.clearMockedCalls();
+        assertEq(token.balanceOf(other), INTENT_AMOUNT);
+        assertEq(token.balanceOf(address(freshVault)), 0);
+        assertEq(uint256(freshPolicy.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
         assertEq(uint256(freshPolicy.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.NONE));
     }
 
