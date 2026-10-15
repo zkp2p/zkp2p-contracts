@@ -15,9 +15,9 @@ contract OrchestratorV4StructLayoutTest is Test {
         assertEq(IOrchestratorV4.signalIntent.selector, expected);
     }
 
-    function test_IntentEncodingMatchesV3() public pure {
+    function test_IntentEncodingMatchesV3MinusPostIntentHook() public pure {
         IReferralFee.ReferralFee[] memory fees = _fees();
-        IOrchestratorV3.Intent memory v3 = IOrchestratorV3.Intent({
+        IOrchestratorV4.Intent memory intent = IOrchestratorV4.Intent({
             owner: address(1),
             to: address(2),
             escrow: address(3),
@@ -29,25 +29,16 @@ contract OrchestratorV4StructLayoutTest is Test {
             conversionRate: 9,
             payeeId: bytes32(uint256(10)),
             referralFees: fees,
-            postIntentHook: IPostIntentHookV2(address(11)),
             data: hex"aabbcc"
         });
-        IOrchestratorV4.Intent memory v4 = IOrchestratorV4.Intent({
-            owner: address(1),
-            to: address(2),
-            escrow: address(3),
-            depositId: 4,
-            amount: 5,
-            timestamp: 6,
-            paymentMethod: bytes32(uint256(7)),
-            fiatCurrency: bytes32(uint256(8)),
-            conversionRate: 9,
-            payeeId: bytes32(uint256(10)),
-            referralFees: fees,
-            postIntentHook: address(11),
-            data: hex"aabbcc"
-        });
-        assertEq(abi.encode(v3), abi.encode(v4));
+        // Top-level tuple offset, twelve-word head, two referrals, and three bytes of data.
+        bytes memory expected = bytes.concat(
+            abi.encode(uint256(32), address(1), address(2), address(3), uint256(4), uint256(5), uint256(6)),
+            abi.encode(bytes32(uint256(7)), bytes32(uint256(8)), uint256(9), bytes32(uint256(10)), uint256(384), uint256(544)),
+            abi.encode(uint256(2), address(12), uint256(13), address(14), uint256(15)),
+            abi.encode(uint256(3), bytes32(hex"aabbcc"))
+        );
+        assertEq(abi.encode(intent), expected);
     }
 
     function test_SignalIntentParamsMatchesV3MinusPostIntentHook() public pure {

@@ -7,7 +7,6 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.
 
 import {IDisputeProtectionPolicyV2} from "../interfaces/IDisputeProtectionPolicyV2.sol";
 import {IDisputeVerifier} from "../interfaces/IDisputeVerifier.sol";
-import {IEscrowV2} from "../interfaces/IEscrowV2.sol";
 import {INullifierRegistry} from "../interfaces/INullifierRegistry.sol";
 import {IStakeVault} from "../interfaces/IStakeVault.sol";
 
@@ -17,6 +16,7 @@ import {IStakeVault} from "../interfaces/IStakeVault.sol";
  * @dev Deferred payouts are stake locks funded by the payout. The token must have no transfer callbacks
  * (canonical USDC only). StakeVault owns collateral accounting; the dedicated dispute registry owns replay state.
  * TRUST: Registered orchestrators must invoke callbacks only for their own validated intents and escrows.
+ * Settlement uses the depositor and token captured before escrow unlock; this policy never reads escrow.
  * Intent hashes must embed the originating orchestrator so identities cannot collide. Governance must keep
  * predecessor hooks authorized and orchestrators registered until their snapshotted intents drain, and drain
  * active locks before moving vault control unless the successor explicitly adopts their state.
@@ -102,17 +102,16 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
         if (intent.status != DisputeProtectionIntentStatus.NONE) {
             revert DisputeProtectionIntentAlreadyExists(_params.intentHash);
         }
-        IEscrowV2.Deposit memory deposit = IEscrowV2(_params.escrow).getDeposit(_params.depositId);
         address expectedToken = address(stakeVault.stakeToken());
-        if (address(deposit.token) != expectedToken) {
-            revert IntentTokenMismatch(expectedToken, address(deposit.token));
+        if (_params.token != expectedToken) {
+            revert IntentTokenMismatch(expectedToken, _params.token);
         }
         if (_params.releaseAmount == 0 || _params.netAmount == 0) {
             revert InvalidSettlementAmount(_params.releaseAmount, _params.netAmount);
         }
         intent.taker = _params.taker;
         intent.recipient = _params.recipient;
-        intent.depositor = deposit.depositor;
+        intent.depositor = _params.depositor;
         intent.paymentMethod = _params.paymentMethod;
         intent.riskWindow = riskWindow;
         intent.releaseAmount = _params.releaseAmount;

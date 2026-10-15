@@ -2,7 +2,6 @@
 
 pragma solidity ^0.8.18;
 
-import { IRelayerRegistry } from "./IRelayerRegistry.sol";
 import { IReferralFee } from "./IReferralFee.sol";
 import { IIntentLifecycleHookV2 } from "./IIntentLifecycleHookV2.sol";
 import { IPreIntentHook } from "./IPreIntentHook.sol";
@@ -10,7 +9,7 @@ import { IPreIntentHook } from "./IPreIntentHook.sol";
 /**
  * @title IOrchestratorV4
  * @notice Interface for the V4 orchestrator with deferred settlement.
- * @dev Intent retains the V3 ABI layout; data holds opaque lifecycle hook data and postIntentHook is always zero.
+ * @dev Intent keeps V3 field order with the post-intent hook removed; data holds opaque lifecycle hook data.
  * IntentLifecycleHookV2 uses a raw 32-byte conditions hash (or empty); only the snapshotted hook interprets data.
  */
 interface IOrchestratorV4 {
@@ -29,7 +28,6 @@ interface IOrchestratorV4 {
         uint256 conversionRate;                     // Conversion rate of deposit token to fiat currency at the time of intent
         bytes32 payeeId;                            // Hashed payee identifier to whom the owner will pay offchain
         IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker
-        address postIntentHook;                     // Reserved V3 layout field; always address(0)
         bytes data;                                 // Opaque lifecycle hook data; empty = none
     }
 
@@ -145,23 +143,11 @@ interface IOrchestratorV4 {
 
     /* ============ View Functions ============ */
 
-    /// @notice Returns the active intent.
     function getIntent(bytes32 intentHash) external view returns (Intent memory);
-
-    /// @notice Returns active intent hashes owned by the account.
     function getAccountIntents(address account) external view returns (bytes32[] memory);
-
-    /// @notice Returns the configured deposit pre-intent hook.
     function getDepositPreIntentHook(address escrow, uint256 depositId) external view returns (IPreIntentHook);
-
-    /// @notice Returns the hook selected for future intents.
     function lifecycleHook() external view returns (IIntentLifecycleHookV2);
-
-    /// @notice Returns the hook snapshotted for the intent.
     function getIntentLifecycleHook(bytes32 intentHash) external view returns (IIntentLifecycleHookV2);
-
-    /// @notice Returns the registry used for relayer admission and lifecycle settlement rules.
-    function relayerRegistry() external view returns (IRelayerRegistry);
 
     /* ============ External Functions for Users ============ */
 

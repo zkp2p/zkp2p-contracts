@@ -10,7 +10,6 @@ import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
 import {MultiAttestationVerifier} from "contracts/unifiedVerifier/MultiAttestationVerifier.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
-import {EscrowDepositStub} from "../mocks/EscrowDepositStub.sol";
 
 contract DeferredPayoutCascadeFuzzTest is Test {
     bytes32 internal constant METHOD = keccak256("venmo");
@@ -22,12 +21,10 @@ contract DeferredPayoutCascadeFuzzTest is Test {
     USDCMock internal token;
     StakeVault internal vault;
     DisputeProtectionPolicyV2 internal policy;
-    EscrowDepositStub internal escrow;
 
     function setUp() public {
         token = new USDCMock(1e18, "USDC", "USDC");
         vault = new StakeVault(address(this), token, address(0), 0);
-        escrow = new EscrowDepositStub(DEPOSITOR, token);
         address[] memory signers = new address[](1);
         signers[0] = vm.addr(0xA11CE);
         DisputeVerifier verifier = new DisputeVerifier(address(this), new NullifierRegistryV2(new NullifierRegistry()), new MultiAttestationVerifier(signers, 1));
@@ -88,7 +85,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
             uint256 relocked = bound(seed, 0, available);
             bytes32 lockId = keccak256(abi.encode("relock", step));
             if (relocked != 0) {
-                assertFalse(policy.onIntentSettled(P.SettleParams(lockId, RECIPIENT, TAKER, address(escrow), 1, METHOD, relocked, relocked, false, false)));
+                assertFalse(policy.onIntentSettled(P.SettleParams(lockId, RECIPIENT, TAKER, DEPOSITOR, address(token), METHOD, relocked, relocked, false, false)));
                 _accounting();
             }
             paid += _claim(net - paid, step % 2 == 0 ? TAKER : RECIPIENT);
@@ -116,7 +113,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
         uint256 referralFee = gross * referralBps / 10000;
         net = gross - protocolFee - referralFee;
         if (freeStake != 0) _deposit(TAKER, freeStake);
-        bool deferred = policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, address(escrow), 1, METHOD, gross, net, balanceFunded, false));
+        bool deferred = policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(token), METHOD, gross, net, balanceFunded, false));
         _accounting();
         token.transfer(address(0x44), protocolFee);
         token.transfer(address(0x55), referralFee);

@@ -410,11 +410,9 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
 
     function test_NoPostIntentHookRunsOnPayNowOrDeferred() public {
         bytes32 paid = _signalDefault();
-        assertEq(orchestrator.getIntent(paid).postIntentHook, address(0));
         _settle(paid, INTENT_AMOUNT, true);
         assertEq(token.balanceOf(other), NET);
         bytes32 deferred = _signalDefault();
-        assertEq(orchestrator.getIntent(deferred).postIntentHook, address(0));
         _settle(deferred, INTENT_AMOUNT, false);
         assertEq(token.balanceOf(other), NET);
         _assertLock(deferred, other, NET);
@@ -462,7 +460,12 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         vm.prank(taker);
         v3.signalIntent(_v3Params());
         assertEq(oldVault.lockedStake(taker), INTENT_AMOUNT);
-        v3.fulfillIntent(IOrchestratorV3.FulfillIntentParams(_proof(id, abi.decode(abi.encode(v3.getIntent(id)), (IOrchestratorV4.Intent)), INTENT_AMOUNT, true), id, "", ""));
+        IOrchestratorV3.Intent memory intent = v3.getIntent(id);
+        IOrchestratorV4.Intent memory proofIntent;
+        proofIntent.amount = intent.amount;
+        proofIntent.paymentMethod = intent.paymentMethod;
+        proofIntent.timestamp = intent.timestamp;
+        v3.fulfillIntent(IOrchestratorV3.FulfillIntentParams(_proof(id, proofIntent, INTENT_AMOUNT, true), id, "", ""));
         assertEq(token.balanceOf(other), NET);
         assertEq(oldVault.lockedStake(taker), INTENT_AMOUNT);
         assertEq(uint256(oldPolicy.getDisputeProtectionIntent(id).status), uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.SETTLED));

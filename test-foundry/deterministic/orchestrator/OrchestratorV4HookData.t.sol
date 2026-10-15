@@ -88,7 +88,7 @@ contract OrchestratorV4HookDataTest is OrchestratorV4Fixture {
         bytes memory raw = abi.encode(uint256(2), keccak256(HOOK_DATA), keccak256("reserved"));
         verifier.setExtensionData(raw);
         _fulfill(id, INTENT_AMOUNT, CONVERSION_RATE);
-        (,,,,,,,,, bytes memory hookData, bytes memory forwarded, bool manual) = lifecycleHookMock.lastSettlementContext();
+        (,,,,,,,,,, bytes memory hookData, bytes memory forwarded, bool manual) = lifecycleHookMock.lastSettlementContext();
         assertEq(hookData, "");
         assertEq(forwarded, raw);
         assertFalse(manual);
@@ -103,7 +103,6 @@ contract OrchestratorV4HookDataTest is OrchestratorV4Fixture {
         vm.prank(taker);
         orchestrator.signalIntent(params);
         assertEq(orchestrator.getIntent(id).data, HOOK_DATA);
-        assertEq(orchestrator.getIntent(id).postIntentHook, address(0));
         assertEq(lifecycleHookMock.lastSignaledLifecycleHookData(), HOOK_DATA);
         assertEq(lifecycleHookMock.lastIntentHash(), id);
     }
@@ -152,7 +151,7 @@ contract OrchestratorV4HookDataTest is OrchestratorV4Fixture {
         bytes memory raw = hex"ff010203";
         verifier.setExtensionData(raw);
         _fulfill(id, INTENT_AMOUNT, CONVERSION_RATE);
-        (bytes32 settledId,,,,,,,,, bytes memory hookData, bytes memory forwarded, bool manual) = lifecycleHookMock.lastSettlementContext();
+        (bytes32 settledId,,,,,,,,,, bytes memory hookData, bytes memory forwarded, bool manual) = lifecycleHookMock.lastSettlementContext();
         assertEq(settledId, id);
         assertEq(hookData, HOOK_DATA);
         assertEq(forwarded, raw);
@@ -202,7 +201,7 @@ contract OrchestratorV4HookDataTest is OrchestratorV4Fixture {
         orchestrator.releaseFundsToPayer(id);
         assertEq(token.balanceOf(taker), INTENT_AMOUNT);
         assertEq(orchestrator.getIntent(id).data, "");
-        (,,,,,,,,, bytes memory hookData, bytes memory forwarded, bool manual) = lifecycleHookMock.lastSettlementContext();
+        (,,,,,,,,,, bytes memory hookData, bytes memory forwarded, bool manual) = lifecycleHookMock.lastSettlementContext();
         assertEq(hookData, HOOK_DATA);
         assertEq(forwarded, "");
         assertTrue(manual);

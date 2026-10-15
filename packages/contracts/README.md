@@ -388,17 +388,22 @@ and the hook interprets it because governance can replace hooks for future inten
 is not upgradeable. Manual release forwards the saved data and an empty extension; the hook skips the
 attestation comparison and extension validation and follows the independent manual-release path without bypass.
 
-IOrchestratorV4 keeps `Intent` ABI-identical to V3, including its reserved `postIntentHook` address,
-which O4 always stores as zero. `SignalIntentParams` keeps V3's fields in order except `postIntentHook`;
+IOrchestratorV4 keeps V3's `Intent` field order with `postIntentHook` removed entirely:
+`owner, to, escrow, depositId, amount, timestamp, paymentMethod, fiatCurrency, conversionRate, payeeId, referralFees, data`.
+`SignalIntentParams` keeps V3's fields in order except `postIntentHook`;
 `FulfillIntentParams` keeps V3's fields except `postIntentHookData`. O4 has no post-intent-hook execution.
 `data` is the opaque lifecycle hook payload and is stored only in `Intent.data`. Non-empty data requires
 a mounted lifecycle hook (`LifecycleHookDataRequiresHook`) and a deposit payment-method gating service
 (`LifecycleHookDataRequiresGatingService`). O4 appends `keccak256(data)` to the gating message; empty
 data preserves the plain V3 packed message byte-for-byte. Read it through `getIntent(intentHash).data`
 until pruning; there is no separate hook-data mapping or getter. Fees are unchanged. The net payout goes
-to the lifecycle hook's deferral vault or directly to `intent.to`. O4 computes the fee plan and calls
-settlement before escrow unlock, so the policy can read a deposit that will close on its final payout;
-after unlock it transfers protocol, referral and manager fees, then the net payout.
+to the lifecycle hook's deferral vault or directly to `intent.to`. Settlement preserves O3's order:
+escrow unlock, protocol/referral/manager fee transfers, lifecycle hook, then net payout. O4 passes the
+depositor and token read before unlock to the hook, so settlement works even when escrow deletes an
+exhausted deposit. The policy does not read escrow at settlement. UPV4 checks O4's ERC-165 interface
+before the V2 probe and decodes `IOrchestratorV4.Intent`; O3 and older decode paths stay unchanged.
+ProtocolViewerV2 is unchanged and decodes only the V2/V3 `Intent` layout, so it cannot serve O4 intents;
+read O4 intents directly with `OrchestratorV4.getIntent`.
 
 IntentLifecycleHookV2 is stateless. At signal, a deposit's enabled whitelist is a pure admission gate:
 non-members are rejected. For a nonzero method risk window, signal checks the deposit token against
@@ -407,10 +412,12 @@ whitelisted and registered relayer takers, without writing policy state. Cancell
 no-op, retained for future hooks; O4 still invokes the snapshotted callback on cancel, escrow prune and
 orphan cleanup.
 
-`SettlementContext` is `{ intentHash, token, taker, recipient, escrow, depositId, paymentMethod,
+`SettlementContext` is `{ intentHash, token, depositor, taker, recipient, escrow, depositId, paymentMethod,
 releaseAmount, netAmount, data, extensionData, isManualRelease }`. O4 reads intent fields before pruning:
-`taker = intent.owner`, `recipient = intent.to`, and `data = intent.data`. The hook passes these identities
-and amounts to the policy's `onIntentSettled(SettleParams)`, with `bypass` set for balance-funded payments
+`taker = intent.owner`, `recipient = intent.to`, and `data = intent.data`; `depositor = deposit.depositor`
+and `token = address(deposit.token)` come from its pre-unlock deposit read. The hook retains escrow/depositId
+for whitelist checks and passes depositor/token and the intent identities and amounts to the policy's
+`onIntentSettled(SettleParams)`, with `bypass` set for balance-funded payments
 or whitelisted takers, checked in that order. A whitelisted taker means the deposit/payment-method
 whitelist is enabled and `isTakerAllowed` returns true for the taker, not the recipient. Registered relayer
 takers follow the same rule: relayer registration alone does not bypass collateral. The hook does not
@@ -420,7 +427,8 @@ unless the payment is balance-funded. A replacement hook can change these rules.
 own path and never uses bypass.
 
 DisputeProtectionPolicyV2 has no signal/cancel records and no per-deposit opt-outs. A zero risk window
-pays normally with no record. Otherwise settlement reads the depositor and rechecks the token, snapshots
+pays normally with no record. Otherwise settlement uses the supplied depositor, rechecks the supplied
+token against `stakeVault.stakeToken()` without reading escrow, snapshots
 the current risk window, and selects manual release, bypass, gross stake collateral, or a deferred net
 payout. Paused admissions do not block settlement. Statuses are `NONE`, `AWAITING_FUNDING`, `SETTLED`,
 `RELEASED`, and `DISPUTED`. One `DisputeProtectionIntentSettled` event includes all participant identities,

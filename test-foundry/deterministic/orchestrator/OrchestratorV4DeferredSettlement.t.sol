@@ -58,7 +58,6 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.referralFees = _twoReferralFees();
         bytes32 hash = _signal(taker, params);
-        assertEq(orchestrator.getIntent(hash).postIntentHook, address(0));
         _fulfill(hash, INTENT_AMOUNT, CONVERSION_RATE);
         assertEq(token.balanceOf(taker), INTENT_AMOUNT - 250_000);
         assertEq(hook.fundedCalls(), 0);
@@ -87,7 +86,6 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
     function test_DeferredPaysVaultWithoutPostIntentHook() public {
         hook.setDeferralVault(address(hook));
         bytes32 hash = _signalDefault();
-        assertEq(orchestrator.getIntent(hash).postIntentHook, address(0));
         _fulfill(hash, INTENT_AMOUNT, CONVERSION_RATE);
         assertEq(token.balanceOf(address(hook)), INTENT_AMOUNT);
         assertEq(token.balanceOf(address(postIntentHook)), 0);
@@ -114,11 +112,11 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
     function test_ExtensionWordZeroForwarded() public {
         verifier.setExtensionData(abi.encode(uint256(1)));
         _fulfill(_signalDefault(), INTENT_AMOUNT, CONVERSION_RATE);
-        (,,,,,,,,,, bytes memory extensionData,) = hook.lastSettlementContext();
+        (,,,,,,,,,,, bytes memory extensionData,) = hook.lastSettlementContext();
         assertEq(extensionData, abi.encode(uint256(1)));
         verifier.setExtensionData(abi.encode(uint256(0)));
         _fulfill(_signalDefault(), INTENT_AMOUNT, CONVERSION_RATE);
-        (,,,,,,,,,, extensionData,) = hook.lastSettlementContext();
+        (,,,,,,,,,,, extensionData,) = hook.lastSettlementContext();
         assertEq(extensionData, abi.encode(uint256(0)));
     }
 
@@ -127,7 +125,7 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
         bytes32 hash = _signalDefault();
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(hash);
-        (,,,,,,,,,, bytes memory extensionData, bool manual) = hook.lastSettlementContext();
+        (,,,,,,,,,,, bytes memory extensionData, bool manual) = hook.lastSettlementContext();
         assertEq(extensionData, "");
         assertTrue(manual);
         assertEq(token.balanceOf(taker), INTENT_AMOUNT);

@@ -3,7 +3,6 @@ pragma solidity ^0.8.18;
 
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicyV2.sol";
 import {IDisputeProtectionPolicyV2 as P} from "contracts/interfaces/IDisputeProtectionPolicyV2.sol";
 import {IStakeVault} from "contracts/interfaces/IStakeVault.sol";
@@ -15,7 +14,6 @@ import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
 import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
 import {AttestationVerifierMock} from "../../mocks/AttestationVerifierMock.sol";
-import {EscrowDepositStub} from "../../mocks/EscrowDepositStub.sol";
 
 contract DisputeProtectionPolicyV2Test is Test {
     event DisputeProtectionIntentSettled(bytes32 indexed intentHash, address indexed taker, address indexed depositor, address recipient, bytes32 paymentMethod, uint64 riskWindow, P.CollateralSource collateralSource, address stakeOwner, uint256 releaseAmount, uint256 lockedAmount, uint64 releaseEligibleAt, bool isManualRelease);
@@ -35,7 +33,6 @@ contract DisputeProtectionPolicyV2Test is Test {
     USDCMock internal usdc;
     StakeVault internal vault;
     DisputeProtectionPolicyV2 internal policy;
-    EscrowDepositStub internal escrow;
     DisputeVerifier internal verifier;
     NullifierRegistry internal disputes;
     NullifierRegistryV2 internal payments;
@@ -47,7 +44,6 @@ contract DisputeProtectionPolicyV2Test is Test {
         payments = new NullifierRegistryV2(new NullifierRegistry());
         disputes = new NullifierRegistry();
         verifier = new DisputeVerifier(address(this), payments, new AttestationVerifierMock());
-        escrow = new EscrowDepositStub(DEPOSITOR, usdc);
         _newPolicy();
         vault.initializeController(address(policy));
     }
@@ -59,7 +55,7 @@ contract DisputeProtectionPolicyV2Test is Test {
         disputes.addWritePermission(address(policy));
     }
     function _settle(bytes32 id, uint256 gross, uint256 net, bool bypass, bool manual) internal returns (bool) {
-        return policy.onIntentSettled(P.SettleParams(id, TAKER, RECIPIENT, address(escrow), 1, METHOD, gross, net, bypass, manual));
+        return policy.onIntentSettled(P.SettleParams(id, TAKER, RECIPIENT, DEPOSITOR, address(usdc), METHOD, gross, net, bypass, manual));
     }
     function _stake(address owner, uint256 amount) internal {
         usdc.transfer(owner, amount);
@@ -138,13 +134,11 @@ contract DisputeProtectionPolicyV2Test is Test {
         _status(P.DisputeProtectionIntentStatus.AWAITING_FUNDING);
     }
     function test_SettlementRejectsTokenMismatch() public {
-        escrow.setDeposit(DEPOSITOR, IERC20(STRANGER));
         vm.expectRevert(abi.encodeWithSelector(P.IntentTokenMismatch.selector, address(usdc), STRANGER));
-        _settle(ID, GROSS, NET, false, false);
+        policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, STRANGER, METHOD, GROSS, NET, false, false));
     }
-    function test_SettlementReadsCurrentDepositor() public {
-        escrow.setDeposit(STRANGER, usdc);
-        _defer();
+    function test_SettlementUsesSuppliedDepositorWithoutEscrow() public {
+        assertTrue(policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, STRANGER, address(usdc), METHOD, GROSS, NET, false, false)));
         assertEq(_record().depositor, STRANGER);
     }
     function test_BypassReleasesWithoutLock() public {
@@ -347,7 +341,7 @@ contract DisputeProtectionPolicyV2Test is Test {
         _fund();
         _mature();
         policy.releaseMaturedDisputeProtectionIntent(ID);
-        assertFalse(policy.onIntentSettled(P.SettleParams(ID2, RECIPIENT, STRANGER, address(escrow), 1, METHOD, 60e6, 59e6, false, false)));
+        assertFalse(policy.onIntentSettled(P.SettleParams(ID2, RECIPIENT, STRANGER, DEPOSITOR, address(usdc), METHOD, 60e6, 59e6, false, false)));
         _claim(TAKER);
         assertEq(usdc.balanceOf(RECIPIENT), 39.05e6);
         assertEq(_record().claimedAmount, 39.05e6);

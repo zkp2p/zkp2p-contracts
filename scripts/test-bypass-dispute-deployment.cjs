@@ -738,6 +738,7 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
     [
       ["intentHash", "bytes32"],
       ["token", "address"],
+      ["depositor", "address"],
       ["taker", "address"],
       ["recipient", "address"],
       ["escrow", "address"],
@@ -767,6 +768,12 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
       (/** @type {{name: string, type: string}} */ entry) => [entry.name, entry.type]
     );
   assert.deepEqual(signalFields(o4Abi), signalFields(v3Abi).filter(([name]) => name !== "postIntentHook"));
+  /** @param {any[]} abi */
+  const intentFields = (abi) => new ethers.utils.Interface(abi)
+    .getFunction("getIntent").outputs[0].components.map(
+      (/** @type {{name: string, type: string}} */ entry) => [entry.name, entry.type]
+    );
+  assert.deepEqual(intentFields(o4Abi), intentFields(v3Abi).filter(([name]) => name !== "postIntentHook"));
   assert.equal(o4Abi.some(
     (/** @type {{name?: string}} */ entry) => /conditions/i.test(entry.name || "")
   ), false);

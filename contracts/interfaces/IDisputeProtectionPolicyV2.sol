@@ -52,8 +52,8 @@ interface IDisputeProtectionPolicyV2 {
         bytes32 intentHash;
         address taker;
         address recipient;
-        address escrow;
-        uint256 depositId;
+        address depositor;
+        address token;
         bytes32 paymentMethod;
         uint256 releaseAmount;
         uint256 netAmount;
@@ -65,6 +65,7 @@ interface IDisputeProtectionPolicyV2 {
     }
 
     /// @notice Records a protected settlement, selects collateral, and returns whether payout funding is required.
+    /// @dev Uses the depositor and token captured by the orchestrator before escrow unlock; never reads escrow.
     function onIntentSettled(SettleParams calldata _params) external returns (bool deferred);
     /// @notice Accounts for a deferred payout transferred to the vault.
     function onDeferredPayoutFunded(bytes32 _intentHash) external;

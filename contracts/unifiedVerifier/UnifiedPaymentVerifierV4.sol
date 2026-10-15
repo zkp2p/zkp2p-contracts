@@ -6,6 +6,8 @@ import { INullifierRegistryV2 } from "../interfaces/INullifierRegistryV2.sol";
 import { IPaymentVerifier } from "../interfaces/IPaymentVerifier.sol";
 import { IAttestationVerifier } from "../interfaces/IAttestationVerifier.sol";
 import { IOrchestrator } from "../interfaces/IOrchestrator.sol";
+import { ERC165Checker } from "@openzeppelin/contracts/utils/introspection/ERC165Checker.sol";
+import { IOrchestratorV4 } from "../interfaces/IOrchestratorV4.sol";
 import { IOrchestratorV2 } from "../interfaces/IOrchestratorV2.sol";
 import { IOrchestratorRegistry } from "../interfaces/IOrchestratorRegistry.sol";
 import { IPaymentVerifierV2 } from "../interfaces/IPaymentVerifierV2.sol";
@@ -26,7 +28,7 @@ import { IPaymentVerifierV2 } from "../interfaces/IPaymentVerifierV2.sol";
  * unsigned attestation.metadata is never returned. Extension words are decoded only by the replaceable lifecycle hook,
  * not this verifier or the non-upgradeable OrchestratorV4: word 0 is balanceFunded, word 1 is conditionsHash,
  * and words 2+ are reserved. An old 480-byte payload returns its trailing bool as extension word 0.
- * intent.data is never read and belongs to post-intent hooks.
+ * intent.data is never interpreted here; O4 forwards it to its snapshotted lifecycle hook.
  */
 contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerifierV3 {
 
@@ -229,7 +231,18 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
     ) internal view {
         require(snapshot.intentHash == intentHash, "UPV: Snapshot hash mismatch");
 
-        if (_isV2Orchestrator(msg.sender)) {
+        if (ERC165Checker.supportsInterface(msg.sender, type(IOrchestratorV4).interfaceId)) {
+            IOrchestratorV4.Intent memory intentV4 = IOrchestratorV4(msg.sender).getIntent(intentHash);
+            _validateSnapshotAgainstIntent(
+                snapshot,
+                intentV4.payeeId,
+                intentV4.amount,
+                intentV4.paymentMethod,
+                intentV4.fiatCurrency,
+                intentV4.conversionRate,
+                intentV4.timestamp
+            );
+        } else if (_isV2Orchestrator(msg.sender)) {
             IOrchestratorV2.Intent memory intentV2 = IOrchestratorV2(msg.sender).getIntent(intentHash);
             _validateSnapshotAgainstIntent(
                 snapshot,

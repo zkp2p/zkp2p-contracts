@@ -64,7 +64,7 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
     }
 
     function _context(bytes32 id, bool balanceFunded) internal view returns (IIntentLifecycleHookV2.SettlementContext memory) {
-        return IIntentLifecycleHookV2.SettlementContext(id, address(token), taker, other, address(escrow), depositId, METHOD, INTENT_AMOUNT, NET, "", abi.encode(balanceFunded), false);
+        return IIntentLifecycleHookV2.SettlementContext(id, address(token), depositor, taker, other, address(escrow), depositId, METHOD, INTENT_AMOUNT, NET, "", abi.encode(balanceFunded), false);
     }
 
     function _whitelistTaker() internal returns (bytes32 group) {
@@ -472,7 +472,7 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         context.data = abi.encodePacked(keccak256("conditions"));
         context.extensionData = abi.encode(uint256(2), keccak256("wrong"));
         relayerRegistry.addRelayer(taker);
-        vm.expectCall(address(policy), abi.encodeCall(P.onIntentSettled, (P.SettleParams(ID, taker, other, address(escrow), depositId, METHOD, INTENT_AMOUNT, NET, false, true))));
+        vm.expectCall(address(policy), abi.encodeCall(P.onIntentSettled, (P.SettleParams(ID, taker, other, depositor, address(token), METHOD, INTENT_AMOUNT, NET, false, true))));
         assertEq(stub.settle(hook, context), address(0));
     }
 

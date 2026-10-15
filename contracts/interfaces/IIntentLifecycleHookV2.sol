@@ -6,6 +6,7 @@ interface IIntentLifecycleHookV2 {
     struct SettlementContext {
         bytes32 intentHash;
         address token;
+        address depositor; // Captured by the orchestrator before escrow unlock can delete the deposit.
         address taker;
         address recipient;
         address escrow;

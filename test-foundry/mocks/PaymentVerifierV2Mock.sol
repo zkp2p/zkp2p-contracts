@@ -4,6 +4,8 @@ pragma solidity ^0.8.18;
 import { IPaymentVerifierV2 } from "contracts/interfaces/IPaymentVerifierV2.sol";
 import { IPaymentVerifier } from "contracts/interfaces/IPaymentVerifier.sol";
 import { IOrchestrator } from "contracts/interfaces/IOrchestrator.sol";
+import { ERC165Checker } from "@openzeppelin/contracts/utils/introspection/ERC165Checker.sol";
+import { IOrchestratorV4 } from "contracts/interfaces/IOrchestratorV4.sol";
 import { IOrchestratorV2 } from "contracts/interfaces/IOrchestratorV2.sol";
 import { IEscrow } from "contracts/interfaces/IEscrow.sol";
 
@@ -108,6 +110,20 @@ contract PaymentVerifierV2Mock is IPaymentVerifierV2 {
     function _fetchSnapshot(bytes32 intentHash) internal view returns (Snapshot memory snapshot) {
         if (orchestratorAddress == address(0) || escrowAddress == address(0)) {
             return snapshot;
+        }
+
+        if (ERC165Checker.supportsInterface(orchestratorAddress, type(IOrchestratorV4).interfaceId)) {
+            IOrchestratorV4.Intent memory intentV4 = IOrchestratorV4(orchestratorAddress).getIntent(intentHash);
+            if (intentV4.owner == address(0)) return snapshot;
+            IEscrow.DepositPaymentMethodData memory methodDataV4 = IEscrow(escrowAddress)
+                .getDepositPaymentMethodData(intentV4.depositId, intentV4.paymentMethod);
+            return Snapshot({
+                amount: intentV4.amount,
+                conversionRate: intentV4.conversionRate,
+                signalTimestamp: intentV4.timestamp,
+                payeeDetails: methodDataV4.payeeDetails,
+                found: true
+            });
         }
 
         (bool isV2Orchestrator, ) = orchestratorAddress.staticcall(

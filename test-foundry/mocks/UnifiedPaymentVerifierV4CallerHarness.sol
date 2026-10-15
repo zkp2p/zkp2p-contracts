@@ -2,6 +2,8 @@
 pragma solidity ^0.8.18;
 
 import {IOrchestrator} from "contracts/interfaces/IOrchestrator.sol";
+import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
+import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IPaymentVerifier} from "contracts/interfaces/IPaymentVerifier.sol";
 import {IPaymentVerifierV2} from "contracts/interfaces/IPaymentVerifierV2.sol";
@@ -52,5 +54,32 @@ contract UnifiedPaymentVerifierV4V2CallerHarness {
     /// @notice Exposes the selector used to identify a V2-shaped orchestrator.
     function getDepositPreIntentHook(address, uint256) external pure returns (address) {
         return address(0);
+    }
+}
+
+contract UnifiedPaymentVerifierV4V4CallerHarness is ERC165 {
+    mapping(bytes32 => IOrchestratorV4.Intent) internal intents;
+
+    function setIntent(bytes32 intentHash, IOrchestratorV4.Intent calldata intent) external {
+        intents[intentHash] = intent;
+    }
+
+    function getIntent(bytes32 intentHash) external view returns (IOrchestratorV4.Intent memory) {
+        return intents[intentHash];
+    }
+
+    function verifyPayment(IPaymentVerifierV2 verifier, IPaymentVerifier.VerifyPaymentData calldata data)
+        external returns (IPaymentVerifierV2.PaymentVerificationResultV2 memory, bytes memory)
+    {
+        return verifier.verifyPayment(data);
+    }
+
+    // O4 also exposes this selector: the verifier must test its ERC-165 interface first.
+    function getDepositPreIntentHook(address, uint256) external pure returns (address) {
+        return address(0);
+    }
+
+    function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
+        return interfaceId == type(IOrchestratorV4).interfaceId || super.supportsInterface(interfaceId);
     }
 }

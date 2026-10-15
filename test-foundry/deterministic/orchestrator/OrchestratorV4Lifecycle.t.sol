@@ -106,6 +106,7 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         IIntentLifecycleHookV2.SettlementContext memory context = lifecycleHookMock.getLastSettlementContext();
         assertEq(context.intentHash, intentHash);
         assertEq(context.token, address(token));
+        assertEq(context.depositor, depositor);
         assertEq(context.taker, taker);
         assertEq(context.recipient, taker);
         assertEq(context.escrow, address(escrow));
@@ -156,7 +157,7 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(intentHash);
         assertEq(lifecycleHookMock.settlementCalls(), 1);
-        (,,,,,,,,, bytes memory lifecycleHookData, bytes memory extensionData, bool isManualRelease) = lifecycleHookMock.lastSettlementContext();
+        (,,,,,,,,,, bytes memory lifecycleHookData, bytes memory extensionData, bool isManualRelease) = lifecycleHookMock.lastSettlementContext();
         assertEq(lifecycleHookData, "");
         assertEq(extensionData, "");
         assertTrue(isManualRelease);

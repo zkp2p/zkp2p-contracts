@@ -237,14 +237,17 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         assertEq(nullifiers.nullifierByIntentHash(first), nullifier);
         assertEq(nullifiers.nullifierByIntentHash(second), bytes32(0));
         assertEq(orchestratorV4.getIntent(second).owner, taker);
-        _assertRetiredVerifierCannotWrite(second);
+        _assertRetiredVerifierCannotWrite();
     }
 
-    function _assertRetiredVerifierCannotWrite(bytes32 intentHash) private {
+    function _assertRetiredVerifierCannotWrite() private {
+        // UPV3 only decodes the old intent layout; use O3 to reach the revoked-writer check.
+        _stake(predecessorVault);
+        bytes32 intentHash = _signalDefault();
         bytes32 paymentId = keccak256("fresh-payment-retired-verifier");
         bytes memory proof = _signedProof(intentHash, paymentId, predecessor.DOMAIN_SEPARATOR(), false);
         vm.expectRevert(abi.encodeWithSelector(INullifierRegistryV2.UnauthorizedWriter.selector, address(predecessor)));
-        vm.prank(address(orchestratorV4));
+        vm.prank(address(orchestrator));
         predecessor.verifyPayment(IPaymentVerifier.VerifyPaymentData(intentHash, proof, ""));
         assertFalse(nullifiers.isNullified(keccak256(abi.encodePacked(METHOD, paymentId))));
     }
@@ -505,7 +508,11 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
 
     function _attestationData(bytes32 intentHash, bytes32 paymentId) private view returns (bytes memory) {
         IOrchestratorV3.Intent memory intent = orchestrator.getIntent(intentHash);
-        if (intent.owner == address(0)) intent = abi.decode(abi.encode(orchestratorV4.getIntent(intentHash)), (IOrchestratorV3.Intent));
+        if (intent.owner == address(0)) {
+            IOrchestratorV4.Intent memory intentV4 = orchestratorV4.getIntent(intentHash);
+            intent.amount = intentV4.amount;
+            intent.timestamp = intentV4.timestamp;
+        }
         return abi.encode(
             UnifiedPaymentVerifierV3.PaymentDetails(METHOD, PAYEE, 5000, USD, block.timestamp * 1000, paymentId),
             UnifiedPaymentVerifierV3.IntentSnapshot(

@@ -7,8 +7,10 @@ import {UnifiedPaymentVerifierV4} from "contracts/unifiedVerifier/UnifiedPayment
 import {IPaymentVerifier} from "contracts/interfaces/IPaymentVerifier.sol";
 import {IPaymentVerifierV2} from "contracts/interfaces/IPaymentVerifierV2.sol";
 import {IOrchestrator} from "contracts/interfaces/IOrchestrator.sol";
+import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
+import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
 import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
-import {UnifiedPaymentVerifierV4CallerHarness, UnifiedPaymentVerifierV4V2CallerHarness} from "../../mocks/UnifiedPaymentVerifierV4CallerHarness.sol";
+import {UnifiedPaymentVerifierV4CallerHarness, UnifiedPaymentVerifierV4V2CallerHarness, UnifiedPaymentVerifierV4V4CallerHarness} from "../../mocks/UnifiedPaymentVerifierV4CallerHarness.sol";
 
 contract UnifiedPaymentVerifierV4Test is UnifiedPaymentVerifierV3Test {
     function setUp() public override {
@@ -20,6 +22,37 @@ contract UnifiedPaymentVerifierV4Test is UnifiedPaymentVerifierV3Test {
         nullifierRegistry.removeWritePermission(address(verifier));
         nullifierRegistry.addWritePermission(address(replacement));
         verifier = UnifiedPaymentVerifierV3(address(replacement));
+    }
+
+    function test_O4IntentValidatesBeforeV2Probe() public {
+        UnifiedPaymentVerifierV4V4CallerHarness caller = new UnifiedPaymentVerifierV4V4CallerHarness();
+        IOrchestratorV2.Intent memory source = v2Caller.getIntent(V2_INTENT);
+        IOrchestratorV4.Intent memory intent = IOrchestratorV4.Intent(
+            source.owner, source.to, source.escrow, source.depositId, source.amount, source.timestamp,
+            source.paymentMethod, source.fiatCurrency, source.conversionRate, source.payeeId,
+            new IReferralFee.ReferralFee[](1), hex"aabbccdd"
+        );
+        intent.referralFees[0] = IReferralFee.ReferralFee(address(123), 1e15);
+        caller.setIntent(V2_INTENT, intent);
+        orchestratorRegistry.addOrchestrator(address(caller));
+        bytes32 paymentId = keccak256("o4-intent");
+        IPaymentVerifier.VerifyPaymentData memory request = IPaymentVerifier.VerifyPaymentData(
+            V2_INTENT, _validProof(verifier, V2_INTENT, paymentId), ""
+        );
+        intent.amount++;
+        caller.setIntent(V2_INTENT, intent);
+        vm.expectRevert("UPV: Snapshot amount mismatch");
+        caller.verifyPayment(IPaymentVerifierV2(address(verifier)), request);
+        assertFalse(nullifierRegistry.isNullified(_nullifier(paymentId)));
+        intent.amount--;
+        caller.setIntent(V2_INTENT, intent);
+        (IPaymentVerifierV2.PaymentVerificationResultV2 memory result, bytes memory extension) =
+            caller.verifyPayment(IPaymentVerifierV2(address(verifier)), request);
+        assertTrue(result.success);
+        assertEq(result.intentHash, V2_INTENT);
+        assertEq(result.releaseAmount, AMOUNT);
+        assertEq(extension, "");
+        assertEq(nullifierRegistry.intentHashByNullifier(_nullifier(paymentId)), V2_INTENT);
     }
 
     function _payloadSuffix() internal pure override returns (bytes memory) {
