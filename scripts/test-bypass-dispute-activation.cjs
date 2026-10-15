@@ -164,10 +164,7 @@ function snapshot(wanted, k = 0) {
     blockTimestamp: "10000",
     freshVault: {
       ...ownership,
-      controller: a.freshPolicy,
-      pendingController: ZERO,
-      pendingControllerValidAt: "0",
-      controllerChangeDelay: "0",
+      policyAuthorized: true,
       stakeToken: a.stakeToken,
     },
     freshPolicy: {
@@ -415,9 +412,9 @@ test("bypass reducer names trust and ordered registry drift", () => {
       },
     ],
     [
-      "freshVault.controllerChangeDelay",
+      "freshVault.policyAuthorized",
       (s) => {
-        s.freshVault.controllerChangeDelay = "1";
+        s.freshVault.policyAuthorized = false;
       },
     ],
     [
@@ -760,7 +757,7 @@ function manifest() {
   });
   /** @type {Omit<Manifest, "manifestSha256">} */
   const unsigned = {
-    version: 7,
+    version: 8,
     kind: "dispute-bypass-cutover",
     chainId: 8453,
     safe: wanted.addresses.safe,
@@ -783,7 +780,7 @@ function manifest() {
   };
 }
 
-test("unsigned v7 bypass manifests validate and reject v6 and tampering", () => {
+test("unsigned v8 bypass manifests validate and reject v7 and tampering", () => {
   const valid = manifest();
   assert.deepEqual(
     deriveBypassConstructorArgs(valid, "guard"),
@@ -793,7 +790,7 @@ test("unsigned v7 bypass manifests validate and reject v6 and tampering", () => 
     deriveBypassConstructorArgs(valid, "postcondition"),
     valid.postcondition.constructorArgs
   );
-  const oldVersion = { ...valid, version: 6 };
+  const oldVersion = { ...valid, version: 7 };
   const { manifestSha256: oldDigest, ...oldUnsigned } = oldVersion;
   oldVersion.manifestSha256 = manifests.computeBypassManifestSha256(
     /** @type {any} */ (oldUnsigned)
@@ -808,7 +805,7 @@ test("unsigned v7 bypass manifests validate and reject v6 and tampering", () => 
   /** @type {Array<(value: Manifest) => void>} */
   const mutations = [
     (m) => {
-      Object.assign(m, { version: 6 });
+      Object.assign(m, { version: 7 });
     },
     (m) => {
       Object.assign(m, { chainId: 31337 });

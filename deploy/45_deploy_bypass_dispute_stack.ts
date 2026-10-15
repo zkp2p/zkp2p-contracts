@@ -8,7 +8,6 @@ import {
   BYPASS_DEPLOYMENT_NAMES,
   BYPASS_EXPECTED_LIVE,
   BYPASS_PREDECESSOR_DEPLOYMENT_NAMES,
-  BYPASS_STAKE_VAULT_CONTROLLER_CHANGE_DELAY,
   BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS,
   isSupersededStagingRecord,
   LANE_45_STEP_KINDS,
@@ -814,34 +813,15 @@ async function readFreshState(
   };
   if (vaultRecord) {
     const vault = (contracts.vault = await hre.ethers.getContractAt(
-      "StakeVault",
+      "StakeVaultV2",
       vaultRecord.address
     ));
     requireState(
-      sameAddress(await vault.stakeToken(), context.stakeToken) &&
-        BigNumber.from(await vault.controllerChangeDelay()).eq(
-          BYPASS_STAKE_VAULT_CONTROLLER_CHANGE_DELAY
-        ),
+      sameAddress(await vault.stakeToken(), context.stakeToken),
       "Fresh StakeVaultV2 dependency state drifted"
     );
-    const controller: string = await vault.controller();
-    requireState(
-      sameAddress(controller, constants.AddressZero) ||
-        Boolean(policyRecord && sameAddress(controller, policyRecord.address)),
-      "Fresh StakeVaultV2 controller drifted"
-    );
-    const pendingController: string = await vault.pendingController();
-    requireState(
-      (sameAddress(pendingController, constants.AddressZero) &&
-        BigNumber.from(await vault.pendingControllerValidAt()).isZero()) ||
-        (sameAddress(controller, constants.AddressZero) &&
-          Boolean(
-            policyRecord && sameAddress(pendingController, policyRecord.address)
-          )),
-      "Fresh StakeVaultV2 pending controller drifted"
-    );
-    completed["initialize-controller"] = Boolean(
-      policyRecord && sameAddress(controller, policyRecord.address)
+    completed["authorize-controller"] = Boolean(
+      policyRecord && (await vault.isController(policyRecord.address))
     );
     if (context.transferOwnership) {
       completed["transfer-vault-owner"] = ownershipStepState(
@@ -1024,48 +1004,14 @@ export async function readLane45State(
   return { ...state, completed };
 }
 
-/** Recover permissionless deposit griefing through a zero-delay handover. */
-async function initializeBypassController(
+/** Authorization remains possible if stake arrives before the policy is deployed. */
+async function authorizeBypassController(
   vault: Contract,
   policy: Contract
 ): Promise<void> {
-  const controller: string = await vault.controller();
-  const pendingController: string = await vault.pendingController();
-  if (sameAddress(controller, policy.address)) {
-    requireState(
-      sameAddress(pendingController, constants.AddressZero) &&
-        BigNumber.from(await vault.pendingControllerValidAt()).isZero(),
-      "Fresh StakeVaultV2 pending controller drifted"
-    );
-    return;
+  if (!(await vault.isController(policy.address))) {
+    await (await vault.setController(policy.address, true)).wait();
   }
-  requireState(
-    sameAddress(controller, constants.AddressZero),
-    "Fresh StakeVaultV2 controller drifted"
-  );
-  if (sameAddress(pendingController, constants.AddressZero)) {
-    requireState(
-      BigNumber.from(await vault.pendingControllerValidAt()).isZero(),
-      "Fresh StakeVaultV2 pending controller drifted"
-    );
-    if (
-      BigNumber.from(await vault.totalStaked()).isZero() &&
-      BigNumber.from(await vault.totalClaimable()).isZero()
-    ) {
-      await (await vault.initializeController(policy.address)).wait();
-    } else {
-      console.log(
-        "StakeVaultV2 liabilities forced the zero-delay handover"
-      );
-      await (await vault.proposeController(policy.address)).wait();
-    }
-    return;
-  }
-  requireState(
-    sameAddress(pendingController, policy.address),
-    "Fresh StakeVaultV2 pending controller drifted"
-  );
-  await (await policy.acceptVaultController()).wait();
 }
 
 async function deployLiveBypassStack(
@@ -1103,7 +1049,6 @@ export async function executeLane45Step(
       context.deployer,
       context.stakeToken,
       constants.AddressZero,
-      BYPASS_STAKE_VAULT_CONTROLLER_CHANGE_DELAY,
     ]);
   } else if (step === "deploy-policy") {
     await deployFresh(hre, "DisputeProtectionPolicyV2", context.deployer, [
@@ -1113,8 +1058,8 @@ export async function executeLane45Step(
       context.disputeNullifierRegistry,
       context.whitelistPolicy,
     ]);
-  } else if (step === "initialize-controller") {
-    await initializeBypassController(
+  } else if (step === "authorize-controller") {
+    await authorizeBypassController(
       state.contracts.vault!,
       state.contracts.policy!
     );
@@ -1287,7 +1232,7 @@ function localSteps(context: StackContext): string[] {
   return [
     "deploy-vault",
     "deploy-policy",
-    "initialize-controller",
+    "authorize-controller",
     "deploy-verifier",
     ...context.paymentMethods.map((method) => `add-verifier-method:${method}`),
     "deploy-orchestrator",
@@ -1326,7 +1271,6 @@ async function deployLocalBypassStack(
     deployer,
     context.stakeToken,
     constants.AddressZero,
-    BYPASS_STAKE_VAULT_CONTROLLER_CHANGE_DELAY,
   ]);
   const policyRecord = await deploy("DisputeProtectionPolicyV2", [
     deployer,
@@ -1336,8 +1280,8 @@ async function deployLocalBypassStack(
     context.whitelistPolicy,
   ]);
   let state = await readFreshState(hre, context);
-  while (!state.completed["initialize-controller"]) {
-    await initializeBypassController(
+  while (!state.completed["authorize-controller"]) {
+    await authorizeBypassController(
       state.contracts.vault!,
       state.contracts.policy!
     );

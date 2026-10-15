@@ -55,7 +55,8 @@ Their ABI and address exports are unchanged.
   `isIntentNoStake`, `validatePayment`, and the `DisputeProtectionIntentStakeModeChanged`
   event; the `getDisputeProtectionIntent` struct is unchanged. `IntentLifecycleHookV1`
   requires the `abi.encode(policy, abi.encode(bool noStake))` validation envelope in
-  `intent.data` on protected routes. `StakeVault` accepts a zero controller-change delay.
+  `intent.data` on protected routes. That release's `StakeVault` source accepted a zero
+  controller-change delay; the current source restores the August vault and adds `StakeVaultV2` separately.
 - Base staging exports `StakeVaultBypass`, `DisputeProtectionPolicyBypass`,
   `IntentLifecycleHookV1Bypass`, and `UnifiedPaymentVerifierV4` deployment records by
   name (deployed, not yet activated). Canonical aliases (`StakeVault`,
@@ -421,8 +422,23 @@ collateral based on the token.
 DisputeProtectionPolicyV2 authorizes callers with `setOrchestratorAuthorization` and
 `isOrchestratorAuthorized`, emits `OrchestratorAuthorizationUpdated`, and rejects unauthorized
 callers with `UnauthorizedOrchestrator`, including manual settlements and funding callbacks.
-Governance must retain authorization for an old policy's orchestrator until its snapshots drain,
-and drain active locks before moving vault control unless a successor adopts their state.
+Governance must retain authorization for an old policy's orchestrator until its snapshots drain.
+Authorize a successor alongside its predecessor with `StakeVaultV2.setController(successor, true)`,
+then select it with O4's `setSettlementPolicy`: new intents snapshot the successor for settlement,
+while existing snapshots and locks remain with the predecessor. The predecessor stays authorized
+until its locks drain; complete any policy-mediated payouts before de-authorizing it.
+
+`StakeVaultV2` is a separate contract and source ABI. The August `StakeVault` / `IStakeVault` retain
+main's delayed single-controller behavior. V2 has no proposal, acceptance, initialization-once or
+controller delay. Its constructor accepts an optional initial controller; non-zero controllers must
+have deployed code. Owner-only `setController(address,bool)` takes effect immediately and emits
+`ControllerUpdated`. Each lock stores its creator, exposed by `lockController(lockId)`; only that
+creator while authorized may increase, resize, unlock or resolve it. Removing authorization freezes
+its open locks until re-authorization. Lock events and the `locks` tuple remain unchanged.
+Every authorized controller is governance-trusted: it can lock any owner's free stake and call
+`payOutStake` to pay any owner's free stake only to that owner's own address. Payout authority is
+per owner, independent of which controller released the stake. Staking, claims, withdrawals,
+taker delegation and accounting invariants are unchanged.
 The policy validates settlement in this order:
 
 1. Manual release returns zero.
@@ -462,11 +478,13 @@ Use a cryptographically random salt per intent and keep it off-chain with the co
 to the gating service and attestor.
 
 Lanes 45/46 deploy StakeVaultV2, DisputeProtectionPolicyV2, UPV4 and O4 without a lifecycle hook.
+Lane 45 authorizes the policy on the vault immediately, without an accept-controller step.
 They pass the same whitelist to O4 and the policy, set O4's policy, authorize O4 on the policy,
-and register O4 last. Bypass batch manifest version 7 records policy authorization and both
-whitelist dependencies; older manifests are rejected. Historical O3 predecessor checks remain
+and register O4 last. Bypass batch manifest version 8 records the selected policy's vault-controller
+authorization, O4 authorization and both whitelist dependencies; older manifests are rejected. Historical O3 predecessor checks remain
 separate. The package drops the removed hook ABI. Its source ABI catalog does not export interface ABIs;
-generated TypeChain interface exports include `IIntentSettlementPolicy`.
+generated TypeChain interface exports include `IIntentSettlementPolicy` and `IStakeVaultV2`.
+The source ABI catalog exports `StakeVaultV2` separately from the August `StakeVault`.
 
 The cross-repo attestor smoke is gated by `ATTESTOR_POLICY_SMOKE_ROOT`; its signed payload
 contains word 0 (zero for pay now, the attested window for protected settlements).

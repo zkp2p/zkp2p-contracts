@@ -11,10 +11,10 @@ import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicyV2.sol";
 import {IDisputeProtectionPolicyV2 as P} from "contracts/interfaces/IDisputeProtectionPolicyV2.sol";
-import {IStakeVault} from "contracts/interfaces/IStakeVault.sol";
+import {IStakeVaultV2} from "contracts/interfaces/IStakeVaultV2.sol";
 import {IDisputeVerifier} from "contracts/interfaces/IDisputeVerifier.sol";
 import {INullifierRegistry} from "contracts/interfaces/INullifierRegistry.sol";
-import {StakeVault} from "contracts/StakeVault.sol";
+import {StakeVaultV2} from "contracts/StakeVaultV2.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
@@ -36,7 +36,7 @@ contract DisputeProtectionPolicyV2Test is Test {
     address internal constant DEPOSITOR = address(0x33);
     address internal constant STRANGER = address(0x44);
     USDCMock internal usdc;
-    StakeVault internal vault;
+    StakeVaultV2 internal vault;
     DisputeProtectionPolicyV2 internal policy;
     WhitelistPolicy internal whitelist;
     DisputeVerifier internal verifier;
@@ -46,12 +46,12 @@ contract DisputeProtectionPolicyV2Test is Test {
     function setUp() public {
         vm.warp(1000);
         usdc = new USDCMock(100000e6, "USDC", "USDC");
-        vault = new StakeVault(address(this), usdc, address(0), 0);
+        vault = new StakeVaultV2(address(this), usdc, address(0));
         payments = new NullifierRegistryV2(new NullifierRegistry());
         disputes = new NullifierRegistry();
         verifier = new DisputeVerifier(address(this), payments, new AttestationVerifierMock());
         _newPolicy();
-        vault.initializeController(address(policy));
+        vault.setController(address(policy), true);
     }
 
     function _newPolicy() internal {
@@ -253,13 +253,13 @@ contract DisputeProtectionPolicyV2Test is Test {
     }
     function test_FundWithoutTokensReverts() public {
         _defer();
-        vm.expectRevert(abi.encodeWithSelector(IStakeVault.InsufficientUnaccountedTokens.selector, 0, NET));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.InsufficientUnaccountedTokens.selector, 0, NET));
         policy.onDeferredPayoutFunded(ID);
     }
     function test_FundTwiceRevertsInVault() public {
         _fund();
         usdc.transfer(address(vault), NET);
-        vm.expectRevert(abi.encodeWithSelector(IStakeVault.LockAlreadyExists.selector, ID));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.LockAlreadyExists.selector, ID));
         policy.onDeferredPayoutFunded(ID);
         _status(P.DisputeProtectionIntentStatus.SETTLED);
         assertEq(vault.lockedStake(RECIPIENT), NET);
@@ -445,7 +445,7 @@ contract DisputeProtectionPolicyV2Test is Test {
                 address bad = j == 0 ? address(0) : STRANGER;
                 if (j == 0) vm.expectRevert(P.ZeroAddress.selector);
                 else vm.expectRevert(abi.encodeWithSelector(P.InvalidContract.selector, bad));
-                new DisputeProtectionPolicyV2(address(this), i == 0 ? IStakeVault(bad) : vault, i == 1 ? IDisputeVerifier(bad) : verifier, i == 2 ? INullifierRegistry(bad) : disputes, i == 3 ? IWhitelistPolicy(bad) : whitelist);
+                new DisputeProtectionPolicyV2(address(this), i == 0 ? IStakeVaultV2(bad) : vault, i == 1 ? IDisputeVerifier(bad) : verifier, i == 2 ? INullifierRegistry(bad) : disputes, i == 3 ? IWhitelistPolicy(bad) : whitelist);
             }
         }
     }
@@ -456,13 +456,7 @@ contract DisputeProtectionPolicyV2Test is Test {
         policy.setDisputeVerifier(address(next));
         assertEq(address(policy.disputeVerifier()), address(next));
     }
-    function test_AcceptVaultController() public {
-        vault = new StakeVault(address(this), usdc, address(this), 0);
-        _newPolicy();
-        vault.proposeController(address(policy));
-        policy.acceptVaultController();
-        assertEq(vault.controller(), address(policy));
-    }
+
     function test_BatchReleaseIsAtomic() public {
         _stake(TAKER, 2 * GROSS);
 

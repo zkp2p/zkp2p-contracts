@@ -23,10 +23,7 @@ export type BypassActivationSnapshot = {
   blockHash: string;
   blockTimestamp: string;
   freshVault: Ownership & {
-    controller: string;
-    pendingController: string;
-    pendingControllerValidAt: string;
-    controllerChangeDelay: string;
+    policyAuthorized: boolean;
     stakeToken: string;
   };
   freshPolicy: Ownership & {
@@ -287,10 +284,7 @@ function commonInvariants(
   const a = e.addresses;
   const wanted: Record<string, unknown> = {
     network: e.network,
-    "freshVault.controller": a.freshPolicy,
-    "freshVault.pendingController": ZERO,
-    "freshVault.pendingControllerValidAt": "0",
-    "freshVault.controllerChangeDelay": "0",
+    "freshVault.policyAuthorized": true,
     "freshVault.stakeToken": a.stakeToken,
     "freshPolicy.stakeVault": a.freshVault,
     "freshPolicy.disputeVerifier": a.disputeVerifier,
@@ -682,10 +676,7 @@ export function bypassTrustSurfaceTuple(
 export const BYPASS_GUARD_BOUND_FIELDS = [
   "freshVault.owner",
   "freshVault.pendingOwner",
-  "freshVault.controller",
-  "freshVault.pendingController",
-  "freshVault.pendingControllerValidAt",
-  "freshVault.controllerChangeDelay",
+  "freshVault.policyAuthorized",
   "freshVault.stakeToken",
   "freshPolicy.owner",
   "freshPolicy.pendingOwner",

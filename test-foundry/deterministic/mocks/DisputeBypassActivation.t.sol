@@ -2,6 +2,7 @@
 pragma solidity ^0.8.18;
 
 import {StakeVault} from "contracts/StakeVault.sol";
+import {StakeVaultV2} from "contracts/StakeVaultV2.sol";
 import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
@@ -41,7 +42,7 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
     MultiAttestationVerifier internal attestationVerifier;
     DisputeVerifier internal disputeVerifier;
     StakeVault internal predecessorVault;
-    StakeVault internal freshVault;
+    StakeVaultV2 internal freshVault;
     DisputeProtectionPolicy internal predecessorPolicy;
     DisputeProtectionPolicyV2 internal freshPolicy;
     AddressGroupRegistry internal groupRegistry;
@@ -61,7 +62,7 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         attestationVerifier = new MultiAttestationVerifier(witnesses, 1);
         disputeVerifier = new DisputeVerifier(address(this), nullifierRegistryV2, attestationVerifier);
         predecessorVault = new StakeVault(address(this), token, address(0), CONTROLLER_CHANGE_DELAY);
-        freshVault = new StakeVault(address(this), token, address(0), 0);
+        freshVault = new StakeVaultV2(address(this), token, address(0));
         predecessorPolicy =
             new DisputeProtectionPolicy(address(this), predecessorVault, disputeVerifier, disputeRegistry);
         groupRegistry = new AddressGroupRegistry();
@@ -70,7 +71,7 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
             new DisputeProtectionPolicyV2(address(this), freshVault, disputeVerifier, disputeRegistry, whitelistPolicy);
         predecessorHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, predecessorPolicy);
         predecessorVault.initializeController(address(predecessorPolicy));
-        freshVault.initializeController(address(freshPolicy));
+        freshVault.setController(address(freshPolicy), true);
         disputeRegistry.addWritePermission(address(predecessorPolicy));
         predecessorPolicy.setLifecycleHookAuthorization(address(predecessorHook), true);
         predecessorPolicy.setRiskWindow(METHOD, RISK_WINDOW);
@@ -121,7 +122,7 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         _transfer(predecessorVault, true);
         _transfer(predecessorPolicy, true);
         _transfer(disputeVerifier, true);
-        _transfer(freshVault, false);
+        freshVault.transferOwnership(safe);
         freshPolicy.transferOwnership(safe);
     }
 
@@ -296,23 +297,13 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         );
     }
 
-    function test_GuardRejectsFreshVaultDelay() public {
-        StakeVault delayedVault = new StakeVault(address(this), token, address(0), CONTROLLER_CHANGE_DELAY);
-        DisputeProtectionPolicyV2 delayedPolicy = new DisputeProtectionPolicyV2(
-            address(this), delayedVault, disputeVerifier, disputeRegistry, whitelistPolicy
-        );
-        delayedVault.initializeController(address(delayedPolicy));
-        vm.prank(safe);
-        orchestratorV4.setSettlementPolicy(delayedPolicy);
-        BypassTrustSurface memory surface = _surface();
-        surface.freshVault = address(delayedVault);
-        surface.freshPolicy = address(delayedPolicy);
-        DisputeBypassCutoverGuard guard = _guard(surface, true, true);
+    function test_GuardRejectsFreshVaultControllerDeauthorization() public {
+        DisputeBypassCutoverGuard guard = _guard(_surface(), true, true);
+        freshVault.setController(address(freshPolicy), false);
         _expectReady(
             guard,
             abi.encodeWithSelector(
-                DisputeBypassTrustSurfaceChecks.FreshVaultControllerChangeDelayMismatch.selector,
-                CONTROLLER_CHANGE_DELAY
+                DisputeBypassTrustSurfaceChecks.FreshVaultControllerAuthorizationMismatch.selector, false
             )
         );
     }

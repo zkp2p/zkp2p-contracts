@@ -91,7 +91,11 @@ interface IBypassActivationVerifier is IActivationOwned {
     function attestationVerifier() external view returns (address);
 }
 
-interface IBypassActivationVault is IActivationVault {
+interface IBypassActivationVault is IActivationOwned {
+    /// @notice Returns the pending governance owner.
+    function pendingOwner() external view returns (address);
+    /// @notice Returns whether the policy may create and service its own locks.
+    function isController(address controller) external view returns (bool);
     /// @notice Returns the vault stake token.
     function stakeToken() external view returns (address);
 }
@@ -146,10 +150,7 @@ abstract contract DisputeBypassTrustSurfaceChecks {
     error FreshPolicyDisputeVerifierMismatch(address actual);
     error FreshPolicyDisputeRegistryMismatch(address actual);
     error FreshPolicyStakeVaultMismatch(address actual);
-    error FreshVaultControllerMismatch(address actual);
-    error FreshVaultPendingControllerMismatch(address actual);
-    error FreshVaultPendingControllerValidAtMismatch(uint64 actual);
-    error FreshVaultControllerChangeDelayMismatch(uint64 actual);
+    error FreshVaultControllerAuthorizationMismatch(bool actual);
     error FreshVaultStakeTokenMismatch(address actual);
     error FreshVaultOwnerMismatch(address actual);
     error FreshVaultPendingOwnerMismatch(address actual);
@@ -347,7 +348,7 @@ abstract contract DisputeBypassTrustSurfaceChecks {
 
         bool predecessorAuthorized = predecessor.isLifecycleHookAuthorized(expected.predecessorHook);
         if (!predecessorAuthorized) revert PredecessorPolicyHookAuthorizationMismatch(predecessorAuthorized);
-        IBypassActivationVault predecessorVault = IBypassActivationVault(expected.predecessorVault);
+        IActivationVault predecessorVault = IActivationVault(expected.predecessorVault);
         actualAddress = predecessorVault.owner();
         if (actualAddress != expected.safe) revert PredecessorVaultOwnerMismatch(actualAddress);
         actualAddress = predecessorVault.controller();
@@ -366,16 +367,8 @@ abstract contract DisputeBypassTrustSurfaceChecks {
         if (actualAddress != expected.freshVault) revert FreshPolicyStakeVaultMismatch(actualAddress);
 
         IBypassActivationVault vault = IBypassActivationVault(expected.freshVault);
-        actualAddress = vault.controller();
-        if (actualAddress != expected.freshPolicy) revert FreshVaultControllerMismatch(actualAddress);
-        actualAddress = vault.pendingController();
-        if (actualAddress != address(0)) revert FreshVaultPendingControllerMismatch(actualAddress);
-        uint64 actualUint64 = vault.pendingControllerValidAt();
-        if (actualUint64 != 0) revert FreshVaultPendingControllerValidAtMismatch(actualUint64);
-        actualUint64 = vault.controllerChangeDelay();
-        if (actualUint64 != 0) {
-            revert FreshVaultControllerChangeDelayMismatch(actualUint64);
-        }
+        bool policyAuthorized = vault.isController(expected.freshPolicy);
+        if (!policyAuthorized) revert FreshVaultControllerAuthorizationMismatch(policyAuthorized);
         actualAddress = vault.stakeToken();
         if (actualAddress != expected.stakeToken) revert FreshVaultStakeTokenMismatch(actualAddress);
     }

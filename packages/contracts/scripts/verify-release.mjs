@@ -85,6 +85,7 @@ const sourceAbiArtifacts = {
   IntentLifecycleHookV1:
     "artifacts/contracts/hooks/IntentLifecycleHookV1.sol/IntentLifecycleHookV1.json",
   StakeVault: "artifacts/contracts/StakeVault.sol/StakeVault.json",
+  StakeVaultV2: "artifacts/contracts/StakeVaultV2.sol/StakeVaultV2.json",
 };
 const requiredDisputeContracts = [
   "DisputeNullifierRegistry",

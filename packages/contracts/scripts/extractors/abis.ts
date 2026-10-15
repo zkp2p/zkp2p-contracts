@@ -60,6 +60,7 @@ export const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
   IntentLifecycleHookV1:
     "contracts/hooks/IntentLifecycleHookV1.sol/IntentLifecycleHookV1.json",
   StakeVault: "contracts/StakeVault.sol/StakeVault.json",
+  StakeVaultV2: "contracts/StakeVaultV2.sol/StakeVaultV2.json",
 };
 
 function ensureDir(dir: string) {

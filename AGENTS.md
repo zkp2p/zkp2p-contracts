@@ -159,12 +159,12 @@
     were written before the three `transferOwnership` calls to `MULTI_SIG.base`. The updater is
     `0x81630fb1ab2A7Eab137888b9746b66889f78F091`. All three contracts are Basescan-verified. The lane is immutable
     and pinned in `deployments/immutableDeploymentLanes.ts`.
-- `deploy/45_deploy_bypass_dispute_stack.ts` is retargeted to `StakeVaultV2` (zero controller delay),
+- `deploy/45_deploy_bypass_dispute_stack.ts` is retargeted to `StakeVaultV2` (multiple authorized controllers),
   `DisputeProtectionPolicyV2`, `UnifiedPaymentVerifierV4` and `OrchestratorV4`.
   This cascade/O4 source has not executed on Base or Base staging. The existing tag and
   `ENABLE_{STAGING,BASE}_V3_DISPUTE_BYPASS_STACK_DEPLOYMENT=true` select resumable deploy-only steps.
-  Lane 45 initializes the vault controller, authorizes O4 on the policy, sets O4's settlement policy,
-  and passes the same whitelist to both. It configures O4
+  Lane 45 authorizes the policy with `vault.setController(policy, true)`, authorizes O4 on the policy,
+  sets O4's settlement policy, and passes the same whitelist to both. It configures O4
   with O3's registries, fees and `allowMultipleIntents`. O4 stays unregistered; Base starts vault/policy
   two-step ownership transfers and transfers UPV4/O4 ownership directly to the Safe.
   Only the exact superseded staging UPV4 address `0x3fe38Afdfa85A9E14D9b0ae5A5B2E577A8a71DA7` with its
@@ -513,8 +513,23 @@ collateral based on the token.
 DisputeProtectionPolicyV2 authorizes callers with `setOrchestratorAuthorization` and
 `isOrchestratorAuthorized`, emits `OrchestratorAuthorizationUpdated`, and rejects unauthorized
 callers with `UnauthorizedOrchestrator`, including manual settlements and funding callbacks.
-Governance must retain authorization for an old policy's orchestrator until its snapshots drain,
-and drain active locks before moving vault control unless a successor adopts their state.
+Governance must retain authorization for an old policy's orchestrator until its snapshots drain.
+Authorize a successor alongside its predecessor with `StakeVaultV2.setController(successor, true)`,
+then select it with O4's `setSettlementPolicy`: new intents snapshot the successor for settlement,
+while existing snapshots and locks remain with the predecessor. The predecessor stays authorized
+until its locks drain; complete any policy-mediated payouts before de-authorizing it.
+
+`StakeVaultV2` is a separate contract and source ABI. The August `StakeVault` / `IStakeVault` retain
+main's delayed single-controller behavior. V2 has no proposal, acceptance, initialization-once or
+controller delay. Its constructor accepts an optional initial controller; non-zero controllers must
+have deployed code. Owner-only `setController(address,bool)` takes effect immediately and emits
+`ControllerUpdated`. Each lock stores its creator, exposed by `lockController(lockId)`; only that
+creator while authorized may increase, resize, unlock or resolve it. Removing authorization freezes
+its open locks until re-authorization. Lock events and the `locks` tuple remain unchanged.
+Every authorized controller is governance-trusted: it can lock any owner's free stake and call
+`payOutStake` to pay any owner's free stake only to that owner's own address. Payout authority is
+per owner, independent of which controller released the stake. Staking, claims, withdrawals,
+taker delegation and accounting invariants are unchanged.
 The policy validates settlement in this order:
 
 1. Manual release returns zero.
@@ -554,11 +569,13 @@ Use a cryptographically random salt per intent and keep it off-chain with the co
 to the gating service and attestor.
 
 Lanes 45/46 deploy StakeVaultV2, DisputeProtectionPolicyV2, UPV4 and O4 without a lifecycle hook.
+Lane 45 authorizes the policy on the vault immediately, without an accept-controller step.
 They pass the same whitelist to O4 and the policy, set O4's policy, authorize O4 on the policy,
-and register O4 last. Bypass batch manifest version 7 records policy authorization and both
-whitelist dependencies; older manifests are rejected. Historical O3 predecessor checks remain
+and register O4 last. Bypass batch manifest version 8 records the selected policy's vault-controller
+authorization, O4 authorization and both whitelist dependencies; older manifests are rejected. Historical O3 predecessor checks remain
 separate. The package drops the removed hook ABI. Its source ABI catalog does not export interface ABIs;
-generated TypeChain interface exports include `IIntentSettlementPolicy`.
+generated TypeChain interface exports include `IIntentSettlementPolicy` and `IStakeVaultV2`.
+The source ABI catalog exports `StakeVaultV2` separately from the August `StakeVault`.
 
 The cross-repo attestor smoke is gated by `ATTESTOR_POLICY_SMOKE_ROOT`; its signed payload
 contains word 0 (zero for pay now, the attested window for protected settlements).

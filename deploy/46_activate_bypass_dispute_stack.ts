@@ -533,7 +533,7 @@ export async function readBypassActivationSnapshot(
     owner: await address(c, "owner"),
     writers: await list(c, "getWriters"),
   });
-  const vault = await at("StakeVault", a.freshVault);
+  const vault = await at("StakeVaultV2", a.freshVault);
   const policy = await at("DisputeProtectionPolicyV2", a.freshPolicy);
   const predecessorVault = await at("StakeVault", a.predecessorVault);
   const predecessorPolicy = await at(
@@ -567,10 +567,7 @@ export async function readBypassActivationSnapshot(
     blockTimestamp: decimal(block.timestamp),
     freshVault: {
       ...(await ownership(vault)),
-      controller: await address(vault, "controller"),
-      pendingController: await address(vault, "pendingController"),
-      pendingControllerValidAt: await number(vault, "pendingControllerValidAt"),
-      controllerChangeDelay: await number(vault, "controllerChangeDelay"),
+      policyAuthorized: await bool(vault, "isController", [a.freshPolicy]),
       stakeToken: await address(vault, "stakeToken"),
     },
     freshPolicy: {
@@ -1101,7 +1098,7 @@ export async function prepareBaseCutoverBatch(
     expected.addresses.safe
   );
   const unsigned: Omit<BypassActivationBatchManifest, "manifestSha256"> = {
-    version: 7,
+    version: 8,
     kind: "dispute-bypass-cutover",
     chainId: 8453,
     safe: expected.addresses.safe,

@@ -7,7 +7,7 @@ import {IIntentSettlementPolicy} from "contracts/interfaces/IIntentSettlementPol
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {IDisputeProtectionPolicyV2 as P} from "contracts/interfaces/IDisputeProtectionPolicyV2.sol";
 import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicyV2.sol";
-import {StakeVault} from "contracts/StakeVault.sol";
+import {StakeVaultV2} from "contracts/StakeVaultV2.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
 import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
@@ -16,20 +16,20 @@ import {AttestationVerifierMock} from "../../mocks/AttestationVerifierMock.sol";
 contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
     bytes32 internal constant ID = keccak256("intent");
     uint256 internal constant NET = INTENT_AMOUNT - 1e6;
-    StakeVault internal vault;
+    StakeVaultV2 internal vault;
     DisputeProtectionPolicyV2 internal policy;
     AddressGroupRegistry internal groups;
 
     function setUp() public override {
         super.setUp();
         groups = AddressGroupRegistry(address(whitelist.groupRegistry()));
-        vault = new StakeVault(address(this), token, address(0), 0);
+        vault = new StakeVaultV2(address(this), token, address(0));
         policy = new DisputeProtectionPolicyV2(
             address(this), vault,
             new DisputeVerifier(address(this), new NullifierRegistryV2(new NullifierRegistry()), new AttestationVerifierMock()),
             new NullifierRegistry(), whitelist
         );
-        vault.initializeController(address(policy));
+        vault.setController(address(policy), true);
         policy.setOrchestratorAuthorization(address(this), true);
     }
 

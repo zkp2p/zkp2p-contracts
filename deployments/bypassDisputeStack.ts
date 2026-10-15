@@ -20,7 +20,7 @@ export const BYPASS_DEPLOYMENT_NAMES = [
 ] as const;
 export type BypassDeploymentName = (typeof BYPASS_DEPLOYMENT_NAMES)[number];
 export const BYPASS_ARTIFACT_NAMES: Record<BypassDeploymentName, string> = {
-  StakeVaultV2: "StakeVault",
+  StakeVaultV2: "StakeVaultV2",
   DisputeProtectionPolicyV2: "DisputeProtectionPolicyV2",
   UnifiedPaymentVerifierV4: "UnifiedPaymentVerifierV4",
   OrchestratorV4: "OrchestratorV4",
@@ -132,7 +132,6 @@ export function supersededBypassLifecycleHookRuntimeHash(
     : undefined;
 }
 
-export const BYPASS_STAKE_VAULT_CONTROLLER_CHANGE_DELAY = 0;
 export const BYPASS_PREDECESSOR_DEPLOYMENT_NAMES = {
   vault: "StakeVaultMethodScoped",
   policy: "DisputeProtectionPolicyMethodScopedStaked",
@@ -350,7 +349,7 @@ function deploymentSteps(network: BypassNetwork): string[] {
   return [
     "deploy-vault",
     "deploy-policy",
-    "initialize-controller",
+    "authorize-controller",
     "deploy-verifier",
     ...BYPASS_EXPECTED_LIVE[network].paymentMethods.map(
       (method) => `add-verifier-method:${method}`

@@ -16,7 +16,7 @@ export { canonicalJson } from "./activationBatchManifest";
 export type { ContractIdentity } from "./activationBatchManifest";
 
 export type BypassActivationBatchManifest = {
-  version: 7;
+  version: 8;
   kind: "dispute-bypass-cutover";
   chainId: 8453;
   safe: string;
@@ -80,7 +80,6 @@ function uint(bits: number): Validator {
       throw new Error(`Invalid ${label} range`);
   };
 }
-const uint64 = uint(64);
 const uint256 = uint(256);
 function array(item: Validator): Validator {
   return (value, label) => {
@@ -119,10 +118,7 @@ const snapshot = object({
   blockTimestamp: decimal,
   freshVault: object({
     ...ownership,
-    controller: address,
-    pendingController: address,
-    pendingControllerValidAt: uint64,
-    controllerChangeDelay: uint64,
+    policyAuthorized: boolean,
     stakeToken: address,
   }),
   freshPolicy: object({
@@ -252,7 +248,7 @@ const transaction = object({
 });
 const manifestSchema = object({
   version: (value) => {
-    if (value !== 7) throw new Error("Invalid version");
+    if (value !== 8) throw new Error("Invalid version");
   },
   kind: (value) => {
     if (value !== "dispute-bypass-cutover") throw new Error("Invalid kind");

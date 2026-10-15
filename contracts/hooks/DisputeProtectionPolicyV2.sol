@@ -11,18 +11,20 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.
 import {IDisputeProtectionPolicyV2} from "../interfaces/IDisputeProtectionPolicyV2.sol";
 import {IDisputeVerifier} from "../interfaces/IDisputeVerifier.sol";
 import {INullifierRegistry} from "../interfaces/INullifierRegistry.sol";
-import {IStakeVault} from "../interfaces/IStakeVault.sol";
+import {IStakeVaultV2} from "../interfaces/IStakeVaultV2.sol";
 
 /**
  * @title DisputeProtectionPolicyV2
  * @notice Selects existing stake or deferred payout collateral at settlement.
  * @dev Deferred payouts are stake locks funded by the payout. The token must have no transfer callbacks
- * (canonical USDC only). StakeVault owns collateral accounting; the dedicated dispute registry owns replay state.
+ * (canonical USDC only). StakeVaultV2 owns collateral accounting; the dedicated dispute registry owns replay state.
  * TRUST: Authorized orchestrators must invoke callbacks only for their own validated intents and escrows.
  * Settlement uses the depositor and token captured before escrow unlock; this policy never reads escrow.
  * Intent hashes must embed the originating orchestrator so identities cannot collide. Governance must keep
- * orchestrators authorized on predecessor policies until their snapshotted intents drain, and drain
- * active locks before moving vault control unless the successor explicitly adopts their state.
+ * orchestrators authorized on predecessor policies until their snapshotted intents drain. Authorize a successor
+ * policy alongside its predecessor in StakeVaultV2 and select it on O4 for new intents and settlements. The
+ * predecessor keeps serving its own locks; de-authorize it only after its locks drain. Any authorized vault
+ * controller can lock any owner's free stake and pay out that free stake only to its owner.
  * Protection applies only to stake-token deposits with a nonzero attested window supplied in the signed extension.
  * There are no per-method windows or paused admissions. Whitelisted takers, manual releases and zero
  * windows settle without a record or event. Non-stake tokens return without a record
@@ -37,7 +39,7 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
     /* ============ State Variables ============ */
 
     /// @notice Stake custody and lock accounting controlled by this policy.
-    IStakeVault public immutable override stakeVault;
+    IStakeVaultV2 public immutable override stakeVault;
 
     /// @notice Live deposit/payment-method whitelist used to exempt allowed takers.
     IWhitelistPolicy public immutable whitelistPolicy;
@@ -57,8 +59,8 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
     /* ============ Constructor ============ */
 
     /**
-     * @notice Creates a dispute protection policy over one StakeVault and one dedicated dispute-nullifier registry.
-     * @dev After deployment, authorize this policy as the StakeVault controller and as a writer on the dedicated
+     * @notice Creates a dispute protection policy over one StakeVaultV2 and one dedicated dispute-nullifier registry.
+     * @dev After deployment, authorize this policy as a StakeVaultV2 controller and as a writer on the dedicated
      * dispute nullifier registry before enabling deposits.
      * @param _owner Governance owner for policy and dependency configuration.
      * @param _stakeVault Vault holding and locking taker collateral.
@@ -68,7 +70,7 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
      */
     constructor(
         address _owner,
-        IStakeVault _stakeVault,
+        IStakeVaultV2 _stakeVault,
         IDisputeVerifier _disputeVerifier,
         INullifierRegistry _disputeNullifierRegistry,
         IWhitelistPolicy _whitelistPolicy
@@ -223,8 +225,8 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
         uint256 compensatedAmount = disputeProtectionIntent.lockedAmount;
         disputeProtectionIntent.status = DisputeProtectionIntentStatus.DISPUTED;
 
-        IStakeVault.Claim[] memory claims = new IStakeVault.Claim[](1);
-        claims[0] = IStakeVault.Claim({beneficiary: disputeProtectionIntent.depositor, amount: compensatedAmount});
+        IStakeVaultV2.Claim[] memory claims = new IStakeVaultV2.Claim[](1);
+        claims[0] = IStakeVaultV2.Claim({beneficiary: disputeProtectionIntent.depositor, amount: compensatedAmount});
         stakeVault.resolveLock(_attestation.intentHash, claims);
 
         emit DisputeResolved(
@@ -260,16 +262,6 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
         if (_isAuthorized) _validateDependency(_orchestrator);
         isOrchestratorAuthorizedByAddress[_orchestrator] = _isAuthorized;
         emit OrchestratorAuthorizationUpdated(_orchestrator, _isAuthorized);
-    }
-
-    /**
-     * @notice GOVERNANCE ONLY: Accepts this policy as StakeVault's controller after its handover delay.
-     * @dev Before replacing another policy, governance must drain its active dispute protection intents or execute an
-     * explicit state-and-lock migration. Accepting controller authority alone cannot import the predecessor's intent
-     * state.
-     */
-    function acceptVaultController() external onlyOwner {
-        stakeVault.acceptController();
     }
 
     /**

@@ -10,7 +10,7 @@ import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.so
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DisputeProtectionStackV2Fixture} from "../deterministic/helpers/DisputeProtectionStackV2Fixture.sol";
-import {StakeVault} from "contracts/StakeVault.sol";
+import {StakeVaultV2} from "contracts/StakeVaultV2.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicyV2.sol";
 import {IDisputeProtectionPolicyV2 as P} from "contracts/interfaces/IDisputeProtectionPolicyV2.sol";
@@ -27,20 +27,20 @@ contract DeferredPayoutCascadeFuzzTest is Test {
     address internal constant RECIPIENT = address(0x22);
     address internal constant DEPOSITOR = address(0x33);
     USDCMock internal token;
-    StakeVault internal vault;
+    StakeVaultV2 internal vault;
     DisputeProtectionPolicyV2 internal policy;
     WhitelistPolicy internal whitelist;
 
     function setUp() public {
         token = new USDCMock(1e18, "USDC", "USDC");
-        vault = new StakeVault(address(this), token, address(0), 0);
+        vault = new StakeVaultV2(address(this), token, address(0));
         address[] memory signers = new address[](1);
         signers[0] = vm.addr(0xA11CE);
         DisputeVerifier verifier = new DisputeVerifier(address(this), new NullifierRegistryV2(new NullifierRegistry()), new MultiAttestationVerifier(signers, 1));
         NullifierRegistry disputes = new NullifierRegistry();
         if (address(whitelist) == address(0)) whitelist = new WhitelistPolicy(new AddressGroupRegistry(), new EscrowRegistry(), new OrchestratorRegistry());
         policy = new DisputeProtectionPolicyV2(address(this), vault, verifier, disputes, whitelist);
-        vault.initializeController(address(policy));
+        vault.setController(address(policy), true);
         policy.setOrchestratorAuthorization(address(this), true);
         disputes.addWritePermission(address(policy));
     }

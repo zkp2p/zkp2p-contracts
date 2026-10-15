@@ -9,6 +9,7 @@ import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicy
 import {IDisputeProtectionPolicyV2 as P} from "contracts/interfaces/IDisputeProtectionPolicyV2.sol";
 import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionPolicy.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
+import {StakeVaultV2} from "contracts/StakeVaultV2.sol";
 import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
@@ -19,7 +20,6 @@ import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
 import {MultiAttestationVerifier} from "contracts/unifiedVerifier/MultiAttestationVerifier.sol";
 import {UnifiedPaymentVerifierV3} from "contracts/unifiedVerifier/UnifiedPaymentVerifierV3.sol";
 import {UnifiedPaymentVerifierV4} from "contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol";
-import {IStakeVault} from "contracts/interfaces/IStakeVault.sol";
 import {INullifierRegistryV2} from "contracts/interfaces/INullifierRegistryV2.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
@@ -42,7 +42,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
     UnifiedPaymentVerifierV3 internal predecessor;
     UnifiedPaymentVerifierV4 internal successor;
     StakeVault internal predecessorVault;
-    StakeVault internal freshVault;
+    StakeVaultV2 internal freshVault;
     DisputeProtectionPolicy internal predecessorPolicy;
     DisputeProtectionPolicyV2 internal freshPolicy;
     IntentLifecycleHookV1 internal predecessorHook;
@@ -104,10 +104,10 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
     }
 
     function _deployLane45() private {
-        freshVault = new StakeVault(address(this), token, address(0), 0);
+        freshVault = new StakeVaultV2(address(this), token, address(0));
         freshPolicy =
             new DisputeProtectionPolicyV2(address(this), freshVault, disputeVerifier, disputeNullifiers, whitelist);
-        freshVault.initializeController(address(freshPolicy));
+        freshVault.setController(address(freshPolicy), true);
         successor = new UnifiedPaymentVerifierV4(orchestratorRegistry, nullifiers, witnesses);
         for (uint256 index; index < originalMethods.length; index++) {
             successor.addPaymentMethod(originalMethods[index]);
@@ -146,19 +146,15 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         orchestratorRegistry.addOrchestrator(address(orchestratorV4));
     }
 
-    function test_ZeroDelayVaultInitializesBeforeLiabilities() public {
+    function test_VaultAuthorizesPolicyWithPreexistingStake() public {
         assertEq(predecessorVault.controllerChangeDelay(), 2 days);
-        assertEq(freshVault.controllerChangeDelay(), 0);
-        assertEq(freshVault.controller(), address(freshPolicy));
-        StakeVault uninitialized = new StakeVault(address(this), token, address(0), 0);
-        token.approve(address(uninitialized), INTENT_AMOUNT);
-        uninitialized.depositStake(INTENT_AMOUNT);
-        vm.expectRevert(
-            abi.encodeWithSelector(IStakeVault.ControllerInitializationWithLiabilities.selector, INTENT_AMOUNT, 0)
-        );
-        uninitialized.initializeController(address(freshPolicy));
-        assertEq(uninitialized.controller(), address(0));
-        assertEq(uninitialized.totalStaked(), INTENT_AMOUNT);
+        assertTrue(freshVault.isController(address(freshPolicy)));
+        StakeVaultV2 unauthorized = new StakeVaultV2(address(this), token, address(0));
+        token.approve(address(unauthorized), INTENT_AMOUNT);
+        unauthorized.depositStake(INTENT_AMOUNT);
+        unauthorized.setController(address(freshPolicy), true);
+        assertTrue(unauthorized.isController(address(freshPolicy)));
+        assertEq(unauthorized.totalStaked(), INTENT_AMOUNT);
     }
 
     function test_ActivationPreservesRegistryOrderAndCurrencies() public {
@@ -351,7 +347,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
 
     function test_O4StakeSettlementUsesAttestedWindowAfterCutover() public {
         _activateLane46();
-        _stake(freshVault);
+        _stake(StakeVault(address(freshVault)));
         bytes32 id = _signalO4();
         assertEq(freshVault.lockedStake(taker), 0);
         uint64 window = 3 days;
@@ -521,7 +517,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
             staleVerifier.addPaymentMethod(method);
             paymentVerifierRegistry.addPaymentMethod(method, address(staleVerifier), originalCurrencies[method]);
         }
-        staleVault = new StakeVault(address(this), token, address(0), 0);
+        staleVault = new StakeVault(address(this), token, address(0), 2 days);
         stalePolicy = new DisputeProtectionPolicy(address(this), staleVault, disputeVerifier, disputeNullifiers);
         staleVault.initializeController(address(stalePolicy));
         // The held no-stake policy is absent; V1 models its pending/cancelled lifecycle.

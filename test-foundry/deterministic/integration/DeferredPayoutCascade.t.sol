@@ -452,7 +452,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
     function test_OrchestratorV3FulfilsThroughUPV4() public {
         OrchestratorV3 v3 = new OrchestratorV3(address(this), CHAIN_ID, address(escrowRegistry), address(paymentVerifierRegistry), address(relayerRegistry), PROTOCOL_FEE, protocolFeeRecipient);
         orchestratorRegistry.addOrchestrator(address(v3));
-        StakeVault oldVault = new StakeVault(address(this), token, address(0), 0);
+        StakeVault oldVault = new StakeVault(address(this), token, address(0), 1 days);
         DisputeProtectionPolicy oldPolicy = new DisputeProtectionPolicy(address(this), oldVault, disputeVerifier, disputeNullifiers);
         oldVault.initializeController(address(oldPolicy));
         oldPolicy.setRiskWindow(METHOD, RISK_WINDOW);
@@ -460,7 +460,11 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         oldPolicy.setLifecycleHookAuthorization(address(oldHook), true);
         disputeNullifiers.addWritePermission(address(oldPolicy));
         v3.setLifecycleHook(oldHook);
-        _stake(oldVault, taker, INTENT_AMOUNT);
+        token.transfer(taker, INTENT_AMOUNT);
+        vm.startPrank(taker);
+        token.approve(address(oldVault), INTENT_AMOUNT);
+        oldVault.depositStake(INTENT_AMOUNT);
+        vm.stopPrank();
         bytes32 id = bytes32(uint256(keccak256(abi.encodePacked(address(v3), v3.intentCounter()))) % CIRCOM_PRIME_FIELD);
         vm.prank(taker);
         v3.signalIntent(_v3Params());

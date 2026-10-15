@@ -2,7 +2,7 @@
 pragma solidity ^0.8.18;
 
 import {IIntentSettlementPolicy} from "./IIntentSettlementPolicy.sol";
-import {IStakeVault} from "./IStakeVault.sol";
+import {IStakeVaultV2} from "./IStakeVaultV2.sol";
 
 interface IDisputeProtectionPolicyV2 is IIntentSettlementPolicy {
     enum DisputeProtectionIntentStatus { NONE, SETTLED, RELEASED, DISPUTED }
@@ -51,5 +51,5 @@ interface IDisputeProtectionPolicyV2 is IIntentSettlementPolicy {
     /// @notice Authorizes or revokes an orchestrator's settlement callbacks.
     function setOrchestratorAuthorization(address orchestrator, bool isAuthorized) external;
     /// @notice Returns the collateral vault.
-    function stakeVault() external view returns (IStakeVault);
+    function stakeVault() external view returns (IStakeVaultV2);
 }

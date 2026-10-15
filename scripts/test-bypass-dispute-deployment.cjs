@@ -53,7 +53,6 @@ const {
   BYPASS_DEPLOYMENT_NAMES,
   BYPASS_ARTIFACT_NAMES,
   BYPASS_EXPECTED_LIVE,
-  BYPASS_STAKE_VAULT_CONTROLLER_CHANGE_DELAY,
   expectedPaymentMethodCurrencies,
 } = require("../deployments/bypassDisputeStack.ts");
 const {
@@ -91,7 +90,7 @@ async function withEnvironment(values, run) {
   }
 }
 
-test("lane 45 exports its cascade identity, live flags, and zero controller delay", () => {
+test("lane 45 exports its cascade identity, live flags, and multi-controller vault source", () => {
   assert.deepEqual(BYPASS_DEPLOYMENT_NAMES, [
     "StakeVaultV2",
     "DisputeProtectionPolicyV2",
@@ -99,7 +98,7 @@ test("lane 45 exports its cascade identity, live flags, and zero controller dela
     "OrchestratorV4",
   ]);
   assert.deepEqual(BYPASS_ARTIFACT_NAMES, {
-    StakeVaultV2: "StakeVault",
+    StakeVaultV2: "StakeVaultV2",
     DisputeProtectionPolicyV2: "DisputeProtectionPolicyV2",
     UnifiedPaymentVerifierV4: "UnifiedPaymentVerifierV4",
     OrchestratorV4: "OrchestratorV4",
@@ -113,14 +112,13 @@ test("lane 45 exports its cascade identity, live flags, and zero controller dela
     base_staging: "ENABLE_STAGING_V3_DISPUTE_BYPASS_STACK_DEPLOYMENT",
     base: "ENABLE_BASE_V3_DISPUTE_BYPASS_STACK_DEPLOYMENT",
   });
-  assert.equal(BYPASS_STAKE_VAULT_CONTROLLER_CHANGE_DELAY, 0);
 });
 
 test("lane 45 pins exact live step order and classifies only contiguous prefixes", () => {
   assert.deepEqual(lane45.LANE_45_STEP_KINDS.base_staging, [
     "deploy-vault",
     "deploy-policy",
-    "initialize-controller",
+    "authorize-controller",
     "deploy-verifier",
     "add-verifier-method:zelle",
     "add-verifier-method:monzo",
@@ -143,7 +141,7 @@ test("lane 45 pins exact live step order and classifies only contiguous prefixes
   assert.deepEqual(lane45.LANE_45_STEP_KINDS.base, [
     "deploy-vault",
     "deploy-policy",
-    "initialize-controller",
+    "authorize-controller",
     "deploy-verifier",
     "add-verifier-method:alipay",
     "add-verifier-method:chime",
@@ -571,13 +569,12 @@ function expectedRouting(state, verifier, writers, hook) {
   };
 }
 
-test("local lane 45 recovers a vault with preexisting stake", async () => {
+test("local lane 45 authorizes its policy despite preexisting stake", async () => {
   const state = await localhostFixture();
-  const vault = await state.deployRecord("StakeVaultV2", "StakeVault", [
+  const vault = await state.deployRecord("StakeVaultV2", "StakeVaultV2", [
     state.deployer,
     state.usdc.address,
     ethers.constants.AddressZero,
-    0,
   ]);
   const amount = 100;
   await (await state.usdc.transfer(state.extraWriter.address, amount)).wait();
@@ -590,11 +587,9 @@ test("local lane 45 recovers a vault with preexisting stake", async () => {
   await deployLane45(state.fakeHre);
 
   assert.equal(
-    await vault.controller(),
-    state.records.get("DisputeProtectionPolicyV2").address
+    await vault.isController(state.records.get("DisputeProtectionPolicyV2").address),
+    true
   );
-  assert.equal(await vault.pendingController(), ethers.constants.AddressZero);
-  assert.equal((await vault.pendingControllerValidAt()).toString(), "0");
   assert.equal((await vault.totalStaked()).toString(), totalStaked.toString());
 });
 
@@ -616,7 +611,7 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
     assert.ok(state.records.get(name), name);
   const requiredAbiFunctions = /** @type {Array<[string, string[]]>} */ ([
     ["DisputeProtectionPolicyV2", ["claimFor", "settleIntent", "onDeferredPayoutFunded", "supportsInterface"]],
-    ["StakeVaultV2", ["payOutStake"]],
+    ["StakeVaultV2", ["payOutStake", "isController", "setController", "lockController"]],
     ["OrchestratorV4", ["supportsInterface"]],
     ["UnifiedPaymentVerifierV4", ["addPaymentMethod", "DOMAIN_SEPARATOR"]],
   ]);
@@ -634,7 +629,7 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
   }
   assert.equal(state.deployCalls(), initialCalls + 4);
   const vault = await ethers.getContractAt(
-    "StakeVault",
+    "StakeVaultV2",
     state.records.get("StakeVaultV2").address
   );
   const policy = await ethers.getContractAt(
@@ -646,11 +641,7 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
     "UnifiedPaymentVerifierV4",
     state.records.get("UnifiedPaymentVerifierV4").address
   );
-  assert.equal(
-    BigNumber.from(await vault.controllerChangeDelay()).toString(),
-    "0"
-  );
-  assert.equal(await vault.controller(), policy.address);
+  assert.equal(await vault.isController(policy.address), true);
   assert.equal(await policy.isOrchestratorAuthorized(o4Address), true);
   const checkedMethods = new Set([
     ...ACTIVE_PAYMENT_METHODS,
@@ -1657,12 +1648,8 @@ test("lane 45 live step handlers only configure the fresh stack on Base and stag
       contracts: {
         vault: {
           address: addresses.StakeVaultV2,
-          controller: async () => ethers.constants.AddressZero,
-          pendingController: async () => ethers.constants.AddressZero,
-          pendingControllerValidAt: async () => 0,
-          totalStaked: async () => 0,
-          totalClaimable: async () => 0,
-          initializeController: transaction("vault.initializeController"),
+          isController: async () => false,
+          setController: transaction("vault.setController"),
           transferOwnership: transaction("vault.transferOwnership"),
         },
         policy: {
@@ -1687,6 +1674,15 @@ test("lane 45 live step handlers only configure the fresh stack on Base and stag
     for (const step of lane45.LANE_45_STEP_KINDS[network])
       await lane45.executeLane45Step(hre, network, context, state, step);
     assert.deepEqual([...records.keys()], BYPASS_DEPLOYMENT_NAMES);
+    assert.equal(records.get("StakeVaultV2").contract, "StakeVaultV2");
+    assert.deepEqual(records.get("StakeVaultV2").args, [
+      pins.deployer,
+      pins.stakeToken,
+      ethers.constants.AddressZero,
+    ]);
+    assert.deepEqual(writes.filter(([name]) => name === "vault.setController"), [
+      ["vault.setController", [addresses.DisputeProtectionPolicyV2, true]],
+    ]);
     assert.deepEqual(records.get("DisputeProtectionPolicyV2").args, [
       pins.deployer,
       addresses.StakeVaultV2,

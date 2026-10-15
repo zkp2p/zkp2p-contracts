@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 import {IPaymentVerifierV2} from "contracts/interfaces/IPaymentVerifierV2.sol";
 
 import {OrchestratorV4Fixture} from "./OrchestratorV4Fixture.sol";
-import {StakeVault} from "contracts/StakeVault.sol";
+import {StakeVaultV2} from "contracts/StakeVaultV2.sol";
 import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicyV2.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
@@ -22,7 +22,7 @@ abstract contract DisputeProtectionStackV2Fixture is OrchestratorV4Fixture {
     uint256 internal constant PROTOCOL_FEE = 5e15;
     uint256 internal constant REFERRAL_FEE = 3e15;
     uint256 internal constant NET = INTENT_AMOUNT - INTENT_AMOUNT * PROTOCOL_FEE / 1e18 - INTENT_AMOUNT * REFERRAL_FEE / 1e18;
-    StakeVault internal vault;
+    StakeVaultV2 internal vault;
     DisputeProtectionPolicyV2 internal protection;
     NullifierRegistry internal disputeNullifiers;
     DisputeVerifier internal disputeVerifier;
@@ -44,11 +44,11 @@ abstract contract DisputeProtectionStackV2Fixture is OrchestratorV4Fixture {
         bytes32[] memory currencies = new bytes32[](1);
         currencies[0] = USD;
         paymentVerifierRegistry.addPaymentMethod(METHOD, address(upv), currencies);
-        vault = new StakeVault(address(this), token, address(0), 0);
+        vault = new StakeVaultV2(address(this), token, address(0));
         disputeNullifiers = new NullifierRegistry();
         disputeVerifier = new DisputeVerifier(address(this), nullifiers, witnesses);
         protection = new DisputeProtectionPolicyV2(address(this), vault, disputeVerifier, disputeNullifiers, whitelist);
-        vault.initializeController(address(protection));
+        vault.setController(address(protection), true);
         disputeNullifiers.addWritePermission(address(protection));
         protection.setOrchestratorAuthorization(address(orchestrator), true);
         orchestrator.setSettlementPolicy(protection);
@@ -62,7 +62,7 @@ abstract contract DisputeProtectionStackV2Fixture is OrchestratorV4Fixture {
         params.referralFees[0] = IReferralFee.ReferralFee(referrer, REFERRAL_FEE);
     }
 
-    function _stake(StakeVault target, address owner, uint256 amount) internal {
+    function _stake(StakeVaultV2 target, address owner, uint256 amount) internal {
         token.transfer(owner, amount);
         vm.startPrank(owner);
         token.approve(address(target), amount);
