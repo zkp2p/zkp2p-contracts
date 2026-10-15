@@ -205,6 +205,12 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
 
     /// @notice Pushes a matured deferred payout's available, unclaimed stake only to its recipient.
     /// @dev Only the taker or recipient may call. A partial payout leaves the remainder claimable later.
+    ///     The record tracks claimed amounts, not which stake units came from the payout. The released payout
+    ///     is ordinary free stake of the recipient.
+    ///     If the recipient withdraws that stake directly first, a later claimFor (including one by the taker)
+    ///     pays the unclaimed amount, capped at the recipient's free stake, out of the recipient's other free stake.
+    ///     Funds only ever reach the recipient, so this is accepted. Per-payout accounting in the vault would
+    ///     be needed to prevent it.
     function claimFor(bytes32 _intentHash) external nonReentrant {
         DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_intentHash];
         if (intent.collateralSource != CollateralSource.DEFERRED_PAYOUT) revert NotDeferredPayout(_intentHash);
