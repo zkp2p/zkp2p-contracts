@@ -71,7 +71,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
     }
 
     function testFuzz_AttestedWindowSetsMaturity(uint64 window, bool staked) public {
-        window = uint64(bound(window, 1, 365 days));
+        window = uint64(bound(window, 1, 180 days));
         if (staked) _deposit(TAKER, 100e6);
         bool deferred = policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(token), METHOD, 100e6, 99e6, window, false));
         P.DisputeProtectionIntent memory record = policy.getDisputeProtectionIntent(ID);

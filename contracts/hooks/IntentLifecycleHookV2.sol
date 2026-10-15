@@ -23,7 +23,7 @@ import {IEscrowV2} from "../interfaces/IEscrowV2.sol";
 /// first word, right-padding shorter data; empty and all-zero data are unconditioned. There is no
 /// length or version decoding: the conditions version lives in the attestor-side hash preimage,
 /// and each intent's data is interpreted only by its snapshotted hook.
-/// Non-manual settlements require extension word 0: disputeWindow in seconds, bounded by 365 days.
+/// Non-manual settlements require extension word 0: disputeWindow in seconds, bounded by 180 days.
 /// Zero pays now; nonzero windows select collateral unless the taker is allowed by an enabled
 /// deposit/payment-method whitelist. Relayer registration alone does not bypass collateral.
 /// Whitelist state is read live at settlement: disabling it or removing the taker restores the cascade.
@@ -31,7 +31,7 @@ import {IEscrowV2} from "../interfaces/IEscrowV2.sol";
 /// At signal, only whitelist admission and the conditions gating-service requirement are checked.
 contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
     /// @dev Matches DisputeProtectionPolicyV2.MAX_RISK_WINDOW; validation precedes uint64 narrowing.
-    uint256 private constant MAX_RISK_WINDOW = 365 days;
+    uint256 private constant MAX_RISK_WINDOW = 180 days;
 
     /* ============ State Variables ============ */
 

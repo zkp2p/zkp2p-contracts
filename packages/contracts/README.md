@@ -375,7 +375,7 @@ covered by `dataHash` and witness signatures. UPV4 returns the extension untouch
 Extension fields occupy dedicated 32-byte words: word 0 is `disputeWindow` (uint256 seconds),
 word 1 is the attested `conditionsHash`, and words 2+ are reserved and ignored by the current hook.
 Non-manual HookV2 settlement requires a complete word 0 (`MissingDisputeWindow()` otherwise),
-rejects windows above 365 days with `InvalidDisputeWindow(window)`, and treats zero as pay now.
+rejects windows above 180 days with `InvalidDisputeWindow(window)`, and treats zero as pay now.
 A missing complete word 1 reads as zero. O4 settlement payloads are at least 480 bytes, or 512 bytes
 with conditions. The 448-byte prefix and opaque UPV4 return remain unchanged for O3.
 Attestors must sign seconds in word 0; the former balance-funded boolean no longer has that meaning.
@@ -434,7 +434,7 @@ per-deposit opt-outs. It uses the supplied depositor and token without reading e
 deposit pays now with no record or policy event. Whitelist bypass emits `DisputeProtectionIntentSettled`
 with source `BYPASS` and no storage writes. Otherwise the policy snapshots the attested window, locks gross
 stake (`STAKE`) or defers the net payout (`DEFERRED_PAYOUT`), and sets `releaseEligibleAt = now + window`.
-It rejects windows above its `MAX_RISK_WINDOW` (365 days) as defence in depth. Statuses remain `NONE`,
+It rejects windows above its `MAX_RISK_WINDOW` (180 days) as defence in depth. Statuses remain `NONE`,
 `AWAITING_FUNDING`, `SETTLED`, `RELEASED`, and `DISPUTED`. Collateral ordinals remain `NONE=0`, `BYPASS=1`,
 `STAKE=2`, `DEFERRED_PAYOUT=3`; `MANUAL_RELEASE` is removed. The settled event includes all participant
 identities, method, window, collateral source, stake owner, amounts and eligibility time, with no manual
@@ -485,7 +485,7 @@ requires one for all non-empty data. All per-intent storage belongs to O4; read 
 `getIntent(intentHash)` and interpret it according to that intent's snapshotted hook.
 
 UPV4's signed extension word 0 is `disputeWindow` in seconds; word 1 is the attested conditions hash.
-A non-manual settlement requires word 0 and rejects windows above 365 days. Word 1 defaults to zero
+A non-manual settlement requires word 0 and rejects windows above 180 days. Word 1 defaults to zero
 when incomplete and must equal the hash read from the pre-prune hook data forwarded by O4, including
 when the window is zero. `ConditionsNotAttested(intentHash)` rolls back the entire fulfillment on
 mismatch; empty hook data rejects a nonzero attested hash. Words 2+ are ignored. Manual release ignores

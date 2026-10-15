@@ -29,7 +29,7 @@ interface IIntentLifecycleHookV2 {
 
     /// @notice Validates signed conditions and selects immediate or deferred settlement.
     /// @dev Signed extension words: 0 = disputeWindow (uint256 seconds), 1 = conditionsHash, 2+ = reserved.
-    /// Non-manual settlement requires word 0 and rejects windows above 365 days. Missing word 1 reads as zero.
+    /// Non-manual settlement requires word 0 and rejects windows above 180 days. Missing word 1 reads as zero.
     /// Manual release ignores the extension and skips the policy. Window zero validates conditions then pays now
     /// without calling the policy. Nonzero windows use stake or deferred payouts only for stake-token deposits.
     /// Whitelisted takers bypass collateral; relayer registration alone does not. Whitelisting requires the

@@ -414,9 +414,10 @@ contract DisputeProtectionPolicyV2Test is Test {
         assertEq(vault.lockedStake(TAKER), 0);
     }
     function test_SettlementWindowBoundedAsDefenceInDepth() public {
-        uint64 max = policy.MAX_RISK_WINDOW();
+        uint64 max = 180 days;
         vm.expectRevert(abi.encodeWithSelector(P.InvalidRiskWindow.selector, max + 1));
         policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(usdc), METHOD, GROSS, NET, max + 1, false));
+        assertEq(policy.MAX_RISK_WINDOW(), max);
         assertTrue(policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(usdc), METHOD, GROSS, NET, max, false)));
         assertEq(_record().riskWindow, max);
         assertEq(_record().releaseEligibleAt, block.timestamp + max);

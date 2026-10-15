@@ -428,7 +428,7 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
     }
 
     function test_WindowAboveMaximumRevertsBeforeNarrowing() public {
-        uint256[3] memory windows = [uint256(365 days + 1), uint256(type(uint64).max) + 1, type(uint256).max];
+        uint256[3] memory windows = [uint256(180 days + 1), uint256(type(uint64).max) + 1, type(uint256).max];
         for (uint256 i; i < windows.length; ++i) {
             IIntentLifecycleHookV2.SettlementContext memory context = _context(ID, windows[i]);
             vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV2.InvalidDisputeWindow.selector, windows[i]));
@@ -438,7 +438,7 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
     }
 
     function test_AttestedWindowsSetDeferredMaturity() public {
-        uint256[3] memory windows = [uint256(1), uint256(7 days), uint256(365 days)];
+        uint256[3] memory windows = [uint256(1), uint256(7 days), uint256(180 days)];
         assertEq(policy.MAX_RISK_WINDOW(), windows[2]);
         for (uint256 i; i < windows.length; ++i) {
             bytes32 id = bytes32(i + 1);

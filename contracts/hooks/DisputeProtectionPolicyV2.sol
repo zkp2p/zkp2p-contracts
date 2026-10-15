@@ -29,7 +29,7 @@ import {IStakeVault} from "../interfaces/IStakeVault.sol";
 contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, ReentrancyGuard {
     /* ============ Constants ============ */
 
-    uint64 public constant MAX_RISK_WINDOW = 365 days;
+    uint64 public constant MAX_RISK_WINDOW = 180 days;
 
     /* ============ State Variables ============ */
 
