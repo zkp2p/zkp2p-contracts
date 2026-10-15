@@ -52,7 +52,6 @@ abstract contract DisputeProtectionStackV2Fixture is OrchestratorV4Fixture {
         protection = new DisputeProtectionPolicyV2(address(this), vault, disputeVerifier, disputeNullifiers);
         vault.initializeController(address(protection));
         disputeNullifiers.addWritePermission(address(protection));
-        protection.setRiskWindow(METHOD, RISK_WINDOW);
         whitelist = new WhitelistPolicy(new AddressGroupRegistry(), escrowRegistry, orchestratorRegistry);
         IntentLifecycleHookV2 hook = new IntentLifecycleHookV2(orchestratorRegistry, whitelist, protection);
         protection.setLifecycleHookAuthorization(address(hook), true);
@@ -79,14 +78,14 @@ abstract contract DisputeProtectionStackV2Fixture is OrchestratorV4Fixture {
         return keccak256(abi.encode("payment", id));
     }
 
-    function _proof(bytes32 id, IOrchestratorV4.Intent memory intent, uint256 amount, bool balanceFunded) internal view returns (bytes memory) {
+    function _proof(bytes32 id, IOrchestratorV4.Intent memory intent, uint256 amount, uint256 disputeWindow) internal view returns (bytes memory) {
         bytes memory data = abi.encode(
             IPaymentVerifierV2.PaymentDetails(intent.paymentMethod, PAYEE, amount / 10000, USD, block.timestamp * 1000, _paymentId(id)),
             IPaymentVerifierV2.IntentSnapshot(id, intent.amount, intent.paymentMethod, USD, PAYEE, CONVERSION_RATE, intent.timestamp, 0)
         );
         assertEq(data.length, 448);
-        // Explicit extension word 0; the payment/snapshot payload itself has no balance flag.
-        data = bytes.concat(data, abi.encode(uint256(balanceFunded ? 1 : 0)));
+        // Explicit extension word 0; the payment/snapshot prefix stays unchanged.
+        data = bytes.concat(data, abi.encode(disputeWindow));
         return _signedProof(id, data, amount);
     }
 
@@ -102,7 +101,7 @@ abstract contract DisputeProtectionStackV2Fixture is OrchestratorV4Fixture {
         return abi.encode(UnifiedPaymentVerifierV4.PaymentAttestation(id, amount, dataHash, signatures, data, ""));
     }
 
-    function _settle(bytes32 id, uint256 amount, bool balanceFunded) internal {
-        orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(_proof(id, orchestrator.getIntent(id), amount, balanceFunded), id, ""));
+    function _settle(bytes32 id, uint256 amount, uint256 disputeWindow) internal {
+        orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(_proof(id, orchestrator.getIntent(id), amount, disputeWindow), id, ""));
     }
 }

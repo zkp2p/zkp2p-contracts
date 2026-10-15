@@ -125,8 +125,6 @@ test("lane 45 pins exact live step order and classifies only contiguous prefixes
     "initialize-controller",
     "deploy-hook",
     "authorize-hook",
-    "set-risk-window:paypal",
-    "set-risk-window:venmo",
     "deploy-verifier",
     "add-verifier-method:zelle",
     "add-verifier-method:monzo",
@@ -151,8 +149,6 @@ test("lane 45 pins exact live step order and classifies only contiguous prefixes
     "initialize-controller",
     "deploy-hook",
     "authorize-hook",
-    "set-risk-window:paypal",
-    "set-risk-window:venmo",
     "deploy-verifier",
     "add-verifier-method:alipay",
     "add-verifier-method:chime",
@@ -265,7 +261,7 @@ test("lane 45 pins live catalogs, currencies, risk windows, and governance", () 
   );
   for (const network of /** @type {const} */ (["base", "base_staging"])) {
     const pins = BYPASS_EXPECTED_LIVE[network];
-    assert.deepEqual(pins.riskWindows, { paypal: "1209600", venmo: "1209600" });
+    assert.deepEqual(pins.predecessorRiskWindows, { paypal: "1209600", venmo: "1209600" });
     for (const method of pins.paymentMethods) {
       const currencies = expectedPaymentMethodCurrencies(method);
       assert.ok(currencies.length > 0, method);
@@ -679,11 +675,6 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
       expected,
       `predecessor ${method}`
     );
-    assert.equal(
-      BigNumber.from(await policy.getRiskWindow(hash(method))).toString(),
-      expected,
-      `fresh ${method}`
-    );
   }
   assert.deepEqual(
     await upv4.getPaymentMethods(),
@@ -695,13 +686,27 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
   assert.equal(state.deployCalls(), preparedCalls);
   assert.deepEqual(await routingSnapshot(state), before);
   const policyAbi = state.records.get("DisputeProtectionPolicyV2").abi;
-  for (const name of ["validatePayment", "setIntentNoStake"])
+  for (const name of [
+    "validatePayment", "setIntentNoStake", "paymentMethodRiskWindow",
+    "setRiskWindow", "getRiskWindow", "RiskWindowUpdated",
+    "admissionsPaused", "setAdmissionsPaused", "AdmissionsPausedUpdated",
+  ])
     assert.equal(
       policyAbi.some(
         (/** @type {{name?: string}} */ entry) => entry.name === name
       ),
       false
     );
+  const settleParams = policyAbi.find((/** @type {{name?: string}} */ entry) => entry.name === "onIntentSettled")
+    .inputs[0].components;
+  assert.deepEqual(settleParams.map((/** @type {{name: string, type: string}} */ entry) => [entry.name, entry.type]), [
+    ["intentHash", "bytes32"], ["taker", "address"], ["recipient", "address"],
+    ["depositor", "address"], ["token", "address"], ["paymentMethod", "bytes32"],
+    ["releaseAmount", "uint256"], ["netAmount", "uint256"],
+    ["riskWindow", "uint64"], ["bypass", "bool"],
+  ]);
+  assert.equal(policyAbi.find((/** @type {{name?: string}} */ entry) => entry.name === "DisputeProtectionIntentSettled")
+    .inputs.some((/** @type {{name?: string}} */ entry) => entry.name === "isManualRelease"), false);
   const verificationOutputs = state.records
     .get("UnifiedPaymentVerifierV4")
     .abi.find(
@@ -769,10 +774,13 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
     );
   assert.deepEqual(signalFields(o4Abi), signalFields(v3Abi).filter(([name]) => name !== "postIntentHook"));
   /** @param {any[]} abi */
-  const intentFields = (abi) => new ethers.utils.Interface(abi)
-    .getFunction("getIntent").outputs[0].components.map(
+  const intentFields = (abi) => {
+    const outputs = new ethers.utils.Interface(abi).getFunction("getIntent").outputs;
+    assert.ok(outputs);
+    return outputs[0].components.map(
       (/** @type {{name: string, type: string}} */ entry) => [entry.name, entry.type]
     );
+  };
   assert.deepEqual(intentFields(o4Abi), intentFields(v3Abi).filter(([name]) => name !== "postIntentHook"));
   assert.equal(o4Abi.some(
     (/** @type {{name?: string}} */ entry) => /conditions/i.test(entry.name || "")
@@ -1458,7 +1466,8 @@ test("staging lane 45 sequential replacement", async (t) => {
   };
   for (const name of BYPASS_DEPLOYMENT_NAMES.slice(0, 3))
     s.records.set(name, { address: `fresh-${name}` });
-  for (const step of lane45.LANE_45_STEP_KINDS.base_staging.slice(8)) {
+  const steps = lane45.LANE_45_STEP_KINDS.base_staging;
+  for (const step of steps.slice(steps.indexOf("deploy-verifier") + 1)) {
     await lane45.executeLane45Step(s.hre, "base_staging", context, state, step);
     await shared();
   }
@@ -1645,12 +1654,6 @@ test("lane 45 live step handlers only configure the fresh stack on Base and stag
       relayerRegistry: expected.relayerRegistry,
       protocolFee: "0",
       protocolFeeRecipient: expected.protocolFeeRecipient,
-      riskWindows: Object.fromEntries(
-        Object.entries(pins.riskWindows).map(([name, value]) => [
-          hash(name),
-          value,
-        ])
-      ),
     };
     /** @type {any} */
     const state = {
@@ -1670,7 +1673,6 @@ test("lane 45 live step handlers only configure the fresh stack on Base and stag
           setLifecycleHookAuthorization: transaction(
             "policy.setLifecycleHookAuthorization"
           ),
-          setRiskWindow: transaction("policy.setRiskWindow"),
           transferOwnership: transaction("policy.transferOwnership"),
         },
         hook: { address: addresses.IntentLifecycleHookV2 },

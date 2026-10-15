@@ -29,7 +29,7 @@ contract DeferredPayoutDepositClosureTest is DisputeProtectionStackV2Fixture {
     function test_FailedSettlementPreservesFinalDepositAndRollsBackPayment() public {
         bytes32 id = _signalFinalDeposit(DUST);
         UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(
-            _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, false),
+            _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, RISK_WINDOW),
             (UnifiedPaymentVerifierV4.PaymentAttestation)
         );
         bytes memory invalidProof = _signedProof(
@@ -60,7 +60,7 @@ contract DeferredPayoutDepositClosureTest is DisputeProtectionStackV2Fixture {
         assertEq(nullifiers.nullifierByIntentHash(id), bytes32(0));
         assertEq(nullifiers.intentHashByNullifier(keccak256(abi.encodePacked(METHOD, _paymentId(id)))), bytes32(0));
 
-        _settle(id, INTENT_AMOUNT, false);
+        _settle(id, INTENT_AMOUNT, RISK_WINDOW);
         _assertClosedDeposit(id);
         assertEq(token.balanceOf(address(vault)), NET);
     }
@@ -79,10 +79,16 @@ contract DeferredPayoutDepositClosureTest is DisputeProtectionStackV2Fixture {
     function _fulfilFinalDeposit(uint256 dust) internal {
         bytes32 id = _signalFinalDeposit(dust);
         uint256 dustRecipientBalance = token.balanceOf(address(this));
-        _settle(id, INTENT_AMOUNT, false);
+        _settle(id, INTENT_AMOUNT, RISK_WINDOW);
 
         _assertClosedDeposit(id);
         P.DisputeProtectionIntent memory record = protection.getDisputeProtectionIntent(id);
+        assertEq(record.depositor, depositor);
+        assertEq(record.taker, taker);
+        assertEq(record.recipient, other);
+        assertEq(record.paymentMethod, METHOD);
+        assertEq(record.riskWindow, RISK_WINDOW);
+        assertEq(record.releaseAmount, INTENT_AMOUNT);
         assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.SETTLED));
         assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.DEFERRED_PAYOUT));
         assertEq(record.stakeOwner, other);
@@ -104,10 +110,10 @@ contract DeferredPayoutDepositClosureTest is DisputeProtectionStackV2Fixture {
 
         _assertClosedDeposit(id);
         P.DisputeProtectionIntent memory record = protection.getDisputeProtectionIntent(id);
-        assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.RELEASED));
-        assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.MANUAL_RELEASE));
+        assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.NONE));
+        assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.NONE));
         assertEq(record.lockedAmount, 0);
-        assertEq(record.releaseEligibleAt, block.timestamp);
+        assertEq(record.releaseEligibleAt, 0);
         assertEq(vault.totalAccounted(), 0);
         assertEq(token.balanceOf(address(vault)), 0);
         assertEq(token.balanceOf(other), NET);
@@ -121,13 +127,6 @@ contract DeferredPayoutDepositClosureTest is DisputeProtectionStackV2Fixture {
         assertEq(escrow.getDepositIntent(depositId, id).amount, 0);
         assertEq(orchestrator.getIntent(id).owner, address(0));
         assertEq(address(orchestrator.getIntentLifecycleHook(id)), address(0));
-        P.DisputeProtectionIntent memory record = protection.getDisputeProtectionIntent(id);
-        assertEq(record.depositor, depositor);
-        assertEq(record.taker, taker);
-        assertEq(record.recipient, other);
-        assertEq(record.paymentMethod, METHOD);
-        assertEq(record.riskWindow, RISK_WINDOW);
-        assertEq(record.releaseAmount, INTENT_AMOUNT);
         assertEq(token.balanceOf(address(escrow)), 0);
         assertEq(token.balanceOf(address(orchestrator)), 0);
         assertEq(token.balanceOf(protocolFeeRecipient), INTENT_AMOUNT * PROTOCOL_FEE / 1e18);

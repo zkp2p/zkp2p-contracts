@@ -50,13 +50,7 @@ import {
 } from "../deployments/staleBypassIntents";
 export { assertStaleBypassIntentsDrained } from "../deployments/staleBypassIntents";
 import { waitForDeploymentDelay } from "../deployments/helpers";
-import {
-  DISPUTABLE_PAYMENT_METHODS,
-  DISPUTE_RISK_WINDOW,
-  MULTI_SIG,
-  RETIRED_DISPUTABLE_PAYMENT_METHODS,
-  USDC,
-} from "../deployments/parameters";
+import { MULTI_SIG, USDC } from "../deployments/parameters";
 import { installSafeArtifactPair } from "../deployments/safeArtifacts";
 import { canonicalTransactionHash } from "../deployments/safeBatchManifest";
 import {
@@ -401,16 +395,6 @@ export async function resolveBypassActivationContext(
         paymentMethods.length,
     "Invalid activation payment catalog"
   );
-  const riskWindows: Record<string, string> = Object.fromEntries(
-    paymentMethods.map(({ paymentMethod }) => [paymentMethod, "0"])
-  );
-  for (const name of RETIRED_DISPUTABLE_PAYMENT_METHODS)
-    riskWindows[lower(paymentMethodHash(name))] = "0";
-  for (const name of DISPUTABLE_PAYMENT_METHODS) {
-    riskWindows[lower(paymentMethodHash(name))] = live
-      ? live.riskWindows[name] || "0"
-      : decimal(DISPUTE_RISK_WINDOW[network]);
-  }
   const expected: BypassExpectedActivationState = {
     network,
     chainId: String(
@@ -423,7 +407,6 @@ export async function resolveBypassActivationContext(
     deployer,
     addresses,
     paymentMethods,
-    riskWindows,
     protocolFee: live
       ? "0"
       : decimal(await read<BigNumber>(orchestrator, "protocolFee", [], block)),
@@ -578,16 +561,6 @@ export async function readBypassActivationSnapshot(
     a.attestationVerifier
   );
   const disputeVerifier = await at("DisputeVerifier", a.disputeVerifier);
-  const riskWindows = Object.fromEntries(
-    await mapWithConcurrency(
-      Object.keys(context.expected.riskWindows),
-      readConcurrency(),
-      async (method) => [
-        lower(method),
-        await number(policy, "getRiskWindow", [method]),
-      ]
-    )
-  );
   return {
     network,
     blockNumber: decimal(block.number),
@@ -603,7 +576,6 @@ export async function readBypassActivationSnapshot(
     },
     freshPolicy: {
       ...(await ownership(policy)),
-      admissionsPaused: await bool(policy, "admissionsPaused"),
       stakeVault: await address(policy, "stakeVault"),
       disputeVerifier: await address(policy, "disputeVerifier"),
       disputeNullifierRegistry: await address(
@@ -615,7 +587,6 @@ export async function readBypassActivationSnapshot(
         context.records.freshPolicy,
         block.number
       ),
-      riskWindows,
     },
     freshHook: await hook(await at("IntentLifecycleHookV2", a.freshHook)),
     verifier: {
@@ -1130,7 +1101,7 @@ export async function prepareBaseCutoverBatch(
     expected.addresses.safe
   );
   const unsigned: Omit<BypassActivationBatchManifest, "manifestSha256"> = {
-    version: 5,
+    version: 6,
     kind: "dispute-bypass-cutover",
     chainId: 8453,
     safe: expected.addresses.safe,

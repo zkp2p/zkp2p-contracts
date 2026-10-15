@@ -45,7 +45,6 @@ import {
 import { assertPaymentBindingReady } from "./31_deploy_v3_payment_binding_stack";
 import {
   EXPECTED_LIVE,
-  EXPECTED_POLICY_GOVERNANCE_EVENTS,
   type FreshStackEvent,
   assertOrchestratorGovernanceState,
   decodeFreshStackLogs,
@@ -64,6 +63,13 @@ export const LIVE_FLAGS: Record<BypassNetwork, string> = {
   base_staging: "ENABLE_STAGING_V3_DISPUTE_BYPASS_STACK_DEPLOYMENT",
   base: "ENABLE_BASE_V3_DISPUTE_BYPASS_STACK_DEPLOYMENT",
 };
+
+export const BYPASS_POLICY_GOVERNANCE_EVENTS = [
+  "DisputeVerifierUpdated",
+  "LifecycleHookAuthorizationUpdated",
+  "OwnershipTransferStarted",
+  "OwnershipTransferred",
+] as const;
 
 export const BYPASS_POLICY_LIFECYCLE_EVENTS = [
   "DisputeProtectionIntentSettled",
@@ -88,7 +94,7 @@ export function classifyBypassPolicyActivity(
     );
   }
   for (const event of events.filter((event) => !lifecycleEvents.includes(event))) {
-    if (!EXPECTED_POLICY_GOVERNANCE_EVENTS.some((name) => name === event.name)) {
+    if (!BYPASS_POLICY_GOVERNANCE_EVENTS.some((name) => name === event.name)) {
       throw new Error(
         `DisputeProtectionPolicyV2 emitted an unclassified event: ${event.name} in ${event.transactionHash}`
       );
@@ -597,7 +603,7 @@ export async function assertLiveSharedState(
   ])) {
     requireState(
       BigNumber.from(await policy.getRiskWindow(paymentMethodHash(method))).eq(
-        pins.riskWindows[method] || "0"
+        pins.predecessorRiskWindows[method] || "0"
       ),
       `Predecessor risk window drifted for ${method}`
     );
@@ -683,7 +689,6 @@ type StackContext = {
   nullifierRegistryV2: string;
   attestationVerifier: string;
   paymentMethods: string[];
-  riskWindows: Record<string, string>;
   transferOwnership: boolean;
   chainId: number;
   escrowRegistry: string;
@@ -736,17 +741,6 @@ async function liveContext(
     nullifierRegistryV2: expected.nullifierRegistryV2,
     attestationVerifier: expected.attestationVerifier,
     paymentMethods: pins.paymentMethods.map(paymentMethodHash),
-    riskWindows: Object.fromEntries(
-      [
-        ...new Set([
-          ...pins.paymentMethods,
-          ...RETIRED_DISPUTABLE_PAYMENT_METHODS,
-        ]),
-      ].map((method) => [
-        paymentMethodHash(method),
-        pins.riskWindows[method] || "0",
-      ])
-    ),
     transferOwnership: network === "base",
     chainId: pins.chainId,
     escrowRegistry: expected.escrowRegistry,
@@ -879,8 +873,7 @@ async function readFreshState(
         sameAddress(
           await policy.disputeNullifierRegistry(),
           context.disputeNullifierRegistry
-        ) &&
-        !(await policy.admissionsPaused()),
+        ),
       "Fresh bypass policy dependency state drifted"
     );
     completed["authorize-hook"] = await assertOnlySuccessorHookAuthorization(
@@ -893,14 +886,6 @@ async function readFreshState(
       Boolean(hookRecord) || !completed["authorize-hook"],
       "Fresh policy authorized a hook before deployment"
     );
-    for (const [method, window] of Object.entries(context.riskWindows)) {
-      const actual = BigNumber.from(await policy.getRiskWindow(method));
-      requireState(
-        actual.isZero() || actual.eq(window),
-        `Fresh bypass risk window drifted for ${method}`
-      );
-      completed[`set-risk-window:${method}`] = actual.eq(window);
-    }
     if (context.transferOwnership) {
       completed["transfer-policy-owner"] = ownershipStepState(
         await policy.owner(),
@@ -1048,10 +1033,7 @@ export async function readLane45State(
   }
   const state = await readFreshState(hre, await liveContext(hre, network));
   const completed = LANE_45_STEP_KINDS[network].map((step) => {
-    if (
-      step.startsWith("set-risk-window:") ||
-      step.startsWith("add-verifier-method:")
-    ) {
+    if (step.startsWith("add-verifier-method:")) {
       const [kind, method] = step.split(":");
       return state.completed[`${kind}:${paymentMethodHash(method)}`] || false;
     }
@@ -1167,14 +1149,6 @@ export async function executeLane45Step(
         true
       )
     ).wait();
-  } else if (step.startsWith("set-risk-window:")) {
-    const method = paymentMethodHash(step.slice("set-risk-window:".length));
-    await (
-      await state.contracts.policy!.setRiskWindow(
-        method,
-        context.riskWindows[method]
-      )
-    ).wait();
   } else if (step === "deploy-verifier") {
     await deployLane45Verifier(hre, network, context.deployer, [
       context.orchestratorRegistry,
@@ -1277,7 +1251,6 @@ async function localContext(
       methods.length,
     "Local payment method catalog contains duplicates"
   );
-  const windows: Record<string, string> = {};
   const protectedMethods = DISPUTABLE_PAYMENT_METHODS.map(paymentMethodHash);
   const checkedMethods = new Set([
     ...methods,
@@ -1294,7 +1267,6 @@ async function localContext(
       window.eq(expected),
       `Local predecessor risk window mismatch for ${method}`
     );
-    windows[method] = window.toString();
   }
   const orchestratorV3 = await hre.ethers.getContractAt(
     "OrchestratorV3",
@@ -1323,7 +1295,6 @@ async function localContext(
       (await hre.deployments.get("SimpleAttestationVerifier"))
     ).address,
     paymentMethods: methods,
-    riskWindows: windows,
     transferOwnership: false,
     chainId: (await hre.ethers.provider.getNetwork()).chainId,
     escrowRegistry: await orchestratorV3.escrowRegistry(),
@@ -1343,9 +1314,6 @@ function localSteps(context: StackContext): string[] {
     "initialize-controller",
     "deploy-hook",
     "authorize-hook",
-    ...DISPUTABLE_PAYMENT_METHODS.map(
-      (method) => `set-risk-window:${paymentMethodHash(method)}`
-    ),
     "deploy-verifier",
     ...context.paymentMethods.map((method) => `add-verifier-method:${method}`),
     "deploy-orchestrator",
@@ -1358,13 +1326,7 @@ async function deployLocalBypassStack(
   hre: HardhatRuntimeEnvironment
 ): Promise<void> {
   const context = await localContext(hre);
-  const {
-    network,
-    deployer,
-    paymentMethods: methods,
-    riskWindows: windows,
-  } = context;
-  const protectedMethods = DISPUTABLE_PAYMENT_METHODS.map(paymentMethodHash);
+  const { network, deployer, paymentMethods: methods } = context;
   const deploy = async (
     name: BypassDeploymentName,
     args: unknown[]
@@ -1420,15 +1382,6 @@ async function deployLocalBypassStack(
       )
     ).wait();
     await waitForDeploymentDelay(hre);
-  }
-  for (const method of protectedMethods) {
-    state = await readFreshState(hre, context);
-    if (!state.completed[`set-risk-window:${method}`]) {
-      await (
-        await state.contracts.policy!.setRiskWindow(method, windows[method])
-      ).wait();
-      await waitForDeploymentDelay(hre);
-    }
   }
   await deploy("UnifiedPaymentVerifierV4", [
     context.orchestratorRegistry,

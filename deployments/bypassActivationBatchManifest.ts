@@ -16,7 +16,7 @@ export { canonicalJson } from "./activationBatchManifest";
 export type { ContractIdentity } from "./activationBatchManifest";
 
 export type BypassActivationBatchManifest = {
-  version: 5;
+  version: 6;
   kind: "dispute-bypass-cutover";
   chainId: 8453;
   safe: string;
@@ -106,14 +106,6 @@ const hook = object({
   whitelistPolicy: address,
   disputeProtectionPolicy: address,
 });
-const riskWindows: Validator = (value, label) => {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    throw new Error(`Invalid ${label}`);
-  Object.entries(value).forEach(([method, window]) => {
-    hash(method, `${label} key`);
-    uint64(window, `${label}.${method}`);
-  });
-};
 const route = object({
   paymentMethod: hash,
   verifier: address,
@@ -135,12 +127,10 @@ const snapshot = object({
   }),
   freshPolicy: object({
     ...ownership,
-    admissionsPaused: boolean,
     stakeVault: address,
     disputeVerifier: address,
     disputeNullifierRegistry: address,
     authorizedHooks: addresses,
-    riskWindows,
   }),
   freshHook: hook,
   verifier: object({
@@ -241,8 +231,6 @@ const trustSurface = object({
   paymentMethods: hashes,
   currencies: hashes,
   currencyCounts: array(uint256),
-  riskWindowMethods: hashes,
-  riskWindows: array(uint64),
 });
 const identity = object({
   address,
@@ -264,7 +252,7 @@ const transaction = object({
 });
 const manifestSchema = object({
   version: (value) => {
-    if (value !== 5) throw new Error("Invalid version");
+    if (value !== 6) throw new Error("Invalid version");
   },
   kind: (value) => {
     if (value !== "dispute-bypass-cutover") throw new Error("Invalid kind");
@@ -290,10 +278,7 @@ const manifestSchema = object({
   manifestSha256: digest,
 });
 function assertSurfaceLengths(surface: BypassTrustSurfaceInput): void {
-  if (
-    surface.paymentMethods.length !== surface.currencyCounts.length ||
-    surface.riskWindowMethods.length !== surface.riskWindows.length
-  ) {
+  if (surface.paymentMethods.length !== surface.currencyCounts.length) {
     throw new Error("Invalid trustSurface array lengths");
   }
   const count = surface.currencyCounts.reduce(

@@ -5,7 +5,6 @@ import {
   assertCanonicalDeployment,
   assertDeploymentMatchesChain,
 } from "./canonicalDeployment";
-import { DISPUTABLE_PAYMENT_METHODS } from "./parameters";
 import { RATIFIED_PAYMENT_METHOD_CURRENCIES } from "../deploy/31_deploy_v3_payment_binding_stack";
 
 export type BypassNetwork = "base" | "base_staging";
@@ -163,7 +162,7 @@ export type BypassLivePins = {
   predecessorPolicy: ContractPin;
   predecessorHook: ContractPin;
   paymentMethods: string[];
-  riskWindows: Record<string, string>;
+  predecessorRiskWindows: Record<string, string>;
   predecessorControllerChangeDelay: string;
   allowedWhitelistPolicyOwners: string[];
 };
@@ -242,7 +241,7 @@ export const BYPASS_EXPECTED_LIVE: Record<BypassNetwork, BypassLivePins> = {
       "xmoney",
       "monobank",
     ],
-    riskWindows: { paypal: "1209600", venmo: "1209600" },
+    predecessorRiskWindows: { paypal: "1209600", venmo: "1209600" },
     predecessorControllerChangeDelay: "172800",
     allowedWhitelistPolicyOwners: [
       "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
@@ -321,7 +320,7 @@ export const BYPASS_EXPECTED_LIVE: Record<BypassNetwork, BypassLivePins> = {
       "upi",
       "xmoney",
     ],
-    riskWindows: { paypal: "1209600", venmo: "1209600" },
+    predecessorRiskWindows: { paypal: "1209600", venmo: "1209600" },
     predecessorControllerChangeDelay: "172800",
     allowedWhitelistPolicyOwners: [
       "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
@@ -350,29 +349,12 @@ export function paymentMethodHash(name: string): string {
 }
 
 function deploymentSteps(network: BypassNetwork): string[] {
-  const riskWindowMethods = Object.keys(
-    BYPASS_EXPECTED_LIVE[network].riskWindows
-  );
-  if (
-    riskWindowMethods.length !== DISPUTABLE_PAYMENT_METHODS.length ||
-    !DISPUTABLE_PAYMENT_METHODS.every((method) =>
-      riskWindowMethods.includes(method)
-    )
-  ) {
-    throw new Error(`Pinned risk window methods mismatch for ${network}`);
-  }
-  riskWindowMethods.sort(
-    (a, b) =>
-      DISPUTABLE_PAYMENT_METHODS.indexOf(a) -
-      DISPUTABLE_PAYMENT_METHODS.indexOf(b)
-  );
   return [
     "deploy-vault",
     "deploy-policy",
     "initialize-controller",
     "deploy-hook",
     "authorize-hook",
-    ...riskWindowMethods.map((method) => `set-risk-window:${method}`),
     "deploy-verifier",
     ...BYPASS_EXPECTED_LIVE[network].paymentMethods.map(
       (method) => `add-verifier-method:${method}`

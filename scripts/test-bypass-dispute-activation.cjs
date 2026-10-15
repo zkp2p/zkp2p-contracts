@@ -144,12 +144,6 @@ function expected(network = "base") {
         currencies: [hash(206), hash(205), hash(207)],
       },
     ],
-    riskWindows: {
-      [hash(103)]: "86400",
-      [hash(101)]: "172800",
-      [hash(102)]: "0",
-      [hash(99)]: "0",
-    },
   };
 }
 
@@ -179,12 +173,10 @@ function snapshot(wanted, k = 0) {
     },
     freshPolicy: {
       ...ownership,
-      admissionsPaused: false,
       stakeVault: a.freshVault,
       disputeVerifier: a.disputeVerifier,
       disputeNullifierRegistry: a.disputeRegistry,
       authorizedHooks: [a.freshHook],
-      riskWindows: { ...wanted.riskWindows },
     },
     freshHook: {
       orchestratorRegistry: a.orchestratorRegistry,
@@ -681,13 +673,6 @@ test("bypass trust surface round-trips guard and postcondition constructor ABIs"
     hash(207),
   ]);
   assert.deepEqual(surface.currencyCounts, ["2", "1", "3"]);
-  assert.deepEqual(surface.riskWindowMethods, [
-    hash(103),
-    hash(101),
-    hash(102),
-    hash(99),
-  ]);
-  assert.deepEqual(surface.riskWindows, ["86400", "172800", "0", "0"]);
   const tuple = model.bypassTrustSurfaceTuple(surface);
   for (const [
     artifact,
@@ -776,7 +761,7 @@ function manifest() {
   });
   /** @type {Omit<Manifest, "manifestSha256">} */
   const unsigned = {
-    version: 5,
+    version: 6,
     kind: "dispute-bypass-cutover",
     chainId: 8453,
     safe: wanted.addresses.safe,
@@ -799,7 +784,7 @@ function manifest() {
   };
 }
 
-test("unsigned v5 bypass manifests validate and reject v4 and tampering", () => {
+test("unsigned v6 bypass manifests validate and reject v5 and tampering", () => {
   const valid = manifest();
   assert.deepEqual(
     deriveBypassConstructorArgs(valid, "guard"),
@@ -809,7 +794,7 @@ test("unsigned v5 bypass manifests validate and reject v4 and tampering", () => 
     deriveBypassConstructorArgs(valid, "postcondition"),
     valid.postcondition.constructorArgs
   );
-  const oldVersion = { ...valid, version: 4 };
+  const oldVersion = { ...valid, version: 5 };
   const { manifestSha256: oldDigest, ...oldUnsigned } = oldVersion;
   oldVersion.manifestSha256 = manifests.computeBypassManifestSha256(
     /** @type {any} */ (oldUnsigned)
@@ -824,7 +809,7 @@ test("unsigned v5 bypass manifests validate and reject v4 and tampering", () => 
   /** @type {Array<(value: Manifest) => void>} */
   const mutations = [
     (m) => {
-      Object.assign(m, { version: 4 });
+      Object.assign(m, { version: 5 });
     },
     (m) => {
       Object.assign(m, { chainId: 31337 });
@@ -837,6 +822,12 @@ test("unsigned v5 bypass manifests validate and reject v4 and tampering", () => 
     },
     (m) => {
       m.proofSnapshot.orchestrator.protocolFee = "1";
+    },
+    (m) => {
+      Object.assign(m.proofSnapshot.freshPolicy, { admissionsPaused: false });
+    },
+    (m) => {
+      Object.assign(m.trustSurface, { riskWindowMethods: [], riskWindows: [] });
     },
     (m) => {
       Object.assign(m, { extra: true });
@@ -1007,7 +998,6 @@ test("lane 46 classifies bypass policy activity across O4 registration", () => {
       transactionHash: hash(1),
     });
   const configuration = [
-    "RiskWindowUpdated",
     "LifecycleHookAuthorizationUpdated",
     "OwnershipTransferStarted",
   ].map(event);

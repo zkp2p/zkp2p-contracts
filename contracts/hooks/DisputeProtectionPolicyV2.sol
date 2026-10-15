@@ -20,10 +20,11 @@ import {IStakeVault} from "../interfaces/IStakeVault.sol";
  * Intent hashes must embed the originating orchestrator so identities cannot collide. Governance must keep
  * predecessor hooks authorized and orchestrators registered until their snapshotted intents drain, and drain
  * active locks before moving vault control unless the successor explicitly adopts their state.
- * Protection applies to every settlement whose payment method has a nonzero risk window.
- * The hook supplies bypass for balance-funded payments or takers allowed by an enabled deposit/payment-method
- * whitelist; these settle without collateral. Relayer registration alone does not qualify. Manual release
- * takes precedence and retains its own collateral source.
+ * Protection applies only to stake-token deposits with a nonzero attested window supplied by the hook.
+ * There are no per-method windows or paused admissions. The hook supplies live whitelist bypass, which
+ * emits a settlement event without writing storage. Non-stake tokens return without a record or event.
+ * Relayer registration alone does not qualify for bypass. Manual releases never reach this policy.
+ * Protected settlements lock gross stake or defer the net payout until now plus the attested window.
  */
 contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, ReentrancyGuard {
     /* ============ Constants ============ */
@@ -41,14 +42,8 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
     /// @notice Verifier used to validate signed dispute evidence.
     IDisputeVerifier public disputeVerifier;
 
-    /// @notice Whether new dispute-protection admissions are paused. Terminal transitions remain available.
-    bool public override admissionsPaused;
-
     /// @dev Lifecycle-hook authorization keyed by lifecycle hook address.
     mapping(address => bool) internal isLifecycleHookAuthorizedByHook;
-
-    /// @dev Minimum collateral lock window for each payment method.
-    mapping(bytes32 => uint64) internal paymentMethodRiskWindow;
 
     /// @dev Dispute protection lifecycle state keyed by globally unique intent hash.
     mapping(bytes32 => DisputeProtectionIntent) internal disputeProtectionIntentByIntentHash;
@@ -94,55 +89,57 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
 
     /// @inheritdoc IDisputeProtectionPolicyV2
     function onIntentSettled(SettleParams calldata _params)
-        external override onlyLifecycleHook nonReentrant returns (bool deferred)
+        external override onlyLifecycleHook returns (bool deferred)
     {
-        uint64 riskWindow = paymentMethodRiskWindow[_params.paymentMethod];
+        if (_params.token != address(stakeVault.stakeToken())) return false;
+        uint64 riskWindow = _params.riskWindow;
+        if (riskWindow > MAX_RISK_WINDOW) revert InvalidRiskWindow(riskWindow);
         if (riskWindow == 0) return false;
-        DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_params.intentHash];
-        if (intent.status != DisputeProtectionIntentStatus.NONE) {
+        if (disputeProtectionIntentByIntentHash[_params.intentHash].status != DisputeProtectionIntentStatus.NONE) {
             revert DisputeProtectionIntentAlreadyExists(_params.intentHash);
-        }
-        address expectedToken = address(stakeVault.stakeToken());
-        if (_params.token != expectedToken) {
-            revert IntentTokenMismatch(expectedToken, _params.token);
         }
         if (_params.releaseAmount == 0 || _params.netAmount == 0) {
             revert InvalidSettlementAmount(_params.releaseAmount, _params.netAmount);
         }
+        if (_params.bypass) {
+            emit DisputeProtectionIntentSettled(
+                _params.intentHash, _params.taker, _params.depositor, _params.recipient, _params.paymentMethod,
+                riskWindow, CollateralSource.BYPASS, address(0), _params.releaseAmount, 0, _currentTimestamp()
+            );
+            return false;
+        }
+        return _settleProtectedIntent(_params);
+    }
+
+    /// @dev Apply the reentrancy guard only where state changes; bypass never writes policy storage.
+    function _settleProtectedIntent(SettleParams calldata _params) internal nonReentrant returns (bool deferred) {
+        DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_params.intentHash];
         intent.taker = _params.taker;
         intent.recipient = _params.recipient;
         intent.depositor = _params.depositor;
         intent.paymentMethod = _params.paymentMethod;
-        intent.riskWindow = riskWindow;
+        intent.riskWindow = _params.riskWindow;
         intent.releaseAmount = _params.releaseAmount;
-        intent.releaseEligibleAt = _calculateReleaseEligibleAt(_params.isManualRelease || _params.bypass ? 0 : riskWindow);
-        if (_params.isManualRelease || _params.bypass) {
-            intent.collateralSource = _params.isManualRelease ? CollateralSource.MANUAL_RELEASE : CollateralSource.BYPASS;
-            intent.status = DisputeProtectionIntentStatus.RELEASED;
+        intent.releaseEligibleAt = _calculateReleaseEligibleAt(_params.riskWindow);
+        address stakeOwner = stakeVault.stakeOwnerOf(_params.taker);
+        if (stakeVault.freeStake(stakeOwner) >= _params.releaseAmount) {
+            intent.collateralSource = CollateralSource.STAKE;
+            intent.stakeOwner = stakeOwner;
+            intent.lockedAmount = _params.releaseAmount;
+            intent.status = DisputeProtectionIntentStatus.SETTLED;
+            stakeVault.lockStake(stakeOwner, _params.intentHash, _params.releaseAmount, intent.releaseEligibleAt);
         } else {
-            address stakeOwner = stakeVault.stakeOwnerOf(_params.taker);
-            if (stakeVault.freeStake(stakeOwner) >= _params.releaseAmount) {
-                intent.collateralSource = CollateralSource.STAKE;
-                intent.stakeOwner = stakeOwner;
-                intent.lockedAmount = _params.releaseAmount;
-                intent.status = DisputeProtectionIntentStatus.SETTLED;
-                stakeVault.lockStake(stakeOwner, _params.intentHash, _params.releaseAmount, intent.releaseEligibleAt);
-            } else {
-                intent.collateralSource = CollateralSource.DEFERRED_PAYOUT;
-                intent.stakeOwner = _params.recipient;
-                intent.lockedAmount = _params.netAmount;
-                intent.status = DisputeProtectionIntentStatus.AWAITING_FUNDING;
-                deferred = true;
-            }
+            intent.collateralSource = CollateralSource.DEFERRED_PAYOUT;
+            intent.stakeOwner = _params.recipient;
+            intent.lockedAmount = _params.netAmount;
+            intent.status = DisputeProtectionIntentStatus.AWAITING_FUNDING;
+            deferred = true;
         }
         emit DisputeProtectionIntentSettled(
             _params.intentHash, intent.taker, intent.depositor, intent.recipient, intent.paymentMethod,
-            riskWindow, intent.collateralSource, intent.stakeOwner, _params.releaseAmount,
-            intent.lockedAmount, intent.releaseEligibleAt, _params.isManualRelease
+            _params.riskWindow, intent.collateralSource, intent.stakeOwner, _params.releaseAmount,
+            intent.lockedAmount, intent.releaseEligibleAt
         );
-        if (intent.status == DisputeProtectionIntentStatus.RELEASED) {
-            emit DisputeProtectionIntentReleased(_params.intentHash, address(0), 0);
-        }
     }
 
     /// @inheritdoc IDisputeProtectionPolicyV2
@@ -231,19 +228,6 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
     /* ============ Governance Functions ============ */
 
     /**
-     * @notice GOVERNANCE ONLY: Sets the minimum collateral lock window for future settlements of a payment method.
-     * @dev A zero window disables dispute protection. Each settlement snapshots the current window; later changes
-     * do not affect its collateral lock. The lifecycle hook always applies the deposit whitelist independently.
-     * @param _paymentMethod Payment method whose future risk window is updated.
-     * @param _riskWindow Minimum seconds collateral remains locked after settlement.
-     */
-    function setRiskWindow(bytes32 _paymentMethod, uint64 _riskWindow) external onlyOwner {
-        if (_riskWindow > MAX_RISK_WINDOW) revert InvalidRiskWindow(_riskWindow);
-        paymentMethodRiskWindow[_paymentMethod] = _riskWindow;
-        emit RiskWindowUpdated(_paymentMethod, _riskWindow);
-    }
-
-    /**
      * @notice GOVERNANCE ONLY: Replaces the verifier used for future dispute submissions.
      * @param _verifier New non-zero deployed dispute verifier.
      */
@@ -265,17 +249,6 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
         if (_isAuthorized) _validateDependency(_hook);
         isLifecycleHookAuthorizedByHook[_hook] = _isAuthorized;
         emit LifecycleHookAuthorizationUpdated(_hook, _isAuthorized);
-    }
-
-    /**
-     * @notice GOVERNANCE ONLY: Pauses or resumes new dispute-protection admissions.
-     * @dev The lifecycle hook reads this flag before admitting a protected order, including whitelisted takers.
-     * Settlement, release, and dispute submission remain available while admissions are paused.
-     * @param _isPaused Whether new dispute protection admissions should revert.
-     */
-    function setAdmissionsPaused(bool _isPaused) external onlyOwner {
-        admissionsPaused = _isPaused;
-        emit AdmissionsPausedUpdated(_isPaused);
     }
 
     /**
@@ -311,14 +284,6 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
      */
     function isLifecycleHookAuthorized(address _hook) external view override returns (bool) {
         return isLifecycleHookAuthorizedByHook[_hook];
-    }
-
-    /**
-     * @notice Returns the risk window applied to future settlements for a payment method.
-     * @param _paymentMethod Payment method whose configured risk window is queried.
-     */
-    function getRiskWindow(bytes32 _paymentMethod) external view override returns (uint64) {
-        return paymentMethodRiskWindow[_paymentMethod];
     }
 
     /* ============ Internal Functions ============ */

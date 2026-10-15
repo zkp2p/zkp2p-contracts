@@ -30,7 +30,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
     }
 
-    function test_ConditionedBalanceFundedSettlement() public {
+    function test_ConditionedZeroWindowSettlement() public {
         _conditionedSettlement(true, false);
     }
 
@@ -42,14 +42,14 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         _conditionedSettlement(false, false);
     }
 
-    function _conditionedSettlement(bool balanceFunded, bool staked) internal {
+    function _conditionedSettlement(bool payNow, bool staked) internal {
         vm.startPrank(depositor);
         depositId = _createDeposit(gatingService, delegate);
         vm.stopPrank();
         if (staked) _stake(vault, taker, INTENT_AMOUNT);
         bytes32 id = _signalWithLifecycleHookData(abi.encodePacked(CONDITIONS));
         UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(
-            _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, balanceFunded),
+            _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, payNow ? 0 : RISK_WINDOW),
             (UnifiedPaymentVerifierV4.PaymentAttestation)
         );
         bytes[4] memory invalidExtensions = [bytes(""), new bytes(31), abi.encode(bytes32(0)), abi.encode(keccak256("wrong"))];
@@ -75,14 +75,14 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, id, ""));
         assertEq(orchestrator.getIntent(id).data, "");
         assertEq(orchestrator.getIntent(id).owner, address(0));
-        assertEq(token.balanceOf(other), balanceFunded || staked ? NET : 0);
-        P.CollateralSource source = balanceFunded ? P.CollateralSource.BYPASS
+        assertEq(token.balanceOf(other), payNow || staked ? NET : 0);
+        P.CollateralSource source = payNow ? P.CollateralSource.NONE
             : staked ? P.CollateralSource.STAKE : P.CollateralSource.DEFERRED_PAYOUT;
         assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(source));
-        if (balanceFunded) _assertLock(id, address(0), 0);
+        if (payNow) _assertLock(id, address(0), 0);
         else if (staked) _assertLock(id, taker, INTENT_AMOUNT);
         else _assertLock(id, other, NET);
-        assertEq(token.balanceOf(address(vault)), balanceFunded ? 0 : staked ? INTENT_AMOUNT : NET);
+        assertEq(token.balanceOf(address(vault)), payNow ? 0 : staked ? INTENT_AMOUNT : NET);
         _assertFees();
     }
 
@@ -96,7 +96,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         vault.selectStakeOwner(delegate);
         bytes32 id = _signalDefault();
         assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
-        _settle(id, INTENT_AMOUNT, false);
+        _settle(id, INTENT_AMOUNT, RISK_WINDOW);
         assertEq(token.balanceOf(other), NET);
         assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.STAKE));
         _assertLock(id, delegate, INTENT_AMOUNT);
@@ -122,34 +122,33 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         bytes32 id = _signalDefault();
         assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
         _expectSettlement(id, P.CollateralSource.BYPASS);
-        _settle(id, INTENT_AMOUNT, false);
+        _settle(id, INTENT_AMOUNT, RISK_WINDOW);
         assertEq(token.balanceOf(other), NET);
-        assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.BYPASS));
+        assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.NONE));
         _assertLock(id, address(0), 0);
         _assertFees();
     }
 
-    function test_RelayerManualReleaseUsesManualSource() public {
+    function test_RelayerManualReleaseSkipsPolicy() public {
         relayerRegistry.addRelayer(taker);
         bytes32 id = _signalDefault();
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(id);
         assertEq(token.balanceOf(other), NET);
-        assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.MANUAL_RELEASE));
+        assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.NONE));
     }
 
-    function test_UnprotectedMethodPaysNormallyWithoutRecord() public {
-        protection.setRiskWindow(METHOD, 0);
-        protection.setAdmissionsPaused(true);
+    function test_ZeroWindowPaysNormallyWithoutPolicyAuthorizationOrRecord() public {
+        protection.setLifecycleHookAuthorization(address(orchestrator.lifecycleHook()), false);
         bytes32 id = _signalDefault();
-        _settle(id, INTENT_AMOUNT, false);
+        _settle(id, INTENT_AMOUNT, 0);
         assertEq(token.balanceOf(other), NET);
         assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
         assertEq(token.balanceOf(address(vault)), 0);
         _assertFees();
     }
 
-    event DisputeProtectionIntentSettled(bytes32 indexed intentHash, address indexed taker, address indexed depositor, address recipient, bytes32 paymentMethod, uint64 riskWindow, P.CollateralSource collateralSource, address stakeOwner, uint256 releaseAmount, uint256 lockedAmount, uint64 releaseEligibleAt, bool isManualRelease);
+    event DisputeProtectionIntentSettled(bytes32 indexed intentHash, address indexed taker, address indexed depositor, address recipient, bytes32 paymentMethod, uint64 riskWindow, P.CollateralSource collateralSource, address stakeOwner, uint256 releaseAmount, uint256 lockedAmount, uint64 releaseEligibleAt);
 
     function _expectSettlement(bytes32 id, P.CollateralSource source) internal {
         bool deferred = source == P.CollateralSource.DEFERRED_PAYOUT;
@@ -157,7 +156,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         emit DisputeProtectionIntentSettled(
             id, taker, depositor, other, METHOD, RISK_WINDOW, source,
             deferred ? other : address(0), INTENT_AMOUNT, deferred ? NET : 0,
-            uint64(block.timestamp + (deferred ? RISK_WINDOW : 0)), source == P.CollateralSource.MANUAL_RELEASE
+            uint64(block.timestamp + (deferred ? RISK_WINDOW : 0))
         );
     }
 
@@ -175,7 +174,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
 
     function _assertDeferredSettlement(bytes32 id) internal {
         _expectSettlement(id, P.CollateralSource.DEFERRED_PAYOUT);
-        _settle(id, INTENT_AMOUNT, false);
+        _settle(id, INTENT_AMOUNT, RISK_WINDOW);
         assertEq(token.balanceOf(other), 0);
         _assertLock(id, other, NET);
         assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.DEFERRED_PAYOUT));
@@ -188,7 +187,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         bytes32 id = _signalDefault();
         assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
         _expectSettlement(id, P.CollateralSource.BYPASS);
-        _settle(id, INTENT_AMOUNT, false);
+        _settle(id, INTENT_AMOUNT, RISK_WINDOW);
         assertEq(token.balanceOf(other), NET);
         _assertLock(id, address(0), 0);
         assertEq(vault.lockedStake(taker), 0);
@@ -196,8 +195,8 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         assertEq(vault.freeStake(taker), INTENT_AMOUNT - 1);
         assertEq(token.balanceOf(address(vault)), INTENT_AMOUNT - 1);
         P.DisputeProtectionIntent memory record = protection.getDisputeProtectionIntent(id);
-        assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.BYPASS));
-        assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.RELEASED));
+        assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.NONE));
+        assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.NONE));
         assertEq(record.lockedAmount, 0);
         _assertFees();
     }
@@ -233,15 +232,14 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         _assertDeferredSettlement(id);
     }
 
-    function test_WhitelistedTakerManualReleaseUsesManualSource() public {
+    function test_WhitelistedTakerManualReleaseSkipsPolicy() public {
         _whitelistTaker();
         bytes32 id = _signalDefault();
-        _expectSettlement(id, P.CollateralSource.MANUAL_RELEASE);
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(id);
         assertEq(token.balanceOf(other), NET);
         _assertLock(id, address(0), 0);
-        assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.MANUAL_RELEASE));
+        assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.NONE));
         _assertFees();
     }
 
@@ -261,28 +259,21 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         assertEq(escrow.getDeposit(depositId).outstandingIntentAmount, 0);
     }
 
-    function test_PausingAdmissionsAfterSignalDoesNotBlockFulfil() public {
+    function test_ZeroWindowPaysNowWithoutLock() public {
         bytes32 id = _signalDefault();
-        protection.setAdmissionsPaused(true);
-        _settle(id, INTENT_AMOUNT, false);
-        _assertLock(id, other, NET);
-    }
-
-    function test_BalanceFundedPaysNowWithoutLock() public {
-        bytes32 id = _signalDefault();
-        _settle(id, INTENT_AMOUNT, true);
+        _settle(id, INTENT_AMOUNT, 0);
         assertEq(token.balanceOf(other), NET);
         _assertLock(id, address(0), 0);
         assertEq(token.balanceOf(address(vault)), 0);
         assertEq(vault.totalAccounted(), 0);
-        assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.BYPASS));
+        assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.NONE));
         _assertFees();
     }
 
     function test_DeferredSettlementWithSignedExtension() public {
         bytes32 id = _signalDefault();
         UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(
-            _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, false),
+            _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, RISK_WINDOW),
             (UnifiedPaymentVerifierV4.PaymentAttestation)
         );
         bytes memory proof = _signedProof(id, bytes.concat(attestation.data, abi.encode(bytes32(0), keccak256("reserved"))), INTENT_AMOUNT);
@@ -297,7 +288,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
     function test_UnconditionedIntentRejectsNonZeroAttestedHash() public {
         bytes32 id = _signalDefault();
         UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(
-            _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, true),
+            _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, 0),
             (UnifiedPaymentVerifierV4.PaymentAttestation)
         );
         assertEq(attestation.data.length, 480);
@@ -324,7 +315,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
     function test_UnconditionedIntentAcceptsZeroAttestedHashWithTrailingBytes() public {
         bytes32 id = _signalDefault();
         UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(
-            _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, false),
+            _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, RISK_WINDOW),
             (UnifiedPaymentVerifierV4.PaymentAttestation)
         );
         bytes memory proof = _signedProof(
@@ -342,7 +333,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
     function test_StakeCoveredPaysNowAndLocksStake() public {
         _stake(vault, taker, INTENT_AMOUNT);
         bytes32 id = _signalDefault();
-        _settle(id, INTENT_AMOUNT, false);
+        _settle(id, INTENT_AMOUNT, RISK_WINDOW);
         assertEq(token.balanceOf(other), NET);
         _assertLock(id, taker, INTENT_AMOUNT);
         assertEq(token.balanceOf(address(vault)), INTENT_AMOUNT);
@@ -352,7 +343,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
 
     function test_UncoveredDefersNetToRecipient() public {
         bytes32 id = _signalDefault();
-        _settle(id, INTENT_AMOUNT, false);
+        _settle(id, INTENT_AMOUNT, RISK_WINDOW);
         assertEq(token.balanceOf(other), 0);
         _assertLock(id, other, NET);
         assertEq(token.balanceOf(address(vault)), NET);
@@ -363,7 +354,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
 
     function test_DeferredDisputePaysDepositorNet() public {
         bytes32 id = _signalDefault();
-        _settle(id, INTENT_AMOUNT, false);
+        _settle(id, INTENT_AMOUNT, RISK_WINDOW);
         bytes32 paymentNullifier = keccak256(abi.encodePacked(METHOD, _paymentId(id)));
         assertEq(nullifiers.intentHashByNullifier(paymentNullifier), id);
         assertEq(nullifiers.nullifierByIntentHash(id), paymentNullifier);
@@ -388,7 +379,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
 
     function test_DeferredReleaseThenTakerClaimFor() public {
         bytes32 id = _signalDefault();
-        _settle(id, INTENT_AMOUNT, false);
+        _settle(id, INTENT_AMOUNT, RISK_WINDOW);
         _release(id);
         vm.prank(taker);
         protection.claimFor(id);
@@ -400,7 +391,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
 
     function test_DeferredRecipientCanWithdrawStakeDirectly() public {
         bytes32 id = _signalDefault();
-        _settle(id, INTENT_AMOUNT, false);
+        _settle(id, INTENT_AMOUNT, RISK_WINDOW);
         _release(id);
         vm.prank(other);
         vault.withdrawStake(NET);
@@ -410,10 +401,10 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
 
     function test_NoPostIntentHookRunsOnPayNowOrDeferred() public {
         bytes32 paid = _signalDefault();
-        _settle(paid, INTENT_AMOUNT, true);
+        _settle(paid, INTENT_AMOUNT, 0);
         assertEq(token.balanceOf(other), NET);
         bytes32 deferred = _signalDefault();
-        _settle(deferred, INTENT_AMOUNT, false);
+        _settle(deferred, INTENT_AMOUNT, RISK_WINDOW);
         assertEq(token.balanceOf(other), NET);
         _assertLock(deferred, other, NET);
         assertEq(postIntentHook.lastPostIntentHookData(), "");
@@ -422,6 +413,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
     }
 
     function test_ManualReleasePaysOutImmediately() public {
+        protection.setLifecycleHookAuthorization(address(orchestrator.lifecycleHook()), false);
         bytes32 id = _signalDefault();
         uint256 vaultBefore = token.balanceOf(address(vault));
         vm.prank(depositor);
@@ -430,14 +422,14 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         _assertLock(id, address(0), 0);
         assertEq(token.balanceOf(address(vault)), vaultBefore);
         assertEq(vault.totalAccounted(), 0);
-        assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.MANUAL_RELEASE));
+        assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.NONE));
         _assertFees();
     }
 
     function test_OverpaymentIsCappedBeforeCascade() public {
         _stake(vault, taker, INTENT_AMOUNT);
         bytes32 id = _signalDefault();
-        _settle(id, 2 * INTENT_AMOUNT, false);
+        _settle(id, 2 * INTENT_AMOUNT, RISK_WINDOW);
         assertEq(protection.getDisputeProtectionIntent(id).releaseAmount, INTENT_AMOUNT);
         _assertLock(id, taker, INTENT_AMOUNT);
         assertEq(token.balanceOf(other), NET);
@@ -465,7 +457,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         proofIntent.amount = intent.amount;
         proofIntent.paymentMethod = intent.paymentMethod;
         proofIntent.timestamp = intent.timestamp;
-        v3.fulfillIntent(IOrchestratorV3.FulfillIntentParams(_proof(id, proofIntent, INTENT_AMOUNT, true), id, "", ""));
+        v3.fulfillIntent(IOrchestratorV3.FulfillIntentParams(_proof(id, proofIntent, INTENT_AMOUNT, 0), id, "", ""));
         assertEq(token.balanceOf(other), NET);
         assertEq(oldVault.lockedStake(taker), INTENT_AMOUNT);
         assertEq(uint256(oldPolicy.getDisputeProtectionIntent(id).status), uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.SETTLED));

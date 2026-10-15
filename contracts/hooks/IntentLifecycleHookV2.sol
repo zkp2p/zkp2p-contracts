@@ -23,14 +23,16 @@ import {IEscrowV2} from "../interfaces/IEscrowV2.sol";
 /// first word, right-padding shorter data; empty and all-zero data are unconditioned. There is no
 /// length or version decoding: the conditions version lives in the attestor-side hash preimage,
 /// and each intent's data is interpreted only by its snapshotted hook.
-/// Non-manual settlements bypass collateral for balance-funded payments or takers allowed by an
-/// enabled deposit/payment-method whitelist, in that short-circuit order. Relayer registration alone
-/// does not bypass collateral; registered relayer takers follow the same whitelist rule.
-/// Whitelist state is read live at settlement: disabling it or removing the taker after signal restores
-/// the collateral cascade unless another bypass applies. Whitelisting the recipient does not qualify.
-/// At signal, the whitelist is only an admission gate; every windowed intent still checks the stake
-/// token, hook authorization and paused admissions, including whitelisted and registered relayer takers.
+/// Non-manual settlements require extension word 0: disputeWindow in seconds, bounded by 365 days.
+/// Zero pays now; nonzero windows select collateral unless the taker is allowed by an enabled
+/// deposit/payment-method whitelist. Relayer registration alone does not bypass collateral.
+/// Whitelist state is read live at settlement: disabling it or removing the taker restores the cascade.
+/// Whitelisting the recipient does not qualify. Manual releases skip the policy and attestation checks.
+/// At signal, only whitelist admission and the conditions gating-service requirement are checked.
 contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
+    /// @dev Matches DisputeProtectionPolicyV2.MAX_RISK_WINDOW; validation precedes uint64 narrowing.
+    uint256 private constant MAX_RISK_WINDOW = 365 days;
+
     /* ============ State Variables ============ */
 
     IOrchestratorRegistry public immutable orchestratorRegistry;
@@ -39,16 +41,14 @@ contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
 
     /* ============ Errors ============ */
 
-    error InvalidBalanceFundedFlag(uint256 value);
+    error MissingDisputeWindow();
+    error InvalidDisputeWindow(uint256 window);
     error ConditionsNotAttested(bytes32 intentHash);
     error ConditionsRequireGatingService();
     error ZeroAddress();
     error InvalidDependency(address dependency);
     error UnauthorizedOrchestrator(address caller);
     error IntentNotFound(bytes32 intentHash);
-    error IntentTokenMismatch(address expectedToken, address actualToken);
-    error LifecycleHookNotAuthorized(address hook);
-    error AdmissionsPaused();
     error TakerNotWhitelisted(address escrow, uint256 depositId, bytes32 paymentMethod, address taker);
 
     /* ============ Constructor ============ */
@@ -82,15 +82,6 @@ contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
         ) {
             revert TakerNotWhitelisted(intent.escrow, intent.depositId, intent.paymentMethod, intent.owner);
         }
-        if (disputeProtectionPolicy.getRiskWindow(intent.paymentMethod) != 0) {
-            address expectedToken = address(disputeProtectionPolicy.stakeVault().stakeToken());
-            address actualToken = address(IEscrowV2(intent.escrow).getDeposit(intent.depositId).token);
-            if (actualToken != expectedToken) revert IntentTokenMismatch(expectedToken, actualToken);
-            if (!disputeProtectionPolicy.isLifecycleHookAuthorized(address(this))) {
-                revert LifecycleHookNotAuthorized(address(this));
-            }
-            if (disputeProtectionPolicy.admissionsPaused()) revert AdmissionsPaused();
-        }
         if (
             bytes32(_data) != bytes32(0)
                 && IEscrowV2(intent.escrow).getDepositGatingService(intent.depositId, intent.paymentMethod) == address(0)
@@ -110,21 +101,19 @@ contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
     function settleIntent(SettlementContext calldata _context)
         external override onlyOrchestrator returns (address deferralVault)
     {
+        if (_context.isManualRelease) return address(0);
+        if (_context.extensionData.length < 32) revert MissingDisputeWindow();
+        uint256 window = abi.decode(_context.extensionData[:32], (uint256));
+        if (window > MAX_RISK_WINDOW) revert InvalidDisputeWindow(window);
         bytes32 expected = bytes32(_context.data);
-        bool bypass;
-        if (!_context.isManualRelease) {
-            uint256 flag = _context.extensionData.length >= 32
-                ? abi.decode(_context.extensionData[:32], (uint256)) : 0;
-            if (flag > 1) revert InvalidBalanceFundedFlag(flag);
-            bytes32 attested = _context.extensionData.length >= 64
-                ? abi.decode(_context.extensionData[32:64], (bytes32)) : bytes32(0);
-            if (attested != expected) revert ConditionsNotAttested(_context.intentHash);
-            bypass = flag == 1
-                || (whitelistPolicy.enabled(_context.escrow, _context.depositId, _context.paymentMethod)
-                    && whitelistPolicy.isTakerAllowed(
-                        _context.escrow, _context.depositId, _context.paymentMethod, _context.taker
-                    ));
-        }
+        bytes32 attested = _context.extensionData.length >= 64
+            ? abi.decode(_context.extensionData[32:64], (bytes32)) : bytes32(0);
+        if (attested != expected) revert ConditionsNotAttested(_context.intentHash);
+        if (window == 0) return address(0);
+        bool bypass = whitelistPolicy.enabled(_context.escrow, _context.depositId, _context.paymentMethod)
+            && whitelistPolicy.isTakerAllowed(
+                _context.escrow, _context.depositId, _context.paymentMethod, _context.taker
+            );
         bool deferred = disputeProtectionPolicy.onIntentSettled(IDisputeProtectionPolicyV2.SettleParams({
             intentHash: _context.intentHash,
             taker: _context.taker,
@@ -134,8 +123,8 @@ contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
             paymentMethod: _context.paymentMethod,
             releaseAmount: _context.releaseAmount,
             netAmount: _context.netAmount,
-            bypass: bypass,
-            isManualRelease: _context.isManualRelease
+            riskWindow: uint64(window),
+            bypass: bypass
         }));
         return deferred ? address(disputeProtectionPolicy.stakeVault()) : address(0);
     }

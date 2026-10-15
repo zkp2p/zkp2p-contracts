@@ -32,31 +32,30 @@ contract DeferredPayoutCascadeFuzzTest is Test {
         policy = new DisputeProtectionPolicyV2(address(this), vault, verifier, disputes);
         vault.initializeController(address(policy));
         policy.setLifecycleHookAuthorization(address(this), true);
-        policy.setRiskWindow(METHOD, WINDOW);
         disputes.addWritePermission(address(policy));
     }
 
-    function testFuzz_LockedAmountMatchesPath(uint256 releaseAmount, uint256 freeStake, bool balanceFunded, uint256 protocolBps, uint256 referralBps) public {
+    function testFuzz_LockedAmountMatchesPath(uint256 releaseAmount, uint256 freeStake, bool whitelisted, uint256 protocolBps, uint256 referralBps) public {
         releaseAmount = bound(releaseAmount, 1, 1e12);
         freeStake = bound(freeStake, 0, 2e12);
-        uint256 net = _settle(releaseAmount, freeStake, balanceFunded, protocolBps, referralBps);
-        uint256 expected = balanceFunded ? 0 : freeStake >= releaseAmount ? releaseAmount : net;
-        P.CollateralSource source = balanceFunded ? P.CollateralSource.BYPASS : freeStake >= releaseAmount ? P.CollateralSource.STAKE : P.CollateralSource.DEFERRED_PAYOUT;
+        uint256 net = _settle(releaseAmount, freeStake, whitelisted, protocolBps, referralBps);
+        uint256 expected = whitelisted ? 0 : freeStake >= releaseAmount ? releaseAmount : net;
+        P.CollateralSource source = whitelisted ? P.CollateralSource.NONE : freeStake >= releaseAmount ? P.CollateralSource.STAKE : P.CollateralSource.DEFERRED_PAYOUT;
         P.DisputeProtectionIntent memory record = policy.getDisputeProtectionIntent(ID);
         assertEq(record.lockedAmount, expected);
         assertEq(uint256(record.collateralSource), uint256(source));
         (address owner, uint256 amount,) = vault.locks(ID);
         assertEq(amount, expected);
-        assertEq(owner, balanceFunded ? address(0) : freeStake >= releaseAmount ? TAKER : RECIPIENT);
+        assertEq(owner, whitelisted ? address(0) : freeStake >= releaseAmount ? TAKER : RECIPIENT);
         assertEq(token.balanceOf(RECIPIENT), source == P.CollateralSource.DEFERRED_PAYOUT ? 0 : net);
     }
 
-    function testFuzz_VaultBalanceCoversAccounting(uint256 releaseAmount, uint256 freeStake, bool balanceFunded, uint256 protocolBps, uint256 referralBps) public {
+    function testFuzz_VaultBalanceCoversAccounting(uint256 releaseAmount, uint256 freeStake, bool whitelisted, uint256 protocolBps, uint256 referralBps) public {
         releaseAmount = bound(releaseAmount, 1, 1e12);
         freeStake = bound(freeStake, 0, 2e12);
-        _settle(releaseAmount, freeStake, balanceFunded, protocolBps, referralBps);
+        _settle(releaseAmount, freeStake, whitelisted, protocolBps, referralBps);
         P.DisputeProtectionIntent memory record = policy.getDisputeProtectionIntent(ID);
-        if (!balanceFunded) {
+        if (!whitelisted) {
             vm.warp(record.releaseEligibleAt);
             policy.releaseMaturedDisputeProtectionIntent(ID);
             _accounting();
@@ -69,6 +68,17 @@ contract DeferredPayoutCascadeFuzzTest is Test {
             }
             _accounting();
         }
+    }
+
+    function testFuzz_AttestedWindowSetsMaturity(uint64 window, bool staked) public {
+        window = uint64(bound(window, 1, 365 days));
+        if (staked) _deposit(TAKER, 100e6);
+        bool deferred = policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(token), METHOD, 100e6, 99e6, window, false));
+        P.DisputeProtectionIntent memory record = policy.getDisputeProtectionIntent(ID);
+        assertEq(deferred, !staked);
+        assertEq(record.riskWindow, window);
+        assertEq(record.releaseEligibleAt, block.timestamp + window);
+        assertEq(uint256(record.collateralSource), uint256(staked ? P.CollateralSource.STAKE : P.CollateralSource.DEFERRED_PAYOUT));
     }
 
     function testFuzz_ClaimForNeverExceedsLocked(uint256 releaseAmount, uint256 freeStake, uint256 protocolBps, uint256 referralBps, uint256 seed) public {
@@ -85,7 +95,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
             uint256 relocked = bound(seed, 0, available);
             bytes32 lockId = keccak256(abi.encode("relock", step));
             if (relocked != 0) {
-                assertFalse(policy.onIntentSettled(P.SettleParams(lockId, RECIPIENT, TAKER, DEPOSITOR, address(token), METHOD, relocked, relocked, false, false)));
+                assertFalse(policy.onIntentSettled(P.SettleParams(lockId, RECIPIENT, TAKER, DEPOSITOR, address(token), METHOD, relocked, relocked, WINDOW, false)));
                 _accounting();
             }
             paid += _claim(net - paid, step % 2 == 0 ? TAKER : RECIPIENT);
@@ -106,14 +116,14 @@ contract DeferredPayoutCascadeFuzzTest is Test {
         assertEq(vault.freeStake(RECIPIENT), releaseAmount);
     }
 
-    function _settle(uint256 gross, uint256 freeStake, bool balanceFunded, uint256 protocolBps, uint256 referralBps) internal returns (uint256 net) {
+    function _settle(uint256 gross, uint256 freeStake, bool whitelisted, uint256 protocolBps, uint256 referralBps) internal returns (uint256 net) {
         protocolBps = bound(protocolBps, 0, 6000);
         referralBps = bound(referralBps, 0, 6000 - protocolBps);
         uint256 protocolFee = gross * protocolBps / 10000;
         uint256 referralFee = gross * referralBps / 10000;
         net = gross - protocolFee - referralFee;
         if (freeStake != 0) _deposit(TAKER, freeStake);
-        bool deferred = policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(token), METHOD, gross, net, balanceFunded, false));
+        bool deferred = policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(token), METHOD, gross, net, WINDOW, whitelisted));
         _accounting();
         token.transfer(address(0x44), protocolFee);
         token.transfer(address(0x55), referralFee);

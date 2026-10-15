@@ -9,8 +9,8 @@ import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {UnifiedPaymentVerifierV4} from "contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol";
 
 /// @notice Opt-in cross-repo smoke; set ATTESTOR_POLICY_SMOKE_ROOT to a checkout with dependencies.
-/// @dev Outside deterministic/, so coverage never runs this FFI test. The attestor script still emits
-/// the old 480-byte encoding until its PR updates; its trailing bool is compatible as extension word 0.
+/// @dev Outside deterministic/, so coverage never runs this FFI test. The attestor must sign a dispute
+/// window in extension word 0: zero for balance payments and 14 days for the protected smoke cases.
 contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
     function test_ServiceSignedProofSmoke() public {
         string memory attestor = vm.envOr("ATTESTOR_POLICY_SMOKE_ROOT", string(""));
@@ -29,15 +29,14 @@ contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
             UnifiedPaymentVerifierV4.PaymentAttestation memory attestation =
                 abi.decode(proof, (UnifiedPaymentVerifierV4.PaymentAttestation));
             // Decode the 448-byte static payload independently of the optional extension words.
-            assertGe(attestation.data.length, 448);
+            assertGe(attestation.data.length, 480);
             assertEq((attestation.data.length - 448) % 32, 0);
             (, IPaymentVerifierV2.IntentSnapshot memory snapshot) = abi.decode(
                 attestation.data, (IPaymentVerifierV2.PaymentDetails, IPaymentVerifierV2.IntentSnapshot)
             );
             assertEq(snapshot.intentHash, id);
-            uint256 flag = _extensionWord(attestation.data, 0);
-            assertLe(flag, 1);
-            assertEq(flag, index == 0 ? 1 : 0);
+            uint256 window = _extensionWord(attestation.data, 0);
+            assertEq(window, index == 0 ? 0 : RISK_WINDOW);
             assertEq(_extensionWord(attestation.data, 1), 0);
             assertEq(attestation.releaseAmount, index == 2 ? 45e6 : INTENT_AMOUNT);
             uint256 net = attestation.releaseAmount - attestation.releaseAmount * PROTOCOL_FEE / 1e18
@@ -45,8 +44,14 @@ contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
             orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, id, ""));
             P.DisputeProtectionIntent memory record = protection.getDisputeProtectionIntent(id);
             (address lockOwner, uint256 lockedAmount,) = vault.locks(id);
+            if (window == 0) {
+                assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.NONE));
+            } else {
+                assertEq(record.riskWindow, window);
+                assertEq(record.releaseEligibleAt, block.timestamp + window);
+            }
             if (index == 0) {
-                assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.BYPASS));
+                assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.NONE));
                 assertEq(lockOwner, address(0));
                 assertEq(lockedAmount, 0);
                 assertEq(token.balanceOf(address(vault)), 0);

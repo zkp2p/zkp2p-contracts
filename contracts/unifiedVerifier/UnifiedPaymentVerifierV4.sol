@@ -26,8 +26,8 @@ import { IPaymentVerifierV2 } from "../interfaces/IPaymentVerifierV2.sol";
  * attestation.data starts with the 448-byte `abi.encode(PaymentDetails, IntentSnapshot)`
  * payload, optionally followed by opaque extension bytes. The entire data is signed through dataHash;
  * unsigned attestation.metadata is never returned. Extension words are decoded only by the replaceable lifecycle hook,
- * not this verifier or the non-upgradeable OrchestratorV4: word 0 is balanceFunded, word 1 is conditionsHash,
- * and words 2+ are reserved. An old 480-byte payload returns its trailing bool as extension word 0.
+ * not this verifier or the non-upgradeable OrchestratorV4. The hook defines the extension layout and
+ * validation rules; this verifier returns every signed byte after the prefix without interpreting it.
  * intent.data is never interpreted here; O4 forwards it to its snapshotted lifecycle hook.
  */
 contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerifierV3 {

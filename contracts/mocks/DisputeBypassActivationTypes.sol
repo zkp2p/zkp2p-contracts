@@ -45,8 +45,6 @@ struct BypassTrustSurface {
     bytes32[] paymentMethods;
     bytes32[] currencies;
     uint256[] currencyCounts;
-    bytes32[] riskWindowMethods;
-    uint64[] riskWindows;
 }
 
 interface IBypassActivationOrchestrator is IActivationOrchestrator {
@@ -59,8 +57,6 @@ interface IBypassActivationOwnedRegistry is IActivationOwned, IActivationOrchest
 interface IBypassActivationCascadePolicy is IActivationOwned {
     /// @notice Returns the pending governance owner.
     function pendingOwner() external view returns (address);
-    /// @notice Returns whether new protected intents are paused.
-    function admissionsPaused() external view returns (bool);
     /// @notice Returns the dispute verifier.
     function disputeVerifier() external view returns (address);
     /// @notice Returns the dispute nullifier registry.
@@ -69,8 +65,6 @@ interface IBypassActivationCascadePolicy is IActivationOwned {
     function stakeVault() external view returns (address);
     /// @notice Returns whether a lifecycle hook is authorized.
     function isLifecycleHookAuthorized(address hook) external view returns (bool);
-    /// @notice Returns the risk window for a payment method.
-    function getRiskWindow(bytes32 paymentMethod) external view returns (uint64);
 }
 
 interface IBypassActivationPaymentVerifierRegistry is IActivationOwned {
@@ -103,7 +97,6 @@ interface IBypassActivationVault is IActivationVault {
  * @notice Shared execution-time assertions for the bypass activation artifacts.
  */
 abstract contract DisputeBypassTrustSurfaceChecks {
-    error RiskWindowConfigurationLengthMismatch(uint256 paymentMethodCount, uint256 riskWindowCount);
     error RegistryOwnerMismatch(address actual);
     error OrchestratorRegistryOwnerMismatch(address actual);
     error OrchestratorV4OwnerMismatch(address actual);
@@ -159,10 +152,8 @@ abstract contract DisputeBypassTrustSurfaceChecks {
     error FreshVaultPendingOwnerMismatch(address actual);
     error FreshPolicyOwnerMismatch(address actual);
     error FreshPolicyPendingOwnerMismatch(address actual);
-    error FreshPolicyAdmissionsPausedMismatch(bool actual);
     error FreshHookAuthorizationMismatch(bool actual);
     error PredecessorHookAuthorizationMismatch(bool actual);
-    error RiskWindowMismatch(bytes32 paymentMethod, uint64 actual);
     error DisputeWriterCountMismatch(uint256 actual);
     error DisputeWriterMismatch(uint256 index, address actual);
     error LifecycleHookMismatch(address actual);
@@ -192,11 +183,6 @@ abstract contract DisputeBypassTrustSurfaceChecks {
     BypassTrustSurface internal expected;
 
     constructor(BypassTrustSurface memory _expected) {
-        if (_expected.riskWindowMethods.length != _expected.riskWindows.length) {
-            revert RiskWindowConfigurationLengthMismatch(
-                _expected.riskWindowMethods.length, _expected.riskWindows.length
-            );
-        }
         if (_expected.paymentMethods.length != _expected.currencyCounts.length) {
             revert CurrencyCountLengthMismatch(_expected.currencyCounts.length);
         }
@@ -402,18 +388,10 @@ abstract contract DisputeBypassTrustSurfaceChecks {
 
     function _assertFreshPolicyConfiguration() internal view {
         IBypassActivationCascadePolicy fresh = IBypassActivationCascadePolicy(expected.freshPolicy);
-        bool actualBool = fresh.admissionsPaused();
-        if (actualBool) revert FreshPolicyAdmissionsPausedMismatch(actualBool);
-        actualBool = fresh.isLifecycleHookAuthorized(expected.freshHook);
+        bool actualBool = fresh.isLifecycleHookAuthorized(expected.freshHook);
         if (!actualBool) revert FreshHookAuthorizationMismatch(actualBool);
         actualBool = fresh.isLifecycleHookAuthorized(expected.predecessorHook);
         if (actualBool) revert PredecessorHookAuthorizationMismatch(actualBool);
-        for (uint256 methodIndex = 0; methodIndex < expected.riskWindowMethods.length; methodIndex++) {
-            uint64 actualWindow = fresh.getRiskWindow(expected.riskWindowMethods[methodIndex]);
-            if (actualWindow != expected.riskWindows[methodIndex]) {
-                revert RiskWindowMismatch(expected.riskWindowMethods[methodIndex], actualWindow);
-            }
-        }
     }
 
     function _assertFreshSafeOwnership() internal view {

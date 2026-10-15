@@ -799,14 +799,15 @@ before the cutover; that readiness is part of `CONFIRM_BASE_V3_DISPUTE_METHOD_SC
 `DisputeProtectionPolicyV2`, `IntentLifecycleHookV2`, `UnifiedPaymentVerifierV4` and `OrchestratorV4`.
 This cascade/O4 source has not executed on Base or Base staging. The existing tag and
 `ENABLE_{STAGING,BASE}_V3_DISPUTE_BYPASS_STACK_DEPLOYMENT=true` select resumable deploy-only steps.
-Lane 45 initializes the vault controller, authorizes HookV2, sets PayPal/Venmo windows and configures O4
+Lane 45 initializes the vault controller, authorizes HookV2, configures O4
 with O3's registries, fees and `allowMultipleIntents`. O4 stays unregistered; Base starts vault/policy
 two-step ownership transfers and transfers UPV4/O4 ownership directly to the Safe.
 Only the exact superseded staging UPV4 address `0x3fe38Afdfa85A9E14D9b0ae5A5B2E577A8a71DA7` with its
 pinned runtime hash may be replaced. Lane 45 deletes that record and deploys a different address.
 Pre-cutover binding checks use the pinned retired verifier independently of the mutable record, including
 after a crash between deletion and deployment; other identity or runtime mismatches fail closed.
-The cascade policy protects every method with a nonzero risk window; it has no per-deposit opt-out.
+The cascade policy protects stake-token settlements with a nonzero attested window; it has no per-method
+  windows, admissions pause, or per-deposit opt-out. Lanes 45/46 neither configure nor verify those removed fields.
 Historical lane 45 first executed on staging on 2026-10-11 from `f9eab7f`. The stake-owner bypass trio
 replaced that first trio on 2026-10-13 from `285bc5c`; UPV4 and its record were unchanged by that run.
 
@@ -866,8 +867,9 @@ The package exports the currently selected (latest) addresses for each network, 
 the addresses to use.
 
 Dispute-evidence issuance in `attestation-service` remains a separate follow-up and is intentionally not implemented
-by these contract lanes. Only PayPal and Venmo receive non-zero onchain risk windows; Cash App and every other
-active payment method have a zero window and do not require stake.
+by these contract lanes. O3's selected policy gives only PayPal and Venmo nonzero onchain risk windows;
+Cash App and every other active method have a zero window. O4 instead consumes each settlement's
+attested dispute window from extension word 0.
 
 `deploy/42_retire_dispute_risk_windows.ts` is the governed write behind that statement (decided 2026-08-28). It zeroes
 the `RETIRED_DISPUTABLE_PAYMENT_METHODS` risk windows on `DisputeProtectionPolicyMethodScopedStaked`, which makes
@@ -989,21 +991,23 @@ MIT
 UPV4 accepts the same 448-byte `abi.encode(PaymentDetails, IntentSnapshot)` payload as UPV3,
 followed by optional signed extension bytes. The entire `data`, including the extension, is
 covered by `dataHash` and witness signatures. UPV4 returns the extension untouched and uninterpreted.
-Extension fields occupy dedicated 32-byte words: word 0 is `balanceFunded` (only 0 or 1),
+Extension fields occupy dedicated 32-byte words: word 0 is `disputeWindow` (uint256 seconds),
 word 1 is the attested `conditionsHash`, and words 2+ are reserved and ignored by the current hook.
-Missing complete words read as zero. Plain payloads are 448 bytes, balance-funded payloads are
-480 bytes, and conditioned payloads are 512 bytes (word 0 may be 0 or 1).
-The old 480-byte encoding remains harmless: its trailing bool becomes extension word 0.
+Non-manual HookV2 settlement requires a complete word 0 (`MissingDisputeWindow()` otherwise),
+rejects windows above 365 days with `InvalidDisputeWindow(window)`, and treats zero as pay now.
+A missing complete word 1 reads as zero. O4 settlement payloads are at least 480 bytes, or 512 bytes
+with conditions. The 448-byte prefix and opaque UPV4 return remain unchanged for O3.
+Attestors must sign seconds in word 0; the former balance-funded boolean no longer has that meaning.
 
 The fully static result preserves the V1 `success`, `intentHash`, `releaseAmount` prefix,
 then returns the uncapped `attestedReleaseAmount`, verified `PaymentDetails`, and signed/validated
-`IntentSnapshot`. `balanceFunded` is not a result field. Dynamic extension bytes are a separate
+`IntentSnapshot`. Dynamic extension bytes are a separate
 trailing return value; unsigned metadata is never returned. O3 reads the V1 prefix with or without
 extension bytes. O4 forwards the raw extension and opaque `intent.data` saved before pruning to
 its snapshotted IntentLifecycleHookV2. The hook is stateless by design: per-intent data lives only in O4,
 and the hook interprets it because governance can replace hooks for future intents while O4
 is not upgradeable. Manual release forwards the saved data and an empty extension; the hook skips the
-attestation comparison and extension validation and follows the independent manual-release path without bypass.
+attestation comparison and extension validation and returns pay now without calling the policy.
 
 IOrchestratorV4 keeps V3's `Intent` field order with `postIntentHook` removed entirely:
 `owner, to, escrow, depositId, amount, timestamp, paymentMethod, fiatCurrency, conversionRate, payeeId, referralFees, data`.
@@ -1023,9 +1027,8 @@ ProtocolViewerV2 is unchanged and decodes only the V2/V3 `Intent` layout, so it 
 read O4 intents directly with `OrchestratorV4.getIntent`.
 
 IntentLifecycleHookV2 is stateless. At signal, a deposit's enabled whitelist is a pure admission gate:
-non-members are rejected. For a nonzero method risk window, signal checks the deposit token against
-the vault's stake token, the policy's hook authorization, and paused admissions for every taker, including
-whitelisted and registered relayer takers, without writing policy state. Cancellation is an unrestricted
+non-members are rejected, and nonzero conditions require a gating service. Signal never calls the
+policy or checks the deposit token, hook authorization, or a risk window. Cancellation is an unrestricted
 no-op, retained for future hooks; O4 still invokes the snapshotted callback on cancel, escrow prune and
 orphan cleanup.
 
@@ -1034,29 +1037,34 @@ releaseAmount, netAmount, data, extensionData, isManualRelease }`. O4 reads inte
 `taker = intent.owner`, `recipient = intent.to`, and `data = intent.data`; `depositor = deposit.depositor`
 and `token = address(deposit.token)` come from its pre-unlock deposit read. The hook retains escrow/depositId
 for whitelist checks and passes depositor/token and the intent identities and amounts to the policy's
-`onIntentSettled(SettleParams)`, with `bypass` set for balance-funded payments
-or whitelisted takers, checked in that order. A whitelisted taker means the deposit/payment-method
-whitelist is enabled and `isTakerAllowed` returns true for the taker, not the recipient. Registered relayer
-takers follow the same rule: relayer registration alone does not bypass collateral. The hook does not
-query the relayer registry; O4 still uses it for its own admission gating. These checks read live state
-at settlement: disabling the whitelist or removing the taker after signal restores the collateral cascade
-unless the payment is balance-funded. A replacement hook can change these rules. Manual release has its
-own path and never uses bypass.
+`onIntentSettled(SettleParams)`, including the attested `uint64 riskWindow` and `bypass` set only for
+whitelisted takers. A whitelisted taker means the deposit/payment-method whitelist is enabled and
+`isTakerAllowed` returns true for the taker, not the recipient. Registered relayer takers follow the same
+rule: relayer registration alone does not bypass collateral. The hook does not query the relayer registry;
+O4 still uses it for its own admission gating. Whitelist state is read live at settlement. Disabling it or
+removing the taker after signal restores collateral for nonzero windows. Manual release and window zero
+return pay now without calling the policy; zero-window settlement still validates conditions.
 
-DisputeProtectionPolicyV2 has no signal/cancel records and no per-deposit opt-outs. A zero risk window
-pays normally with no record. Otherwise settlement uses the supplied depositor, rechecks the supplied
-token against `stakeVault.stakeToken()` without reading escrow, snapshots
-the current risk window, and selects manual release, bypass, gross stake collateral, or a deferred net
-payout. Paused admissions do not block settlement. Statuses are `NONE`, `AWAITING_FUNDING`, `SETTLED`,
-`RELEASED`, and `DISPUTED`. One `DisputeProtectionIntentSettled` event includes all participant identities,
-method, window, collateral source, stake owner, amounts, eligibility time and manual-release flag;
-`DisputeProtectionIntentReleased` remains on immediate releases. No Opened or Cancelled event is emitted.
+Lanes 45/46 use bypass batch manifest version 6, which omits fresh-policy windows and admissions pause.
+Historical O3 predecessor checks remain separate; old manifest versions are rejected.
+
+DisputeProtectionPolicyV2 has no signal/cancel records, per-method windows, admissions pause, or
+per-deposit opt-outs. It uses the supplied depositor and token without reading escrow. A non-stake-token
+deposit pays now with no record or policy event. Whitelist bypass emits `DisputeProtectionIntentSettled`
+with source `BYPASS` and no storage writes. Otherwise the policy snapshots the attested window, locks gross
+stake (`STAKE`) or defers the net payout (`DEFERRED_PAYOUT`), and sets `releaseEligibleAt = now + window`.
+It rejects windows above its `MAX_RISK_WINDOW` (365 days) as defence in depth. Statuses remain `NONE`,
+`AWAITING_FUNDING`, `SETTLED`, `RELEASED`, and `DISPUTED`. Collateral ordinals remain `NONE=0`, `BYPASS=1`,
+`STAKE=2`, `DEFERRED_PAYOUT=3`; `MANUAL_RELEASE` is removed. The settled event includes all participant
+identities, method, window, collateral source, stake owner, amounts and eligibility time, with no manual
+flag. O4's `IntentFulfilled` carries `isManualRelease`. Only matured collateral releases emit
+`DisputeProtectionIntentReleased`. No Opened or Cancelled event is emitted.
 
 IntentLifecycleHookV2 reads `bytes32(data)`: clients send empty data for no conditions or
 `abi.encodePacked(conditionsHash)` for a raw 32-byte hash. Empty and all-zero data are unconditioned;
 shorter data is right-padded and longer data uses its first word, with no length or version decoding.
 The conditions version belongs inside the attestor-side hash preimage. Each intent's data is interpreted
-only by its snapshotted hook. After whitelist and read-only policy checks, a nonzero hash requires a
+only by its snapshotted hook. After the whitelist admission check, a nonzero hash requires a
 gating service (`ConditionsRequireGatingService`); O4 separately requires a gating service for any
 non-empty data and verifies its signature covering the data hash. Settlement compares extension word 1
 with the expected hash symmetrically, unless manually released. A mismatch reverts with
@@ -1064,8 +1072,8 @@ with the expected hash symmetrically, unless manually released. A mismatch rever
 `onIntentSignaled`, `onIntentCancelled`, `settleIntent` and `onDeferredPayoutFunded`. Its ERC-165
 interface id is the XOR of exactly those four selectors; O4 validates it when configuring the hook.
 
-The cross-repo attestor smoke remains gated by `ATTESTOR_POLICY_SMOKE_ROOT`. The attestation repo's
-script still emits the old 480-byte format until its PR updates; that format is compatible as above.
+The cross-repo attestor smoke remains gated by `ATTESTOR_POLICY_SMOKE_ROOT`. Its expected signed payload
+contains a dispute window in word 0: zero for pay now and the attested window for protected settlements.
 
 ### Deferred lifecycle compatibility
 
@@ -1101,13 +1109,13 @@ version checks. A nonzero hash requires a deposit gating service even for whitel
 requires one for all non-empty data. All per-intent storage belongs to O4; read the data from
 `getIntent(intentHash)` and interpret it according to that intent's snapshotted hook.
 
-UPV4's signed extension word 0 is the dedicated `balanceFunded` flag (0 or 1); word 1 is the attested
-conditions hash. Missing complete words mean zero. IntentLifecycleHookV2 rejects any other flag with
-`InvalidBalanceFundedFlag(value)` and, unless this is a manual release, requires word 1 to equal the
-hash read from the pre-prune hook data forwarded by O4. `ConditionsNotAttested(intentHash)` rolls
-back the entire fulfillment on mismatch. The comparison is symmetric: empty hook data rejects a nonzero
-attested hash. Words 2+ are ignored. Manual release ignores the extension, skips the hash comparison,
-and follows the independent manual-release path without bypass. Both formats are interpreted only by the replaceable hook.
+UPV4's signed extension word 0 is `disputeWindow` in seconds; word 1 is the attested conditions hash.
+A non-manual settlement requires word 0 and rejects windows above 365 days. Word 1 defaults to zero
+when incomplete and must equal the hash read from the pre-prune hook data forwarded by O4, including
+when the window is zero. `ConditionsNotAttested(intentHash)` rolls back the entire fulfillment on
+mismatch; empty hook data rejects a nonzero attested hash. Words 2+ are ignored. Manual release ignores
+the extension and conditions and pays now without calling the policy. The replaceable hook owns both
+interpretations.
 
 The conditions version lives inside the attestor-side preimage. Off-chain convention v1 is
 `conditionsHash = keccak256(abi.encode(uint8(1), salt, payerIdHash))`,

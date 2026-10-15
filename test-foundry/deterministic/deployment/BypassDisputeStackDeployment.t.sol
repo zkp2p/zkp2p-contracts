@@ -104,18 +104,10 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
 
     function _deployLane45() private {
         freshVault = new StakeVault(address(this), token, address(0), 0);
-        freshPolicy = new DisputeProtectionPolicyV2(
-            address(this),
-            freshVault,
-            disputeVerifier,
-            disputeNullifiers
-        );
+        freshPolicy = new DisputeProtectionPolicyV2(address(this), freshVault, disputeVerifier, disputeNullifiers);
         freshVault.initializeController(address(freshPolicy));
         freshHook = new IntentLifecycleHookV2(orchestratorRegistry, whitelist, freshPolicy);
         freshPolicy.setLifecycleHookAuthorization(address(freshHook), true);
-        // Lane 45 copies nonzero windows in the pinned paypal, venmo order.
-        freshPolicy.setRiskWindow(PAYPAL, predecessorPolicy.getRiskWindow(PAYPAL));
-        freshPolicy.setRiskWindow(METHOD, predecessorPolicy.getRiskWindow(METHOD));
         successor = new UnifiedPaymentVerifierV4(orchestratorRegistry, nullifiers, witnesses);
         for (uint256 index; index < originalMethods.length; index++) {
             successor.addPaymentMethod(originalMethods[index]);
@@ -156,9 +148,6 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         assertEq(predecessorVault.controllerChangeDelay(), 2 days);
         assertEq(freshVault.controllerChangeDelay(), 0);
         assertEq(freshVault.controller(), address(freshPolicy));
-        assertEq(freshPolicy.getRiskWindow(PAYPAL), RISK_WINDOW);
-        assertEq(freshPolicy.getRiskWindow(METHOD), RISK_WINDOW);
-        assertEq(freshPolicy.getRiskWindow(ZELLE), 0);
         StakeVault uninitialized = new StakeVault(address(this), token, address(0), 0);
         token.approve(address(uninitialized), INTENT_AMOUNT);
         uninitialized.depositStake(INTENT_AMOUNT);
@@ -310,17 +299,25 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         _stake(predecessorVault);
         bytes32 id = _signalDefault();
         _activateLane46();
-        _settle(id, _signedProof(id, PAYMENT_ID, successor.DOMAIN_SEPARATOR(), true, false, hex"010203deadbeef"));
+        _settle(id, _signedProof(id, PAYMENT_ID, successor.DOMAIN_SEPARATOR(), true, RISK_WINDOW, hex"010203deadbeef"));
         assertEq(token.balanceOf(taker), INTENT_AMOUNT);
         assertEq(orchestrator.getIntent(id).owner, address(0));
         assertEq(predecessorVault.lockedStake(taker), INTENT_AMOUNT);
-        assertEq(uint256(predecessorPolicy.getDisputeProtectionIntent(id).status), uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.SETTLED));
+        assertEq(
+            uint256(predecessorPolicy.getDisputeProtectionIntent(id).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.SETTLED)
+        );
     }
 
     function test_O4FulfilsThroughUPV4WithExtensionAfterCutover() public {
         _activateLane46();
         bytes32 id = _signalO4();
-        _settleO4(id, _signedProof(id, PAYMENT_ID, successor.DOMAIN_SEPARATOR(), true, true, abi.encode(bytes32(0), keccak256("reserved"))));
+        _settleO4(
+            id,
+            _signedProof(
+                id, PAYMENT_ID, successor.DOMAIN_SEPARATOR(), true, 0, abi.encode(bytes32(0), keccak256("reserved"))
+            )
+        );
         assertEq(token.balanceOf(other), INTENT_AMOUNT);
         assertEq(orchestratorV4.getIntent(id).owner, address(0));
     }
@@ -329,7 +326,10 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         _activateLane46();
         bytes32 id = _signalO4();
         assertEq(freshVault.stakeBalance(taker), 0);
-        _settleO4(id, _signedProof(id, PAYMENT_ID, successor.DOMAIN_SEPARATOR(), true));
+        uint64 window = 37 hours;
+        _settleO4(id, _signedProof(id, PAYMENT_ID, successor.DOMAIN_SEPARATOR(), true, window));
+        assertEq(freshPolicy.getDisputeProtectionIntent(id).releaseEligibleAt, block.timestamp + window);
+        assertEq(freshPolicy.getDisputeProtectionIntent(id).riskWindow, window);
         assertEq(token.balanceOf(other), 0);
         assertEq(token.balanceOf(address(freshVault)), INTENT_AMOUNT);
         (address owner, uint256 amount,) = freshVault.locks(id);
@@ -341,16 +341,29 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         );
     }
 
-    function test_O4BalanceFundedPaysNowAfterCutover() public {
+    function test_O4StakeSettlementUsesAttestedWindowAfterCutover() public {
+        _activateLane46();
+        _stake(freshVault);
+        bytes32 id = _signalO4();
+        assertEq(freshVault.lockedStake(taker), 0);
+        uint64 window = 3 days;
+        _settleO4(id, _signedProof(id, PAYMENT_ID, successor.DOMAIN_SEPARATOR(), true, window));
+        assertEq(token.balanceOf(other), INTENT_AMOUNT);
+        assertEq(freshVault.lockedStake(taker), INTENT_AMOUNT);
+        P.DisputeProtectionIntent memory record = freshPolicy.getDisputeProtectionIntent(id);
+        assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.STAKE));
+        assertEq(record.riskWindow, window);
+        assertEq(record.releaseEligibleAt, block.timestamp + window);
+    }
+
+    function test_O4WindowZeroPaysNowAfterCutover() public {
         _activateLane46();
         bytes32 id = _signalO4();
-        _settleO4(id, _signedProof(id, PAYMENT_ID, successor.DOMAIN_SEPARATOR(), true, true));
+        _settleO4(id, _signedProof(id, PAYMENT_ID, successor.DOMAIN_SEPARATOR(), true, 0));
         assertEq(token.balanceOf(other), INTENT_AMOUNT);
         assertEq(token.balanceOf(address(freshVault)), 0);
         assertEq(freshVault.lockedStake(other), 0);
-        assertEq(
-            uint256(freshPolicy.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.BYPASS)
-        );
+        assertEq(uint256(freshPolicy.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.NONE));
     }
 
     function test_O4ManualReleasePaysNowAfterCutover() public {
@@ -362,10 +375,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         assertEq(token.balanceOf(other), INTENT_AMOUNT);
         assertEq(token.balanceOf(address(freshVault)), vaultBalance);
         assertEq(freshVault.lockedStake(other), 0);
-        assertEq(
-            uint256(freshPolicy.getDisputeProtectionIntent(id).collateralSource),
-            uint256(P.CollateralSource.MANUAL_RELEASE)
-        );
+        assertEq(uint256(freshPolicy.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.NONE));
     }
 
     function test_O4RiskWindowProtectionIgnoresAugustOptOut() public {
@@ -374,7 +384,6 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         _deployLane45();
         _activateLane46();
         assertFalse(predecessorPolicy.isDisputeProtectionEnabled(address(escrow), depositId, METHOD));
-        assertEq(freshPolicy.getRiskWindow(METHOD), RISK_WINDOW);
         bytes32 protectedId = _signalO4();
         assertEq(
             uint256(freshPolicy.getDisputeProtectionIntent(protectedId).status),
@@ -526,25 +535,30 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         view
         returns (bytes memory)
     {
-        return _signedProof(intentHash, paymentId, domain, v4, false);
+        return _signedProof(intentHash, paymentId, domain, v4, RISK_WINDOW);
     }
 
-    function _signedProof(bytes32 intentHash, bytes32 paymentId, bytes32 domain, bool v4, bool balanceFunded)
+    function _signedProof(bytes32 intentHash, bytes32 paymentId, bytes32 domain, bool v4, uint64 riskWindow)
         private
         view
         returns (bytes memory)
     {
-        return _signedProof(intentHash, paymentId, domain, v4, balanceFunded, "");
+        return _signedProof(intentHash, paymentId, domain, v4, riskWindow, "");
     }
 
-    function _signedProof(bytes32 intentHash, bytes32 paymentId, bytes32 domain, bool v4, bool balanceFunded, bytes memory extensionData)
-        private view returns (bytes memory)
-    {
+    function _signedProof(
+        bytes32 intentHash,
+        bytes32 paymentId,
+        bytes32 domain,
+        bool v4,
+        uint64 riskWindow,
+        bytes memory extensionData
+    ) private view returns (bytes memory) {
         bytes memory data = _attestationData(intentHash, paymentId);
         assertEq(data.length, 448);
-        // Plain UPV4 proofs need no extension. When present, word 0 is the balance flag.
-        if (v4 && (balanceFunded || extensionData.length != 0)) {
-            data = bytes.concat(data, abi.encode(uint256(balanceFunded ? 1 : 0)));
+        // O4 requires word 0; retain plain UPV4 proof coverage for the unchanged O3 consumer.
+        if (v4 && (orchestratorV4.getIntent(intentHash).owner != address(0) || extensionData.length != 0)) {
+            data = bytes.concat(data, abi.encode(uint256(riskWindow)));
         }
         data = bytes.concat(data, extensionData);
         bytes32 dataHash = keccak256(data);

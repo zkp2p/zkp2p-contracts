@@ -30,12 +30,10 @@ export type BypassActivationSnapshot = {
     stakeToken: string;
   };
   freshPolicy: Ownership & {
-    admissionsPaused: boolean;
     stakeVault: string;
     disputeVerifier: string;
     disputeNullifierRegistry: string;
     authorizedHooks: string[];
-    riskWindows: Record<string, string>;
   };
   freshHook: Hook;
   verifier: {
@@ -143,7 +141,6 @@ export type BypassExpectedActivationState = {
   allowMultipleIntents: boolean;
   paymentMethods: PaymentMethod[];
   protocolFee: string;
-  riskWindows: Record<string, string>;
 };
 export type BypassActivationReduction = {
   phase: "deployed" | "activating" | "active" | "unrecognized";
@@ -184,8 +181,6 @@ export type BypassTrustSurfaceInput = {
   paymentMethods: string[];
   currencies: string[];
   currencyCounts: string[];
-  riskWindowMethods: string[];
-  riskWindows: string[];
 };
 const ZERO = "0x0000000000000000000000000000000000000000";
 type Invariant = readonly [string, boolean];
@@ -298,12 +293,10 @@ function commonInvariants(
     "freshVault.pendingControllerValidAt": "0",
     "freshVault.controllerChangeDelay": "0",
     "freshVault.stakeToken": a.stakeToken,
-    "freshPolicy.admissionsPaused": false,
     "freshPolicy.stakeVault": a.freshVault,
     "freshPolicy.disputeVerifier": a.disputeVerifier,
     "freshPolicy.disputeNullifierRegistry": a.disputeRegistry,
     "freshPolicy.authorizedHooks": [a.freshHook],
-    "freshPolicy.riskWindows": e.riskWindows,
     "freshHook.orchestratorRegistry": a.orchestratorRegistry,
     "freshHook.whitelistPolicy": a.whitelistPolicy,
     "freshHook.disputeProtectionPolicy": a.freshPolicy,
@@ -619,12 +612,6 @@ export function buildBypassTrustSurface(
   const paymentMethods = expected.paymentMethods.map(
     (method) => method.paymentMethod
   );
-  const riskWindowMethods = [
-    ...paymentMethods,
-    ...Object.keys(expected.riskWindows)
-      .filter((method) => !paymentMethods.includes(method))
-      .sort(),
-  ];
   return {
     safe: a.safe,
     deployer: expected.deployer,
@@ -657,10 +644,6 @@ export function buildBypassTrustSurface(
     currencies: expected.paymentMethods.flatMap((method) => method.currencies),
     currencyCounts: expected.paymentMethods.map((method) =>
       String(method.currencies.length)
-    ),
-    riskWindowMethods,
-    riskWindows: riskWindowMethods.map((method) =>
-      decimal(expected.riskWindows[method]).toString()
     ),
   };
 }
@@ -698,8 +681,6 @@ export function bypassTrustSurfaceTuple(
     s.paymentMethods,
     s.currencies,
     s.currencyCounts,
-    s.riskWindowMethods,
-    s.riskWindows,
   ];
 }
 export const BYPASS_GUARD_BOUND_FIELDS = [
@@ -712,12 +693,10 @@ export const BYPASS_GUARD_BOUND_FIELDS = [
   "freshVault.stakeToken",
   "freshPolicy.owner",
   "freshPolicy.pendingOwner",
-  "freshPolicy.admissionsPaused",
   "freshPolicy.stakeVault",
   "freshPolicy.disputeVerifier",
   "freshPolicy.disputeNullifierRegistry",
   "freshPolicy.authorizedHooks",
-  "freshPolicy.riskWindows",
   "freshHook.orchestratorRegistry",
   "freshHook.whitelistPolicy",
   "freshHook.disputeProtectionPolicy",

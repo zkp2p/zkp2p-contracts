@@ -16,9 +16,7 @@ import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
 import {AttestationVerifierMock} from "../../mocks/AttestationVerifierMock.sol";
 
 contract DisputeProtectionPolicyV2Test is Test {
-    event DisputeProtectionIntentSettled(bytes32 indexed intentHash, address indexed taker, address indexed depositor, address recipient, bytes32 paymentMethod, uint64 riskWindow, P.CollateralSource collateralSource, address stakeOwner, uint256 releaseAmount, uint256 lockedAmount, uint64 releaseEligibleAt, bool isManualRelease);
-    event RiskWindowUpdated(bytes32 indexed paymentMethod, uint64 riskWindow);
-    event AdmissionsPausedUpdated(bool isPaused);
+    event DisputeProtectionIntentSettled(bytes32 indexed intentHash, address indexed taker, address indexed depositor, address recipient, bytes32 paymentMethod, uint64 riskWindow, P.CollateralSource collateralSource, address stakeOwner, uint256 releaseAmount, uint256 lockedAmount, uint64 releaseEligibleAt);
     event DisputeVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
     uint64 internal constant WINDOW = 14 days;
     uint256 internal constant GROSS = 100e6;
@@ -51,11 +49,10 @@ contract DisputeProtectionPolicyV2Test is Test {
     function _newPolicy() internal {
         policy = new DisputeProtectionPolicyV2(address(this), vault, verifier, disputes);
         policy.setLifecycleHookAuthorization(address(this), true);
-        policy.setRiskWindow(METHOD, WINDOW);
         disputes.addWritePermission(address(policy));
     }
-    function _settle(bytes32 id, uint256 gross, uint256 net, bool bypass, bool manual) internal returns (bool) {
-        return policy.onIntentSettled(P.SettleParams(id, TAKER, RECIPIENT, DEPOSITOR, address(usdc), METHOD, gross, net, bypass, manual));
+    function _settle(bytes32 id, uint256 gross, uint256 net, bool bypass) internal returns (bool) {
+        return policy.onIntentSettled(P.SettleParams(id, TAKER, RECIPIENT, DEPOSITOR, address(usdc), METHOD, gross, net, WINDOW, bypass));
     }
     function _stake(address owner, uint256 amount) internal {
         usdc.transfer(owner, amount);
@@ -74,7 +71,7 @@ contract DisputeProtectionPolicyV2Test is Test {
         vm.expectRevert(abi.encodeWithSelector(P.UnexpectedStatus.selector, ID, status));
     }
     function _defer() internal {
-        assertTrue(_settle(ID, GROSS, NET, false, false));
+        assertTrue(_settle(ID, GROSS, NET, false));
     }
     function _fund() internal {
         _defer();
@@ -91,7 +88,7 @@ contract DisputeProtectionPolicyV2Test is Test {
     function _settleStake() internal {
         _stake(TAKER, GROSS);
 
-        assertFalse(_settle(ID, GROSS, NET, false, false));
+        assertFalse(_settle(ID, GROSS, NET, false));
     }
     function _attestation() internal returns (IDisputeVerifier.DisputeAttestation memory) {
         bytes32 paymentId = keccak256("payment");
@@ -104,7 +101,7 @@ contract DisputeProtectionPolicyV2Test is Test {
     function test_SettlementRecordsAllContextAndEmitsOneEvent() public {
         vm.recordLogs();
         vm.expectEmit(true, true, true, true, address(policy));
-        emit DisputeProtectionIntentSettled(ID, TAKER, DEPOSITOR, RECIPIENT, METHOD, WINDOW, P.CollateralSource.DEFERRED_PAYOUT, RECIPIENT, GROSS, NET, uint64(block.timestamp + WINDOW), false);
+        emit DisputeProtectionIntentSettled(ID, TAKER, DEPOSITOR, RECIPIENT, METHOD, WINDOW, P.CollateralSource.DEFERRED_PAYOUT, RECIPIENT, GROSS, NET, uint64(block.timestamp + WINDOW));
         _defer();
         // expectEmit also records the test's expected log; the policy emits exactly one event.
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -122,51 +119,43 @@ contract DisputeProtectionPolicyV2Test is Test {
         _status(P.DisputeProtectionIntentStatus.AWAITING_FUNDING);
     }
     function test_SettlementZeroWindowCreatesNoRecord() public {
-        policy.setRiskWindow(METHOD, 0);
         vm.recordLogs();
-        assertFalse(_settle(ID, GROSS, NET, false, false));
+        assertFalse(policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(usdc), METHOD, GROSS, NET, 0, false)));
         assertEq(vm.getRecordedLogs().length, 0);
         _status(P.DisputeProtectionIntentStatus.NONE);
     }
-    function test_SettlementStillWorksWhenAdmissionsPaused() public {
-        policy.setAdmissionsPaused(true);
-        _defer();
-        _status(P.DisputeProtectionIntentStatus.AWAITING_FUNDING);
-    }
-    function test_SettlementRejectsTokenMismatch() public {
-        vm.expectRevert(abi.encodeWithSelector(P.IntentTokenMismatch.selector, address(usdc), STRANGER));
-        policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, STRANGER, METHOD, GROSS, NET, false, false));
-    }
-    function test_SettlementUsesSuppliedDepositorWithoutEscrow() public {
-        assertTrue(policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, STRANGER, address(usdc), METHOD, GROSS, NET, false, false)));
-        assertEq(_record().depositor, STRANGER);
-    }
-    function test_BypassReleasesWithoutLock() public {
-        vm.expectEmit(true, true, true, true, address(policy));
-        emit DisputeProtectionIntentSettled(ID, TAKER, DEPOSITOR, RECIPIENT, METHOD, WINDOW, P.CollateralSource.BYPASS, address(0), GROSS, 0, uint64(block.timestamp), false);
-        assertFalse(_settle(ID, GROSS, NET, true, false));
-        assertEq(_record().releaseEligibleAt, block.timestamp);
-        _status(P.DisputeProtectionIntentStatus.RELEASED);
-        assertEq(uint256(_record().collateralSource), uint256(P.CollateralSource.BYPASS));
-        assertEq(vault.totalAccounted(), 0);
-    }
-    function test_ManualReleasePaysNowWithoutLock() public {
-        for (uint256 i; i < 4; ++i) {
-            if (i == 2) _stake(TAKER, GROSS);
-            bytes32 id = bytes32(i + 1);
 
-            vm.expectEmit(true, true, true, true, address(policy));
-            emit DisputeProtectionIntentSettled(id, TAKER, DEPOSITOR, RECIPIENT, METHOD, WINDOW, P.CollateralSource.MANUAL_RELEASE, address(0), GROSS, 0, uint64(block.timestamp), true);
-            assertFalse(_settle(id, GROSS, NET, i % 2 == 0, true));
-            P.DisputeProtectionIntent memory r = policy.getDisputeProtectionIntent(id);
-            assertEq(uint256(r.status), uint256(P.DisputeProtectionIntentStatus.RELEASED));
-            assertEq(uint256(r.collateralSource), uint256(P.CollateralSource.MANUAL_RELEASE));
-            assertEq(r.releaseEligibleAt, block.timestamp);
-            assertEq(r.lockedAmount, 0);
-            assertEq(r.stakeOwner, address(0));
-            assertEq(vault.lockedStake(TAKER), 0);
+    function test_NonStakeTokenCreatesNoRecordOrEvent() public {
+        for (uint256 i; i < 2; ++i) {
+            vm.recordLogs();
+            vm.record();
+            assertFalse(policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, STRANGER, METHOD, GROSS, NET, WINDOW, i == 0)));
+            (, bytes32[] memory writes) = vm.accesses(address(policy));
+            assertEq(writes.length, 0);
+            assertEq(vm.getRecordedLogs().length, 0);
+            _status(P.DisputeProtectionIntentStatus.NONE);
         }
     }
+    function test_SettlementUsesSuppliedDepositorWithoutEscrow() public {
+        assertTrue(policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, STRANGER, address(usdc), METHOD, GROSS, NET, WINDOW, false)));
+        assertEq(_record().depositor, STRANGER);
+    }
+    function test_BypassEmitsWithoutStorageOrReleasedEvent() public {
+        vm.expectEmit(true, true, true, true, address(policy));
+        emit DisputeProtectionIntentSettled(ID, TAKER, DEPOSITOR, RECIPIENT, METHOD, WINDOW, P.CollateralSource.BYPASS, address(0), GROSS, 0, uint64(block.timestamp));
+        vm.recordLogs();
+        vm.record();
+        assertFalse(_settle(ID, GROSS, NET, true));
+        (, bytes32[] memory writes) = vm.accesses(address(policy));
+        assertEq(writes.length, 0);
+        assertEq(vm.getRecordedLogs().length, 1);
+        _status(P.DisputeProtectionIntentStatus.NONE);
+        assertEq(keccak256(abi.encode(_record())), keccak256(abi.encode(_emptyRecord())));
+        assertEq(vault.totalAccounted(), 0);
+    }
+
+    function _emptyRecord() internal pure returns (P.DisputeProtectionIntent memory record) {}
+
     function test_StakeBoundaryEqualLocksStake() public {
         _settleStake();
         assertEq(_record().lockedAmount, GROSS);
@@ -192,7 +181,7 @@ contract DisputeProtectionPolicyV2Test is Test {
     function test_DelegatedStakeOwnerIsUsed() public {
         _delegate();
 
-        _settle(ID, GROSS, NET, false, false);
+        _settle(ID, GROSS, NET, false);
         assertEq(_record().stakeOwner, STRANGER);
         assertEq(vault.lockedStake(STRANGER), GROSS);
     }
@@ -201,7 +190,7 @@ contract DisputeProtectionPolicyV2Test is Test {
 
         vm.prank(TAKER);
         vault.withdrawStake(GROSS);
-        assertTrue(_settle(ID, GROSS, NET, false, false));
+        assertTrue(_settle(ID, GROSS, NET, false));
     }
     function test_DelegationRevokedBeforeSettlementFallsBackToTaker() public {
         _delegate();
@@ -209,35 +198,35 @@ contract DisputeProtectionPolicyV2Test is Test {
         vm.prank(STRANGER);
         vault.setTakerAuthorization(TAKER, false);
         assertEq(vault.stakeOwnerOf(TAKER), TAKER);
-        assertTrue(_settle(ID, GROSS, NET, false, false));
+        assertTrue(_settle(ID, GROSS, NET, false));
         assertEq(vault.lockedStake(STRANGER), 0);
     }
     function test_TwoSettlementsCompeteForOneStake() public {
         _stake(TAKER, 150e6);
 
-        assertFalse(_settle(ID, GROSS, NET, false, false));
-        assertTrue(_settle(ID2, GROSS, NET, false, false));
+        assertFalse(_settle(ID, GROSS, NET, false));
+        assertTrue(_settle(ID2, GROSS, NET, false));
         assertEq(vault.lockedStake(TAKER), GROSS);
         assertLe(vault.lockedStake(TAKER), vault.stakeBalance(TAKER));
     }
-    function test_SettlementSnapshotsCurrentWindow() public {
-        policy.setRiskWindow(METHOD, 1 days);
-        assertTrue(_settle(ID, GROSS, NET, false, false));
+    function test_SettlementSnapshotsAttestedWindowPerIntent() public {
+        assertTrue(policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(usdc), METHOD, GROSS, NET, 1 days, false)));
+        assertTrue(policy.onIntentSettled(P.SettleParams(ID2, TAKER, RECIPIENT, DEPOSITOR, address(usdc), METHOD, GROSS, NET, 2 days, false)));
         assertEq(_record().riskWindow, 1 days);
         assertEq(_record().releaseEligibleAt, block.timestamp + 1 days);
-        policy.setRiskWindow(METHOD, 2 days);
-        assertEq(_record().riskWindow, 1 days);
+        assertEq(policy.getDisputeProtectionIntent(ID2).riskWindow, 2 days);
+        assertEq(policy.getDisputeProtectionIntent(ID2).releaseEligibleAt, block.timestamp + 2 days);
     }
     function test_ZeroAmountsFailClosed() public {
         vm.expectRevert(abi.encodeWithSelector(P.InvalidSettlementAmount.selector, 0, NET));
-        _settle(ID, 0, NET, false, false);
+        _settle(ID, 0, NET, false);
         vm.expectRevert(abi.encodeWithSelector(P.InvalidSettlementAmount.selector, GROSS, 0));
-        _settle(ID, GROSS, 0, false, false);
+        _settle(ID, GROSS, 0, false);
     }
     function test_SettleTwiceReverts() public {
         _settleStake();
         vm.expectRevert(abi.encodeWithSelector(P.DisputeProtectionIntentAlreadyExists.selector, ID));
-        _settle(ID, GROSS, NET, false, false);
+        _settle(ID, GROSS, NET, false);
     }
     function test_FundDeferredLocksNetForRecipient() public {
         _stake(RECIPIENT, 10e6);
@@ -341,7 +330,7 @@ contract DisputeProtectionPolicyV2Test is Test {
         _fund();
         _mature();
         policy.releaseMaturedDisputeProtectionIntent(ID);
-        assertFalse(policy.onIntentSettled(P.SettleParams(ID2, RECIPIENT, STRANGER, DEPOSITOR, address(usdc), METHOD, 60e6, 59e6, false, false)));
+        assertFalse(policy.onIntentSettled(P.SettleParams(ID2, RECIPIENT, STRANGER, DEPOSITOR, address(usdc), METHOD, 60e6, 59e6, WINDOW, false)));
         _claim(TAKER);
         assertEq(usdc.balanceOf(RECIPIENT), 39.05e6);
         assertEq(_record().claimedAmount, 39.05e6);
@@ -369,7 +358,7 @@ contract DisputeProtectionPolicyV2Test is Test {
     function test_LifecycleEntrypointsRequireAuthorizedHook() public {
         vm.startPrank(STRANGER);
         vm.expectRevert(abi.encodeWithSelector(P.UnauthorizedLifecycleHook.selector, STRANGER));
-        _settle(ID, GROSS, NET, false, false);
+        _settle(ID, GROSS, NET, false);
         vm.expectRevert(abi.encodeWithSelector(P.UnauthorizedLifecycleHook.selector, STRANGER));
         policy.onDeferredPayoutFunded(ID);
         vm.stopPrank();
@@ -407,10 +396,10 @@ contract DisputeProtectionPolicyV2Test is Test {
     function test_BatchReleaseIsAtomic() public {
         _stake(TAKER, 2 * GROSS);
 
-        _settle(ID, GROSS, NET, false, false);
+        _settle(ID, GROSS, NET, false);
         vm.warp(vm.getBlockTimestamp() + 1);
 
-        _settle(ID2, GROSS, NET, false, false);
+        _settle(ID2, GROSS, NET, false);
         _mature();
         bytes32[] memory ids = new bytes32[](2);
         ids[0] = ID;
@@ -424,21 +413,15 @@ contract DisputeProtectionPolicyV2Test is Test {
         policy.releaseMaturedDisputeProtectionIntents(ids);
         assertEq(vault.lockedStake(TAKER), 0);
     }
-    function test_SetRiskWindowBoundsAndEmits() public {
+    function test_SettlementWindowBoundedAsDefenceInDepth() public {
         uint64 max = policy.MAX_RISK_WINDOW();
         vm.expectRevert(abi.encodeWithSelector(P.InvalidRiskWindow.selector, max + 1));
-        policy.setRiskWindow(METHOD, max + 1);
-        vm.expectEmit(true, false, false, true, address(policy));
-        emit RiskWindowUpdated(METHOD, max);
-        policy.setRiskWindow(METHOD, max);
-        assertEq(policy.getRiskWindow(METHOD), max);
+        policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(usdc), METHOD, GROSS, NET, max + 1, false));
+        assertTrue(policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(usdc), METHOD, GROSS, NET, max, false)));
+        assertEq(_record().riskWindow, max);
+        assertEq(_record().releaseEligibleAt, block.timestamp + max);
     }
-    function test_SetAdmissionsPausedEmits() public {
-        vm.expectEmit(false, false, false, true, address(policy));
-        emit AdmissionsPausedUpdated(true);
-        policy.setAdmissionsPaused(true);
-        assertTrue(policy.admissionsPaused());
-    }
+
     function test_Views() public {
         _defer();
 
@@ -446,7 +429,6 @@ contract DisputeProtectionPolicyV2Test is Test {
         assertEq(r.taker, TAKER);
         assertEq(r.depositor, DEPOSITOR);
         assertEq(r.paymentMethod, METHOD);
-        assertEq(policy.getRiskWindow(METHOD), WINDOW);
         assertTrue(policy.isLifecycleHookAuthorized(address(this)));
         assertFalse(policy.isLifecycleHookAuthorized(STRANGER));
         assertEq(address(policy.stakeVault()), address(vault));

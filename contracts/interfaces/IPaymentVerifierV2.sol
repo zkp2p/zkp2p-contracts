@@ -38,7 +38,7 @@ interface IPaymentVerifierV2 {
     }
 
     /// @notice Verifies a payment and returns all verified fields plus signed extension data (never unsigned metadata).
-    /// @dev Extension words: 0 = balanceFunded (0 or 1), 1 = conditionsHash, 2+ = reserved.
+    /// @dev Extension words: 0 = disputeWindow (uint256 seconds), 1 = conditionsHash, 2+ = reserved.
     /// The verifier returns these bytes untouched; IntentLifecycleHookV2 decodes and validates them.
     function verifyPayment(IPaymentVerifier.VerifyPaymentData calldata _verifyPaymentData)
         external

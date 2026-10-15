@@ -66,12 +66,7 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         freshVault = new StakeVault(address(this), token, address(0), 0);
         predecessorPolicy =
             new DisputeProtectionPolicy(address(this), predecessorVault, disputeVerifier, disputeRegistry);
-        freshPolicy = new DisputeProtectionPolicyV2(
-            address(this),
-            freshVault,
-            disputeVerifier,
-            disputeRegistry
-        );
+        freshPolicy = new DisputeProtectionPolicyV2(address(this), freshVault, disputeVerifier, disputeRegistry);
         groupRegistry = new AddressGroupRegistry();
         whitelistPolicy = new WhitelistPolicy(groupRegistry, escrowRegistry, orchestratorRegistry);
         predecessorHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, predecessorPolicy);
@@ -82,7 +77,6 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         predecessorPolicy.setLifecycleHookAuthorization(address(predecessorHook), true);
         freshPolicy.setLifecycleHookAuthorization(address(freshHook), true);
         predecessorPolicy.setRiskWindow(METHOD, RISK_WINDOW);
-        freshPolicy.setRiskWindow(METHOD, predecessorPolicy.getRiskWindow(METHOD));
         orchestrator.setLifecycleHook(predecessorHook);
         orchestrator.setAllowMultipleIntents(false);
         orchestratorV4 = new OrchestratorV4(
@@ -100,7 +94,6 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         vm.prank(depositor);
         predecessorPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, false);
         predecessorPolicy.setRiskWindow(PAYPAL, RISK_WINDOW);
-        freshPolicy.setRiskWindow(PAYPAL, predecessorPolicy.getRiskWindow(PAYPAL));
         retiredVerifier = new UnifiedPaymentVerifierV3(orchestratorRegistry, nullifierRegistryV2, attestationVerifier);
         freshVerifier = new UnifiedPaymentVerifierV4(orchestratorRegistry, nullifierRegistryV2, attestationVerifier);
         paymentVerifierRegistry.removePaymentMethod(METHOD);
@@ -131,7 +124,6 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         _transfer(disputeVerifier, true);
         _transfer(freshVault, false);
         freshPolicy.transferOwnership(safe);
-        assertEq(freshPolicy.getRiskWindow(METHOD), RISK_WINDOW);
     }
 
     function test_CutoverPassesForEveryConditionalAcceptanceCombination() public {
@@ -305,12 +297,8 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
 
     function test_GuardRejectsFreshVaultDelay() public {
         StakeVault delayedVault = new StakeVault(address(this), token, address(0), CONTROLLER_CHANGE_DELAY);
-        DisputeProtectionPolicyV2 delayedPolicy = new DisputeProtectionPolicyV2(
-            address(this),
-            delayedVault,
-            disputeVerifier,
-            disputeRegistry
-        );
+        DisputeProtectionPolicyV2 delayedPolicy =
+            new DisputeProtectionPolicyV2(address(this), delayedVault, disputeVerifier, disputeRegistry);
         IntentLifecycleHookV2 delayedHook =
             new IntentLifecycleHookV2(orchestratorRegistry, whitelistPolicy, delayedPolicy);
         delayedVault.initializeController(address(delayedPolicy));
@@ -327,15 +315,6 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
                 DisputeBypassTrustSurfaceChecks.FreshVaultControllerChangeDelayMismatch.selector,
                 CONTROLLER_CHANGE_DELAY
             )
-        );
-    }
-
-    function test_GuardRejectsRiskWindowDrift() public {
-        DisputeBypassCutoverGuard guard = _guard(_surface(), true, true);
-        freshPolicy.setRiskWindow(PAYPAL, RISK_WINDOW + 1);
-        _expectReady(
-            guard,
-            abi.encodeWithSelector(DisputeBypassTrustSurfaceChecks.RiskWindowMismatch.selector, PAYPAL, RISK_WINDOW + 1)
         );
     }
 
@@ -531,17 +510,6 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         );
     }
 
-    function test_ConstructorsRejectRiskWindowLengthMismatch() public {
-        BypassTrustSurface memory surface = _surface();
-        surface.riskWindows = new uint64[](2);
-        _expectConstructorReverts(
-            surface,
-            abi.encodeWithSelector(
-                DisputeBypassTrustSurfaceChecks.RiskWindowConfigurationLengthMismatch.selector, uint256(3), uint256(2)
-            )
-        );
-    }
-
     function _expectConstructorReverts(BypassTrustSurface memory surface, bytes memory reason) internal {
         vm.expectRevert(reason);
         new DisputeBypassCutoverGuard(surface, true, true);
@@ -634,10 +602,6 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         surface.currencies[1] = USD;
         surface.currencies[2] = EUR;
         surface.currencies[3] = USD;
-        surface.riskWindowMethods = _methods();
-        surface.riskWindows = new uint64[](3);
-        surface.riskWindows[0] = RISK_WINDOW;
-        surface.riskWindows[1] = RISK_WINDOW;
     }
 
     function _transfer(StakeVault target, bool accept) internal {
