@@ -41,8 +41,9 @@ before stating what is active.
 
 - `EscrowV2.sol` is the current escrow.
 - `UnifiedPaymentVerifierV3.sol` is the verifier every payment method routes
-  to. `UnifiedPaymentVerifierV4.sol` is deployed on Base staging and not yet
-  routed.
+  to on Base. On Base staging, every method has routed to an earlier
+  `UnifiedPaymentVerifierV4` deployment since 2026-10-12; this branch changes
+  that source, and the new version isn't deployed yet.
 - `registries/NullifierRegistry.sol` is the source of the live
   `DisputeNullifierRegistry`.
 - `interfaces/IEscrow.sol`, `IOrchestrator.sol`, `IOrchestratorV2.sol`, and
