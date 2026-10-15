@@ -106,7 +106,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
     function _deployLane45() private {
         freshVault = new StakeVaultV2(address(this), token, address(0));
         freshPolicy =
-            new DisputeProtectionPolicyV2(address(this), freshVault, disputeVerifier, disputeNullifiers, whitelist);
+            new DisputeProtectionPolicyV2(address(this), freshVault, disputeVerifier, disputeNullifiers, whitelist, relayerRegistry);
         freshVault.setController(address(freshPolicy), true);
         successor = new UnifiedPaymentVerifierV4(orchestratorRegistry, nullifiers, witnesses);
         for (uint256 index; index < originalMethods.length; index++) {

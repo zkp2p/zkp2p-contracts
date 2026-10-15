@@ -26,7 +26,8 @@ interface IIntentSettlementPolicy {
     /// @dev Signed extension words: 0 = dispute window (uint256 seconds), required for non-manual
     /// settlements and at most 180 days; 1 = conditions hash (missing reads as zero). Words 2+ are
     /// reserved. The current policy compares word 1 to bytes32(data), then exempts zero windows,
-    /// live whitelisted takers and non-stake tokens. Manual release skips these checks.
+    /// live whitelisted takers, registered relayer takers whose deposit has not opted out of relayer
+    /// bypass, and non-stake tokens. Manual release skips these checks.
     /// Data interpretation belongs to the snapshotted policy; O4 forwards it unchanged.
     /// @return deferralVault Zero to pay intent.to now; otherwise the vault that must receive
     /// netAmount before onDeferredPayoutFunded is called in the same transaction.

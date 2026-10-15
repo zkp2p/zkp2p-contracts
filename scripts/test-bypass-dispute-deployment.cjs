@@ -610,7 +610,7 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
   for (const name of BYPASS_DEPLOYMENT_NAMES)
     assert.ok(state.records.get(name), name);
   const requiredAbiFunctions = /** @type {Array<[string, string[]]>} */ ([
-    ["DisputeProtectionPolicyV2", ["claimFor", "settleIntent", "onDeferredPayoutFunded", "supportsInterface"]],
+    ["DisputeProtectionPolicyV2", ["claimFor", "settleIntent", "onDeferredPayoutFunded", "supportsInterface", "relayerRegistry", "isDepositOptedOutForRelayerBypass", "setDepositOptOutForRelayerBypass"]],
     ["StakeVaultV2", ["payOutStake", "isController", "setController", "lockController"]],
     ["OrchestratorV4", ["supportsInterface"]],
     ["UnifiedPaymentVerifierV4", ["addPaymentMethod", "DOMAIN_SEPARATOR"]],
@@ -1122,6 +1122,10 @@ test("fresh record validation rejects the superseded staging verifier before art
 
 /** @param {Awaited<ReturnType<typeof localhostFixture>>} state @param {import("ethers").Contract} o4 */
 async function assertO4Config(state, o4) {
+  const policy = await ethers.getContractAt(
+    "DisputeProtectionPolicyV2", state.records.get("DisputeProtectionPolicyV2").address
+  );
+  assert.equal(await policy.relayerRegistry(), await o4.relayerRegistry());
   for (const field of [
     "escrowRegistry",
     "paymentVerifierRegistry",
@@ -1178,6 +1182,22 @@ test("lane 45 never registers OrchestratorV4", async () => {
     deployLane45(state.fakeHre),
     /OrchestratorV4 registered before lane 46/
   );
+});
+
+test("local lane 45 rejects a policy whose relayer registry differs from O4", async () => {
+  const state = await localhostFixture();
+  await deployLane45(state.fakeHre);
+  const getContractAt = state.fakeHre.ethers.getContractAt;
+  state.fakeHre.ethers = {
+    ...state.fakeHre.ethers,
+    /** @param {string} name @param {string} target */
+    getContractAt: async (name, target) => {
+      const contract = await getContractAt(name, target);
+      if (name !== "DisputeProtectionPolicyV2") return contract;
+      return { ...contract, relayerRegistry: async () => state.extraWriter.address };
+    },
+  };
+  await assert.rejects(deployLane45(state.fakeHre), /Fresh bypass policy dependency state drifted/);
 });
 
 test("local lane 45 rejects an O4 whose fee recipient differs from O3", async () => {
@@ -1689,6 +1709,7 @@ test("lane 45 live step handlers only configure the fresh stack on Base and stag
       pins.disputeVerifier.address,
       pins.disputeNullifierRegistry.address,
       pins.whitelistPolicy.address,
+      expected.relayerRegistry,
     ]);
     assert.deepEqual(records.get("OrchestratorV4").args, [
       pins.deployer,

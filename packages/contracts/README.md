@@ -390,7 +390,8 @@ own `IOrchestratorV4` ERC-165 advertisement. OrchestratorV3, IntentLifecycleHook
 DisputeProtectionPolicy are unchanged.
 
 O4 and DisputeProtectionPolicyV2 receive the same immutable, nonzero deployed `IWhitelistPolicy`
-in their constructors. O4 enforces admission at signal: an enabled deposit/payment-method
+in their constructors. The policy also receives a nonzero deployed `IRelayerRegistry` matching
+O4's configured registry. O4 enforces admission at signal: an enabled deposit/payment-method
 whitelist must allow the taker. `TakerNotWhitelisted` rejects non-members even with a zero
 settlement policy. Signal does not call the settlement policy. Cancel, escrow prune and orphan
 cleanup clear the intent and policy snapshot without policy callbacks.
@@ -409,7 +410,8 @@ until pruning; there is no separate policy-data mapping or getter.
 
 Settlement preserves O3's order: escrow unlock, the unchanged protocol/referral/manager fee
 function, the snapshotted policy, then net payout. O4 captures the token and depositor before
-unlock, even when escrow deletes an exhausted deposit, and the policy never reads escrow.
+unlock, even when escrow deletes an exhausted deposit, and the policy never reads escrow during
+settlement. Only the depositor opt-out setter reads escrow.
 `SettlementContext` is `{ intentHash, token, taker, recipient, depositor, escrow, depositId,
 paymentMethod, releaseAmount, netAmount, data, extensionData, isManualRelease }`.
 The policy returns zero to pay `intent.to` now, or the vault that must receive `netAmount`.
@@ -447,14 +449,23 @@ The policy validates settlement in this order:
 3. Require extension word 1 to equal `bytes32(data)` (`ConditionsNotAttested(intentHash)`).
 4. Window zero returns zero.
 5. A live enabled whitelist allowing the taker returns zero.
-6. A token other than `stakeVault.stakeToken()` returns zero.
-7. Reject duplicate records and zero amounts, enforce timestamp bounds, then lock gross stake
+6. A registered relayer taker returns zero unless the deposit has opted out of relayer bypass.
+7. A token other than `stakeVault.stakeToken()` returns zero.
+8. Reject duplicate records and zero amounts, enforce timestamp bounds, then lock gross stake
    (`STAKE`) or defer the net payout (`DEFERRED_PAYOUT`).
 
-Whitelist membership belongs to the taker, not the recipient; relayer registration does not
-exempt collateral. Disabling the whitelist or removing the taker after signal restores the
-cascade for a nonzero window. Exempt settlements write no record and emit no policy event.
-There are no signal/cancel records, per-method windows, admissions pause or per-deposit opt-outs.
+Whitelist and relayer membership belong to the taker, not the recipient, and are read live at
+settlement. Registered relayer takers bypass collateral on every deposit by default. Only the
+depositor may call `setDepositOptOutForRelayerBypass(escrow, depositId, optOut)` to opt out or back
+in; delegates are rejected with `NotDepositor(escrow, depositId, caller)`. The setter emits
+`DepositOptOutForRelayerBypassUpdated`; `isDepositOptedOutForRelayerBypass` exposes the current
+value. Opt-outs are scoped to escrow and deposit ID. A fake escrow can only write its own key,
+because settlement uses the escrow validated by O4. Opting out restores the collateral cascade
+for relayers, but whitelist and manual-release exemptions still take precedence. Disabling a
+whitelist or removing its taker restores the cascade only if relayer bypass does not apply.
+Exempt settlements write no record, emit no policy event and make no vault call (except the
+stake-token read for the non-stake-token exemption). There are no signal/cancel records,
+per-method windows or admissions pause.
 Both protected paths create a `SETTLED` record; the deferred path returns `address(stakeVault)`.
 Funding requires a `SETTLED` `DEFERRED_PAYOUT` record and calls `fundLock`; the vault rejects double
 funding with `LockAlreadyExists`. Skipping funding leaves a settled record without a vault lock.
@@ -471,17 +482,20 @@ Disputes, releases and claims retain their own guards; no Opened or Cancelled ev
 The policy reads the conditions hash as `bytes32(data)`: empty/all-zero data means none,
 shorter data is right-padded and longer data uses the first word. Clients normally send
 `abi.encodePacked(conditionsHash)` or empty data. There is no length/version decoding.
-The comparison is symmetric, including zero windows and whitelisted takers; manual release
-skips it. Off-chain v1 convention is
+The comparison is symmetric, including zero windows, whitelisted takers and relayer bypass.
+Manual release skips it. Off-chain v1 convention is
 `conditionsHash = keccak256(abi.encode(uint8(1), salt, payerIdHash))`, with two bytes32 values.
 Use a cryptographically random salt per intent and keep it off-chain with the conditions supplied
 to the gating service and attestor.
 
 Lanes 45/46 deploy StakeVaultV2, DisputeProtectionPolicyV2, UPV4 and O4 without a lifecycle hook.
 Lane 45 authorizes the policy on the vault immediately, without an accept-controller step.
-They pass the same whitelist to O4 and the policy, set O4's policy, authorize O4 on the policy,
-and register O4 last. Bypass batch manifest version 8 records the selected policy's vault-controller
-authorization, O4 authorization and both whitelist dependencies; older manifests are rejected. Historical O3 predecessor checks remain
+They pass the same whitelist and relayer registry to O4 and the policy, set O4's policy, authorize
+O4 on the policy, and register O4 last. Deployment checks, activation snapshots and the on-chain
+guard require the policy's registry to match O4's pinned registry. Depositor opt-outs are allowed
+before activation. Bypass batch manifest version 9 records the selected policy's vault-controller
+authorization, O4 authorization, both whitelist dependencies and the policy's relayer registry;
+older manifests are rejected. Historical O3 predecessor checks remain
 separate. The package drops the removed hook ABI. Its source ABI catalog does not export interface ABIs;
 generated TypeChain interface exports include `IIntentSettlementPolicy` and `IStakeVaultV2`.
 The source ABI catalog exports `StakeVaultV2` separately from the August `StakeVault`.

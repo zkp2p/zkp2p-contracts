@@ -579,6 +579,7 @@ export async function readBypassActivationSnapshot(
         "disputeNullifierRegistry"
       ),
       whitelistPolicy: await address(policy, "whitelistPolicy"),
+      relayerRegistry: await address(policy, "relayerRegistry"),
       authorizedOrchestrators: await authorizedOrchestrators(
         hre,
         context.records.freshPolicy,
@@ -1098,7 +1099,7 @@ export async function prepareBaseCutoverBatch(
     expected.addresses.safe
   );
   const unsigned: Omit<BypassActivationBatchManifest, "manifestSha256"> = {
-    version: 8,
+    version: 9,
     kind: "dispute-bypass-cutover",
     chainId: 8453,
     safe: expected.addresses.safe,

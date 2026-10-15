@@ -174,6 +174,7 @@ function snapshot(wanted, k = 0) {
       disputeNullifierRegistry: a.disputeRegistry,
       authorizedOrchestrators: [a.orchestratorV4],
       whitelistPolicy: a.whitelistPolicy,
+      relayerRegistry: a.relayerRegistry,
     },
     verifier: {
       owner,
@@ -381,6 +382,7 @@ test("bypass reducer names trust and ordered registry drift", () => {
     ["freshPolicy.authorizedOrchestrators", (s) => { s.freshPolicy.authorizedOrchestrators = []; }],
     ["freshPolicy.authorizedOrchestrators", (s) => { s.freshPolicy.authorizedOrchestrators.push(address(90)); }],
     ["freshPolicy.whitelistPolicy", (s) => { s.freshPolicy.whitelistPolicy = address(90); }],
+    ["freshPolicy.relayerRegistry", (s) => { s.freshPolicy.relayerRegistry = address(90); }],
     [
       "disputeRegistry.writers",
       (s) => {
@@ -757,7 +759,7 @@ function manifest() {
   });
   /** @type {Omit<Manifest, "manifestSha256">} */
   const unsigned = {
-    version: 8,
+    version: 9,
     kind: "dispute-bypass-cutover",
     chainId: 8453,
     safe: wanted.addresses.safe,
@@ -780,7 +782,7 @@ function manifest() {
   };
 }
 
-test("unsigned v8 bypass manifests validate and reject v7 and tampering", () => {
+test("unsigned v9 bypass manifests validate and reject v8 and tampering", () => {
   const valid = manifest();
   assert.deepEqual(
     deriveBypassConstructorArgs(valid, "guard"),
@@ -790,7 +792,7 @@ test("unsigned v8 bypass manifests validate and reject v7 and tampering", () => 
     deriveBypassConstructorArgs(valid, "postcondition"),
     valid.postcondition.constructorArgs
   );
-  const oldVersion = { ...valid, version: 7 };
+  const oldVersion = { ...valid, version: 8 };
   const { manifestSha256: oldDigest, ...oldUnsigned } = oldVersion;
   oldVersion.manifestSha256 = manifests.computeBypassManifestSha256(
     /** @type {any} */ (oldUnsigned)
@@ -805,7 +807,7 @@ test("unsigned v8 bypass manifests validate and reject v7 and tampering", () => 
   /** @type {Array<(value: Manifest) => void>} */
   const mutations = [
     (m) => {
-      Object.assign(m, { version: 7 });
+      Object.assign(m, { version: 8 });
     },
     (m) => {
       Object.assign(m, { chainId: 31337 });
@@ -996,6 +998,7 @@ test("lane 46 classifies bypass policy activity across O4 registration", () => {
   const configuration = [
     "OrchestratorAuthorizationUpdated",
     "OwnershipTransferStarted",
+    "DepositOptOutForRelayerBypassUpdated",
   ].map(event);
   assert.deepEqual(lane.BYPASS_POLICY_LIFECYCLE_EVENTS, [
     "DisputeProtectionIntentSettled",

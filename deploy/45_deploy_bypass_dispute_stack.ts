@@ -92,7 +92,10 @@ export function classifyBypassPolicyActivity(
     );
   }
   for (const event of events.filter((event) => !lifecycleEvents.includes(event))) {
-    if (!BYPASS_POLICY_GOVERNANCE_EVENTS.some((name) => name === event.name)) {
+    if (
+      !BYPASS_POLICY_GOVERNANCE_EVENTS.some((name) => name === event.name) &&
+      event.name !== "DepositOptOutForRelayerBypassUpdated"
+    ) {
       throw new Error(
         `DisputeProtectionPolicyV2 emitted an unclassified event: ${event.name} in ${event.transactionHash}`
       );
@@ -847,6 +850,7 @@ async function readFreshState(
     requireState(
       sameAddress(await policy.stakeVault(), vaultRecord!.address) &&
         sameAddress(await policy.whitelistPolicy(), context.whitelistPolicy) &&
+        sameAddress(await policy.relayerRegistry(), context.relayerRegistry) &&
         sameAddress(await policy.disputeVerifier(), context.disputeVerifier) &&
         sameAddress(
           await policy.disputeNullifierRegistry(),
@@ -1057,6 +1061,7 @@ export async function executeLane45Step(
       context.disputeVerifier,
       context.disputeNullifierRegistry,
       context.whitelistPolicy,
+      context.relayerRegistry,
     ]);
   } else if (step === "authorize-controller") {
     await authorizeBypassController(
@@ -1278,6 +1283,7 @@ async function deployLocalBypassStack(
     context.disputeVerifier,
     context.disputeNullifierRegistry,
     context.whitelistPolicy,
+    context.relayerRegistry,
   ]);
   let state = await readFreshState(hre, context);
   while (!state.completed["authorize-controller"]) {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
+import {EscrowDepositStub} from "../../mocks/EscrowDepositStub.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 import {OrchestratorV4Fixture} from "../helpers/OrchestratorV4Fixture.sol";
 import {IIntentSettlementPolicy} from "contracts/interfaces/IIntentSettlementPolicy.sol";
@@ -27,7 +28,7 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
         policy = new DisputeProtectionPolicyV2(
             address(this), vault,
             new DisputeVerifier(address(this), new NullifierRegistryV2(new NullifierRegistry()), new AttestationVerifierMock()),
-            new NullifierRegistry(), whitelist
+            new NullifierRegistry(), whitelist, relayerRegistry
         );
         vault.setController(address(policy), true);
         policy.setOrchestratorAuthorization(address(this), true);
@@ -163,8 +164,25 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
         assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
     }
 
-    function test_RelayerTakerWithWhitelistDisabledUsesStakeOwnerCollateral() public {
+    function test_RelayerTakerPaysNowWithoutRecordEventOrVaultCall() public {
         relayerRegistry.addRelayer(taker);
+        assertFalse(whitelist.enabled(address(escrow), depositId, METHOD));
+        assertEq(vault.freeStake(taker), 0);
+        vm.mockCallRevert(address(vault), bytes(""), bytes("vault called"));
+
+        vm.recordLogs();
+        vm.record();
+        assertEq(policy.settleIntent(_context(ID, 14 days)), address(0));
+        (, bytes32[] memory writes) = vm.accesses(address(policy));
+        assertEq(writes.length, 0);
+        assertEq(vm.getRecordedLogs().length, 0);
+        assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
+    }
+
+    function test_OptedOutRelayerTakerUsesStakeOwnerCollateral() public {
+        relayerRegistry.addRelayer(taker);
+        vm.prank(depositor);
+        policy.setDepositOptOutForRelayerBypass(address(escrow), depositId, true);
         assertFalse(whitelist.enabled(address(escrow), depositId, METHOD));
         token.transfer(delegate, INTENT_AMOUNT);
         vm.startPrank(delegate);
@@ -187,8 +205,10 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
         assertEq(vault.lockedStake(taker), 0);
     }
 
-    function test_RelayerTakerWithWhitelistDisabledDefersUncoveredPayout() public {
+    function test_OptedOutRelayerTakerDefersUncoveredPayout() public {
         relayerRegistry.addRelayer(taker);
+        vm.prank(depositor);
+        policy.setDepositOptOutForRelayerBypass(address(escrow), depositId, true);
         assertFalse(whitelist.enabled(address(escrow), depositId, METHOD));
 
         assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
@@ -199,9 +219,12 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
         assertEq(record.lockedAmount, NET);
     }
 
-    function test_RelayerTakerAllowedByEnabledWhitelistBypasses() public {
+    function testFuzz_RelayerWhitelistBypassTakesPrecedence(bool optOut) public {
+        vm.prank(depositor);
+        policy.setDepositOptOutForRelayerBypass(address(escrow), depositId, optOut);
         relayerRegistry.addRelayer(taker);
         _whitelistTaker();
+        vm.mockCallRevert(address(relayerRegistry), bytes(""), bytes("relayer registry called"));
 
         vm.recordLogs();
         vm.record();
@@ -215,6 +238,89 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
         assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.NONE));
         assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.NONE));
         assertEq(record.lockedAmount, 0);
+    }
+
+
+    event DepositOptOutForRelayerBypassUpdated(address indexed escrow, uint256 indexed depositId, bool optedOut);
+
+    function test_DepositorCanOptOutAndBackInWithEvents() public {
+        assertFalse(policy.isDepositOptedOutForRelayerBypass(address(escrow), depositId));
+        vm.startPrank(depositor);
+        vm.expectEmit(true, true, false, true, address(policy));
+        emit DepositOptOutForRelayerBypassUpdated(address(escrow), depositId, true);
+        policy.setDepositOptOutForRelayerBypass(address(escrow), depositId, true);
+        assertTrue(policy.isDepositOptedOutForRelayerBypass(address(escrow), depositId));
+        vm.expectEmit(true, true, false, true, address(policy));
+        emit DepositOptOutForRelayerBypassUpdated(address(escrow), depositId, false);
+        policy.setDepositOptOutForRelayerBypass(address(escrow), depositId, false);
+        vm.stopPrank();
+        assertFalse(policy.isDepositOptedOutForRelayerBypass(address(escrow), depositId));
+        relayerRegistry.addRelayer(taker);
+        assertEq(policy.settleIntent(_context(ID, 14 days)), address(0));
+    }
+
+    function test_OnlyDepositorMayChangeRelayerBypassOptOut() public {
+        address[3] memory callers = [delegate, other, address(this)];
+        for (uint256 i; i < callers.length; ++i) {
+            vm.prank(callers[i]);
+            vm.expectRevert(abi.encodeWithSelector(P.NotDepositor.selector, address(escrow), depositId, callers[i]));
+            policy.setDepositOptOutForRelayerBypass(address(escrow), depositId, true);
+        }
+        assertFalse(policy.isDepositOptedOutForRelayerBypass(address(escrow), depositId));
+    }
+
+    function test_RelayerOptOutIsScopedToEscrowAndDeposit() public {
+        relayerRegistry.addRelayer(taker);
+        vm.startPrank(depositor);
+        uint256 secondDeposit = _createDeposit(address(0), delegate);
+        policy.setDepositOptOutForRelayerBypass(address(escrow), depositId, true);
+        vm.stopPrank();
+        EscrowDepositStub otherEscrow = new EscrowDepositStub(depositor, token);
+        assertTrue(policy.isDepositOptedOutForRelayerBypass(address(escrow), depositId));
+        assertFalse(policy.isDepositOptedOutForRelayerBypass(address(escrow), secondDeposit));
+        assertFalse(policy.isDepositOptedOutForRelayerBypass(address(otherEscrow), depositId));
+        _assertDeferred();
+        IIntentSettlementPolicy.SettlementContext memory context = _context(keccak256("second deposit"), 14 days);
+        context.depositId = secondDeposit;
+        assertEq(policy.settleIntent(context), address(0));
+        context.escrow = address(otherEscrow);
+        context.depositId = depositId;
+        assertEq(policy.settleIntent(context), address(0));
+    }
+
+    function test_FakeEscrowCanOnlyOptOutItsOwnKey() public {
+        EscrowDepositStub fakeEscrow = new EscrowDepositStub(other, token);
+        vm.prank(other);
+        policy.setDepositOptOutForRelayerBypass(address(fakeEscrow), depositId, true);
+        assertTrue(policy.isDepositOptedOutForRelayerBypass(address(fakeEscrow), depositId));
+        assertFalse(policy.isDepositOptedOutForRelayerBypass(address(escrow), depositId));
+        relayerRegistry.addRelayer(taker);
+        assertEq(policy.settleIntent(_context(ID, 14 days)), address(0));
+    }
+
+    function test_RelayerBypassStillRequiresWindowCapAndConditions() public {
+        relayerRegistry.addRelayer(taker);
+        IIntentSettlementPolicy.SettlementContext memory context = _context(ID, 14 days);
+        context.extensionData = "";
+        vm.expectRevert(P.MissingDisputeWindow.selector);
+        policy.settleIntent(context);
+        context.extensionData = abi.encode(uint256(180 days + 1));
+        vm.expectRevert(abi.encodeWithSelector(P.InvalidDisputeWindow.selector, uint256(180 days + 1)));
+        policy.settleIntent(context);
+        context.extensionData = abi.encode(uint256(14 days));
+        context.data = _conditionsData();
+        vm.expectRevert(abi.encodeWithSelector(P.ConditionsNotAttested.selector, ID));
+        policy.settleIntent(context);
+    }
+
+    function test_RelayerMembershipUsesTakerAndLiveRegistry() public {
+        relayerRegistry.addRelayer(other);
+        _assertDeferred();
+        relayerRegistry.addRelayer(taker);
+        bytes32 next = keccak256("live relayer");
+        assertEq(policy.settleIntent(_context(next, 14 days)), address(0));
+        relayerRegistry.removeRelayer(taker);
+        assertEq(policy.settleIntent(_context(next, 14 days)), address(vault));
     }
 
     function _conditionsData() internal pure returns (bytes memory) {
@@ -403,7 +509,9 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
         assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
     }
 
-    function test_ManualReleaseIgnoresInvalidExtensionAndConditions() public {
+    function testFuzz_ManualReleaseIgnoresOptOutInvalidExtensionAndConditions(bool optOut) public {
+        vm.prank(depositor);
+        policy.setDepositOptOutForRelayerBypass(address(escrow), depositId, optOut);
 
         IIntentSettlementPolicy.SettlementContext memory context = _context(ID, 14 days);
         context.isManualRelease = true;
@@ -411,8 +519,13 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
         context.extensionData = abi.encode(type(uint256).max, keccak256("wrong"));
         vm.mockCallRevert(address(whitelist), bytes(""), bytes("whitelist called"));
         relayerRegistry.addRelayer(taker);
+        vm.mockCallRevert(address(relayerRegistry), bytes(""), bytes("relayer registry called"));
+        vm.mockCallRevert(address(vault), bytes(""), bytes("vault called"));
 
+        vm.recordLogs();
         assertEq(policy.settleIntent(context), address(0));
+        assertEq(vm.getRecordedLogs().length, 0);
+        assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
     }
 
     function test_FundingCreatesVaultLock() public {
@@ -432,6 +545,7 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
         assertFalse(policy.supportsInterface(0xffffffff));
         assertFalse(policy.supportsInterface(type(IOrchestratorV4).interfaceId));
         assertEq(address(policy.whitelistPolicy()), address(whitelist));
+        assertEq(address(policy.relayerRegistry()), address(orchestrator.relayerRegistry()));
     }
 
 }
