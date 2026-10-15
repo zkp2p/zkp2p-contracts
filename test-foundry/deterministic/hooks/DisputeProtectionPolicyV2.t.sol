@@ -3,7 +3,6 @@ pragma solidity ^0.8.18;
 
 import {IIntentSettlementPolicy as S} from "contracts/interfaces/IIntentSettlementPolicy.sol";
 import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
-import {IRelayerRegistry} from "contracts/interfaces/IRelayerRegistry.sol";
 import {IWhitelistPolicy} from "contracts/interfaces/IWhitelistPolicy.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
@@ -41,7 +40,7 @@ contract DisputeProtectionPolicyV2Test is Test {
     StakeVaultV2 internal vault;
     DisputeProtectionPolicyV2 internal policy;
     WhitelistPolicy internal whitelist;
-    RelayerRegistry internal relayerRegistry;
+    RelayerRegistry public relayerRegistry;
     DisputeVerifier internal verifier;
     NullifierRegistry internal disputes;
     NullifierRegistryV2 internal payments;
@@ -60,7 +59,7 @@ contract DisputeProtectionPolicyV2Test is Test {
     function _newPolicy() internal {
         if (address(whitelist) == address(0)) whitelist = new WhitelistPolicy(new AddressGroupRegistry(), new EscrowRegistry(), new OrchestratorRegistry());
         if (address(relayerRegistry) == address(0)) relayerRegistry = new RelayerRegistry();
-        policy = new DisputeProtectionPolicyV2(address(this), vault, verifier, disputes, whitelist, relayerRegistry);
+        policy = new DisputeProtectionPolicyV2(address(this), vault, verifier, disputes, whitelist);
         policy.setOrchestratorAuthorization(address(this), true);
         disputes.addWritePermission(address(policy));
     }
@@ -443,13 +442,13 @@ contract DisputeProtectionPolicyV2Test is Test {
     }
     function test_ConstructorRejectsZeroOrCodelessDependencies() public {
         vm.expectRevert(P.ZeroAddress.selector);
-        new DisputeProtectionPolicyV2(address(0), vault, verifier, disputes, whitelist, relayerRegistry);
-        for (uint256 i; i < 5; ++i) {
+        new DisputeProtectionPolicyV2(address(0), vault, verifier, disputes, whitelist);
+        for (uint256 i; i < 4; ++i) {
             for (uint256 j; j < 2; ++j) {
                 address bad = j == 0 ? address(0) : STRANGER;
                 if (j == 0) vm.expectRevert(P.ZeroAddress.selector);
                 else vm.expectRevert(abi.encodeWithSelector(P.InvalidContract.selector, bad));
-                new DisputeProtectionPolicyV2(address(this), i == 0 ? IStakeVaultV2(bad) : vault, i == 1 ? IDisputeVerifier(bad) : verifier, i == 2 ? INullifierRegistry(bad) : disputes, i == 3 ? IWhitelistPolicy(bad) : whitelist, i == 4 ? IRelayerRegistry(bad) : relayerRegistry);
+                new DisputeProtectionPolicyV2(address(this), i == 0 ? IStakeVaultV2(bad) : vault, i == 1 ? IDisputeVerifier(bad) : verifier, i == 2 ? INullifierRegistry(bad) : disputes, i == 3 ? IWhitelistPolicy(bad) : whitelist);
             }
         }
     }

@@ -174,7 +174,6 @@ function snapshot(wanted, k = 0) {
       disputeNullifierRegistry: a.disputeRegistry,
       authorizedOrchestrators: [a.orchestratorV4],
       whitelistPolicy: a.whitelistPolicy,
-      relayerRegistry: a.relayerRegistry,
     },
     verifier: {
       owner,
@@ -382,7 +381,6 @@ test("bypass reducer names trust and ordered registry drift", () => {
     ["freshPolicy.authorizedOrchestrators", (s) => { s.freshPolicy.authorizedOrchestrators = []; }],
     ["freshPolicy.authorizedOrchestrators", (s) => { s.freshPolicy.authorizedOrchestrators.push(address(90)); }],
     ["freshPolicy.whitelistPolicy", (s) => { s.freshPolicy.whitelistPolicy = address(90); }],
-    ["freshPolicy.relayerRegistry", (s) => { s.freshPolicy.relayerRegistry = address(90); }],
     [
       "disputeRegistry.writers",
       (s) => {
@@ -759,7 +757,7 @@ function manifest() {
   });
   /** @type {Omit<Manifest, "manifestSha256">} */
   const unsigned = {
-    version: 9,
+    version: 10,
     kind: "dispute-bypass-cutover",
     chainId: 8453,
     safe: wanted.addresses.safe,
@@ -782,7 +780,7 @@ function manifest() {
   };
 }
 
-test("unsigned v9 bypass manifests validate and reject v8 and tampering", () => {
+test("unsigned v10 bypass manifests validate and reject v9 and tampering", () => {
   const valid = manifest();
   assert.deepEqual(
     deriveBypassConstructorArgs(valid, "guard"),
@@ -792,7 +790,7 @@ test("unsigned v9 bypass manifests validate and reject v8 and tampering", () => 
     deriveBypassConstructorArgs(valid, "postcondition"),
     valid.postcondition.constructorArgs
   );
-  const oldVersion = { ...valid, version: 8 };
+  const oldVersion = { ...valid, version: 9 };
   const { manifestSha256: oldDigest, ...oldUnsigned } = oldVersion;
   oldVersion.manifestSha256 = manifests.computeBypassManifestSha256(
     /** @type {any} */ (oldUnsigned)
@@ -807,7 +805,7 @@ test("unsigned v9 bypass manifests validate and reject v8 and tampering", () => 
   /** @type {Array<(value: Manifest) => void>} */
   const mutations = [
     (m) => {
-      Object.assign(m, { version: 8 });
+      Object.assign(m, { version: 9 });
     },
     (m) => {
       Object.assign(m, { chainId: 31337 });
@@ -823,6 +821,9 @@ test("unsigned v9 bypass manifests validate and reject v8 and tampering", () => 
     },
     (m) => {
       Object.assign(m.proofSnapshot.freshPolicy, { admissionsPaused: false });
+    },
+    (m) => {
+      Object.assign(m.proofSnapshot.freshPolicy, { relayerRegistry: address(18) });
     },
     (m) => {
       Object.assign(m.trustSurface, { riskWindowMethods: [], riskWindows: [] });

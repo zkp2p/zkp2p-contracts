@@ -69,8 +69,6 @@ interface IBypassActivationCascadePolicy is IActivationOwned {
     function isOrchestratorAuthorized(address orchestrator) external view returns (bool);
     /// @notice Returns the immutable whitelist policy.
     function whitelistPolicy() external view returns (address);
-    /// @notice Returns the immutable relayer registry shared with O4.
-    function relayerRegistry() external view returns (address);
 }
 
 interface IBypassActivationPaymentVerifierRegistry is IActivationOwned {
@@ -152,7 +150,6 @@ abstract contract DisputeBypassTrustSurfaceChecks {
     error FreshPolicyDisputeVerifierMismatch(address actual);
     error FreshPolicyDisputeRegistryMismatch(address actual);
     error FreshPolicyStakeVaultMismatch(address actual);
-    error FreshPolicyRelayerRegistryMismatch(address actual);
     error FreshVaultControllerAuthorizationMismatch(bool actual);
     error FreshVaultStakeTokenMismatch(address actual);
     error FreshVaultOwnerMismatch(address actual);
@@ -366,8 +363,6 @@ abstract contract DisputeBypassTrustSurfaceChecks {
         if (actualAddress != expected.disputeRegistry) revert FreshPolicyDisputeRegistryMismatch(actualAddress);
         actualAddress = fresh.whitelistPolicy();
         if (actualAddress != expected.whitelistPolicy) revert FreshPolicyWhitelistPolicyMismatch(actualAddress);
-        actualAddress = fresh.relayerRegistry();
-        if (actualAddress != expected.relayerRegistry) revert FreshPolicyRelayerRegistryMismatch(actualAddress);
         actualAddress = fresh.stakeVault();
         if (actualAddress != expected.freshVault) revert FreshPolicyStakeVaultMismatch(actualAddress);
 

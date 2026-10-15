@@ -13,6 +13,7 @@ import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
 import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
 import {AttestationVerifierMock} from "../../mocks/AttestationVerifierMock.sol";
+import {ZeroRelayerRegistryOrchestratorMock} from "../../mocks/ZeroRelayerRegistryOrchestratorMock.sol";
 
 contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
     bytes32 internal constant ID = keccak256("intent");
@@ -28,7 +29,7 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
         policy = new DisputeProtectionPolicyV2(
             address(this), vault,
             new DisputeVerifier(address(this), new NullifierRegistryV2(new NullifierRegistry()), new AttestationVerifierMock()),
-            new NullifierRegistry(), whitelist, relayerRegistry
+            new NullifierRegistry(), whitelist
         );
         vault.setController(address(policy), true);
         policy.setOrchestratorAuthorization(address(this), true);
@@ -36,6 +37,54 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
 
     function _context(bytes32 id, uint256 window) internal view returns (IIntentSettlementPolicy.SettlementContext memory) {
         return IIntentSettlementPolicy.SettlementContext(id, address(token), taker, other, depositor, address(escrow), depositId, METHOD, INTENT_AMOUNT, NET, "", abi.encode(window), false);
+    }
+
+    function _authorizeZeroRegistryOrchestrator() internal returns (address caller) {
+        caller = address(new ZeroRelayerRegistryOrchestratorMock());
+        policy.setOrchestratorAuthorization(caller, true);
+    }
+
+    function test_ZeroOrchestratorRelayerRegistryReverts() public {
+        address caller = _authorizeZeroRegistryOrchestrator();
+        IIntentSettlementPolicy.SettlementContext memory context = _context(ID, 14 days);
+        vm.expectRevert(P.ZeroRelayerRegistry.selector);
+        vm.prank(caller);
+        policy.settleIntent(context);
+    }
+
+    function test_ZeroRegistryRevertsBeforeOptOutAndTokenExemptions() public {
+        address caller = _authorizeZeroRegistryOrchestrator();
+        vm.prank(depositor);
+        policy.setDepositOptOutForRelayerBypass(address(escrow), depositId, true);
+        IIntentSettlementPolicy.SettlementContext memory context = _context(ID, 14 days);
+        context.token = other;
+        vm.expectRevert(P.ZeroRelayerRegistry.selector);
+        vm.prank(caller);
+        policy.settleIntent(context);
+    }
+
+    function test_ManualReleaseDoesNotReadOrchestratorRegistry() public {
+        address caller = _authorizeZeroRegistryOrchestrator();
+        IIntentSettlementPolicy.SettlementContext memory context = _context(ID, 14 days);
+        context.isManualRelease = true;
+        context.extensionData = "";
+        vm.prank(caller);
+        assertEq(policy.settleIntent(context), address(0));
+    }
+
+    function test_ZeroWindowDoesNotReadOrchestratorRegistry() public {
+        address caller = _authorizeZeroRegistryOrchestrator();
+        IIntentSettlementPolicy.SettlementContext memory context = _context(ID, 0);
+        vm.prank(caller);
+        assertEq(policy.settleIntent(context), address(0));
+    }
+
+    function test_WhitelistExemptionDoesNotReadOrchestratorRegistry() public {
+        address caller = _authorizeZeroRegistryOrchestrator();
+        _whitelistTaker();
+        IIntentSettlementPolicy.SettlementContext memory context = _context(ID, 14 days);
+        vm.prank(caller);
+        assertEq(policy.settleIntent(context), address(0));
     }
 
     function _whitelistTaker() internal returns (bytes32 group) {
@@ -545,7 +594,6 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
         assertFalse(policy.supportsInterface(0xffffffff));
         assertFalse(policy.supportsInterface(type(IOrchestratorV4).interfaceId));
         assertEq(address(policy.whitelistPolicy()), address(whitelist));
-        assertEq(address(policy.relayerRegistry()), address(orchestrator.relayerRegistry()));
     }
 
 }

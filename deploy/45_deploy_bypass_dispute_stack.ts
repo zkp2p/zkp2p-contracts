@@ -850,7 +850,6 @@ async function readFreshState(
     requireState(
       sameAddress(await policy.stakeVault(), vaultRecord!.address) &&
         sameAddress(await policy.whitelistPolicy(), context.whitelistPolicy) &&
-        sameAddress(await policy.relayerRegistry(), context.relayerRegistry) &&
         sameAddress(await policy.disputeVerifier(), context.disputeVerifier) &&
         sameAddress(
           await policy.disputeNullifierRegistry(),
@@ -1061,7 +1060,6 @@ export async function executeLane45Step(
       context.disputeVerifier,
       context.disputeNullifierRegistry,
       context.whitelistPolicy,
-      context.relayerRegistry,
     ]);
   } else if (step === "authorize-controller") {
     await authorizeBypassController(
@@ -1283,7 +1281,6 @@ async function deployLocalBypassStack(
     context.disputeVerifier,
     context.disputeNullifierRegistry,
     context.whitelistPolicy,
-    context.relayerRegistry,
   ]);
   let state = await readFreshState(hre, context);
   while (!state.completed["authorize-controller"]) {

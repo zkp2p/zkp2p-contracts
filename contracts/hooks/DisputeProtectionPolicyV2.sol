@@ -6,6 +6,7 @@ import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 import {IIntentSettlementPolicy} from "../interfaces/IIntentSettlementPolicy.sol";
 import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
 import {IRelayerRegistry} from "../interfaces/IRelayerRegistry.sol";
+import {IRelayerRegistryProvider} from "../interfaces/IRelayerRegistryProvider.sol";
 import {IEscrowV2} from "../interfaces/IEscrowV2.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
@@ -30,7 +31,8 @@ import {IStakeVaultV2} from "../interfaces/IStakeVaultV2.sol";
  * controller can lock any owner's free stake and pay out that free stake only to its owner.
  * Protection applies only to stake-token deposits with a nonzero attested window supplied in the signed extension.
  * There are no per-method windows or paused admissions. Whitelisted takers, manual releases and zero
- * windows settle without a record or event. Registered relayer takers also bypass collateral by default;
+ * windows settle without a record or event. Relayer membership is read from the calling authorized
+ * orchestrator's current registry at settlement. Registered relayer takers bypass collateral by default;
  * only the depositor can opt their deposit out of this bypass. Non-stake tokens return without a record
  * or event. Protected settlements lock gross stake or defer the net payout until now plus the attested
  * window; only these STAKE and DEFERRED_PAYOUT settlements emit DisputeProtectionIntentSettled.
@@ -47,9 +49,6 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
 
     /// @notice Live deposit/payment-method whitelist used to exempt allowed takers.
     IWhitelistPolicy public immutable whitelistPolicy;
-
-    /// @notice Live relayer registry shared with O4, used to exempt registered takers by default.
-    IRelayerRegistry public immutable override relayerRegistry;
 
     /// @dev Depositor opt-outs from relayer bypass, keyed by the escrow and deposit validated by O4.
     mapping(address => mapping(uint256 => bool)) internal depositOptOutForRelayerBypass;
@@ -77,15 +76,13 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
      * @param _disputeVerifier Verifier for signed dispute evidence.
      * @param _disputeNullifierRegistry Dedicated registry that rejects reused dispute nullifiers.
      * @param _whitelistPolicy Live whitelist for settlement exemptions.
-     * @param _relayerRegistry The same deployed relayer registry configured on O4.
      */
     constructor(
         address _owner,
         IStakeVaultV2 _stakeVault,
         IDisputeVerifier _disputeVerifier,
         INullifierRegistry _disputeNullifierRegistry,
-        IWhitelistPolicy _whitelistPolicy,
-        IRelayerRegistry _relayerRegistry
+        IWhitelistPolicy _whitelistPolicy
     ) {
         if (_owner == address(0)) revert ZeroAddress();
         _validateDependency(address(_stakeVault));
@@ -93,9 +90,7 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
         _validateDependency(address(_disputeNullifierRegistry));
 
         _validateDependency(address(_whitelistPolicy));
-        _validateDependency(address(_relayerRegistry));
         whitelistPolicy = _whitelistPolicy;
-        relayerRegistry = _relayerRegistry;
         stakeVault = _stakeVault;
         disputeVerifier = _disputeVerifier;
         disputeNullifierRegistry = _disputeNullifierRegistry;
@@ -151,6 +146,8 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
                     _context.escrow, _context.depositId, _context.paymentMethod, _context.taker
                 )
         ) return address(0);
+        IRelayerRegistry relayerRegistry = IRelayerRegistryProvider(msg.sender).relayerRegistry();
+        if (address(relayerRegistry) == address(0)) revert ZeroRelayerRegistry();
         if (
             relayerRegistry.isWhitelistedRelayer(_context.taker)
                 && !depositOptOutForRelayerBypass[_context.escrow][_context.depositId]

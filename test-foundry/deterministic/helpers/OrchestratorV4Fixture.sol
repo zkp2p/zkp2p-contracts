@@ -50,7 +50,7 @@ abstract contract OrchestratorV4Fixture is Test {
     EscrowRegistry internal escrowRegistry;
     OrchestratorRegistry internal orchestratorRegistry;
     PaymentVerifierRegistry internal paymentVerifierRegistry;
-    RelayerRegistry internal relayerRegistry;
+    RelayerRegistry public relayerRegistry;
     PaymentVerifierV2Mock internal verifier;
     PreIntentHookMock internal preIntentHook;
     PostIntentHookV2Mock internal postIntentHook;

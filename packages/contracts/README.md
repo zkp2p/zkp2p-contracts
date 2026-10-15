@@ -390,9 +390,11 @@ own `IOrchestratorV4` ERC-165 advertisement. OrchestratorV3, IntentLifecycleHook
 DisputeProtectionPolicy are unchanged.
 
 O4 and DisputeProtectionPolicyV2 receive the same immutable, nonzero deployed `IWhitelistPolicy`
-in their constructors. The policy also receives a nonzero deployed `IRelayerRegistry` matching
-O4's configured registry. O4 enforces admission at signal: an enabled deposit/payment-method
-whitelist must allow the taker. `TakerNotWhitelisted` rejects non-members even with a zero
+in their constructors. The policy reads the calling authorized orchestrator's current
+`IRelayerRegistry` at settlement through `IRelayerRegistryProvider`; it stores no registry.
+A zero registry reverts with `ZeroRelayerRegistry`. The lookup occurs at the relayer exemption,
+after the whitelist exemption and before the deposit opt-out and token checks. O4 enforces admission
+at signal: an enabled deposit/payment-method whitelist must allow the taker. `TakerNotWhitelisted` rejects non-members even with a zero
 settlement policy. Signal does not call the settlement policy. Cancel, escrow prune and orphan
 cleanup clear the intent and policy snapshot without policy callbacks.
 
@@ -490,13 +492,14 @@ to the gating service and attestor.
 
 Lanes 45/46 deploy StakeVaultV2, DisputeProtectionPolicyV2, UPV4 and O4 without a lifecycle hook.
 Lane 45 authorizes the policy on the vault immediately, without an accept-controller step.
-They pass the same whitelist and relayer registry to O4 and the policy, set O4's policy, authorize
-O4 on the policy, and register O4 last. Deployment checks, activation snapshots and the on-chain
-guard require the policy's registry to match O4's pinned registry. Depositor opt-outs are allowed
-before activation. Bypass batch manifest version 9 records the selected policy's vault-controller
-authorization, O4 authorization, both whitelist dependencies and the policy's relayer registry;
-older manifests are rejected. Historical O3 predecessor checks remain
-separate. The package drops the removed hook ABI. Its source ABI catalog does not export interface ABIs;
+They pass the same whitelist to O4 and the policy, set O4's policy, authorize O4 on the policy,
+and register O4 last. The policy reads the calling orchestrator's current relayer registry at
+settlement, so O4 registry updates immediately govern bypass for existing and new intents.
+Deployment checks, activation snapshots and the on-chain guard retain O4's pinned registry check.
+Depositor opt-outs are allowed before activation. Bypass batch manifest version 10 records the
+selected policy's vault-controller authorization, O4 authorization and both whitelist dependencies,
+without a separate policy registry; older manifests are rejected. Historical O3 predecessor checks
+remain separate. The package drops the removed hook ABI. Its source ABI catalog does not export interface ABIs;
 generated TypeChain interface exports include `IIntentSettlementPolicy` and `IStakeVaultV2`.
 The source ABI catalog exports `StakeVaultV2` separately from the August `StakeVault`.
 

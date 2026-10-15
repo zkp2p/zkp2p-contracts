@@ -164,7 +164,8 @@
   This cascade/O4 source has not executed on Base or Base staging. The existing tag and
   `ENABLE_{STAGING,BASE}_V3_DISPUTE_BYPASS_STACK_DEPLOYMENT=true` select resumable deploy-only steps.
   Lane 45 authorizes the policy with `vault.setController(policy, true)`, authorizes O4 on the policy,
-  sets O4's settlement policy, and passes the same whitelist and relayer registry to both. It configures O4
+  sets O4's settlement policy, and passes the same whitelist to both. The policy reads O4's current
+  relayer registry at settlement. It configures O4
   with O3's registries, fees and `allowMultipleIntents`. O4 stays unregistered; Base starts vault/policy
   two-step ownership transfers and transfers UPV4/O4 ownership directly to the Safe.
   Only the exact superseded staging UPV4 address `0x3fe38Afdfa85A9E14D9b0ae5A5B2E577A8a71DA7` with its
@@ -482,9 +483,11 @@ own `IOrchestratorV4` ERC-165 advertisement. OrchestratorV3, IntentLifecycleHook
 DisputeProtectionPolicy are unchanged.
 
 O4 and DisputeProtectionPolicyV2 receive the same immutable, nonzero deployed `IWhitelistPolicy`
-in their constructors. The policy also receives a nonzero deployed `IRelayerRegistry` matching
-O4's configured registry. O4 enforces admission at signal: an enabled deposit/payment-method
-whitelist must allow the taker. `TakerNotWhitelisted` rejects non-members even with a zero
+in their constructors. The policy reads the calling authorized orchestrator's current
+`IRelayerRegistry` at settlement through `IRelayerRegistryProvider`; it stores no registry.
+A zero registry reverts with `ZeroRelayerRegistry`. The lookup occurs at the relayer exemption,
+after the whitelist exemption and before the deposit opt-out and token checks. O4 enforces admission
+at signal: an enabled deposit/payment-method whitelist must allow the taker. `TakerNotWhitelisted` rejects non-members even with a zero
 settlement policy. Signal does not call the settlement policy. Cancel, escrow prune and orphan
 cleanup clear the intent and policy snapshot without policy callbacks.
 
@@ -582,15 +585,41 @@ to the gating service and attestor.
 
 Lanes 45/46 deploy StakeVaultV2, DisputeProtectionPolicyV2, UPV4 and O4 without a lifecycle hook.
 Lane 45 authorizes the policy on the vault immediately, without an accept-controller step.
-They pass the same whitelist and relayer registry to O4 and the policy, set O4's policy, authorize
-O4 on the policy, and register O4 last. Deployment checks, activation snapshots and the on-chain
-guard require the policy's registry to match O4's pinned registry. Depositor opt-outs are allowed
-before activation. Bypass batch manifest version 9 records the selected policy's vault-controller
-authorization, O4 authorization, both whitelist dependencies and the policy's relayer registry;
-older manifests are rejected. Historical O3 predecessor checks remain
-separate. The package drops the removed hook ABI. Its source ABI catalog does not export interface ABIs;
+They pass the same whitelist to O4 and the policy, set O4's policy, authorize O4 on the policy,
+and register O4 last. The policy reads the calling orchestrator's current relayer registry at
+settlement, so O4 registry updates immediately govern bypass for existing and new intents.
+Deployment checks, activation snapshots and the on-chain guard retain O4's pinned registry check.
+Depositor opt-outs are allowed before activation. Bypass batch manifest version 10 records the
+selected policy's vault-controller authorization, O4 authorization and both whitelist dependencies,
+without a separate policy registry; older manifests are rejected. Historical O3 predecessor checks
+remain separate. The package drops the removed hook ABI. Its source ABI catalog does not export interface ABIs;
 generated TypeChain interface exports include `IIntentSettlementPolicy` and `IStakeVaultV2`.
 The source ABI catalog exports `StakeVaultV2` separately from the August `StakeVault`.
 
 The cross-repo attestor smoke is gated by `ATTESTOR_POLICY_SMOKE_ROOT`; its signed payload
 contains word 0 (zero for pay now, the attested window for protected settlements).
+
+### Rotating the settlement policy or relayer
+
+These steps only matter after launch, when O4's settlement policy, its relayer registry or the relayer
+wallet changes:
+
+1. **New policy.** Authorize the successor as a `StakeVaultV2` controller and authorize O4 on the
+   successor, then call O4's `setSettlementPolicy`. Keep the predecessor authorized on the vault, and
+   O4 authorized on the predecessor, until every predecessor lock is released or resolved and every
+   deferred payout is claimed.
+2. **Indexer.** Bind the successor policy's events before selecting it, and keep the predecessor bound.
+   The SDK and Pay resolve each intent's policy from the indexer (`IntentSettlementPolicyState`,
+   `DeferredPayout.policyAddress`), so an unbound policy makes its payouts invisible to them.
+   O4 deletes the on-chain snapshot at settlement.
+3. **Releases and claims.** Pay's release and claim jobs and the SDK query due payouts and locks across
+   all policies through the indexer, so no hand-maintained predecessor list is needed. Check that the
+   predecessor's matured locks keep being released after the switch.
+4. **Relayer opt-outs.** Depositor opt-outs from the relayer bypass live in each policy's storage and
+   do not carry over. Depositors who opted out must opt out again on the successor.
+5. **Relayer registry.** The policy reads the calling orchestrator's registry at settlement, so
+   `setRelayerRegistry` on O4 changes the bypass for every unsettled intent immediately. No policy
+   change is needed.
+6. **Relayer wallet.** On relayer orders the relayer is the taker. Only the taker or the recipient may
+   call `claimFor`, so keep a retired relayer wallet available until its deferred payouts are claimed,
+   or claim them as the recipient.

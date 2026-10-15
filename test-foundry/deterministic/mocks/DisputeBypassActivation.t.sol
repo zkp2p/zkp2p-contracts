@@ -68,7 +68,7 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         groupRegistry = new AddressGroupRegistry();
         whitelistPolicy = new WhitelistPolicy(groupRegistry, escrowRegistry, orchestratorRegistry);
         freshPolicy =
-            new DisputeProtectionPolicyV2(address(this), freshVault, disputeVerifier, disputeRegistry, whitelistPolicy, relayerRegistry);
+            new DisputeProtectionPolicyV2(address(this), freshVault, disputeVerifier, disputeRegistry, whitelistPolicy);
         predecessorHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, predecessorPolicy);
         predecessorVault.initializeController(address(predecessorPolicy));
         freshVault.setController(address(freshPolicy), true);
@@ -426,15 +426,6 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
             abi.encodeWithSelector(
                 DisputeBypassTrustSurfaceChecks.OrchestratorV4WhitelistPolicyMismatch.selector, other
             )
-        );
-    }
-
-    function test_GuardRejectsFreshPolicyRelayerRegistryDrift() public {
-        DisputeBypassCutoverGuard guard = _guard(_surface(), true, true);
-        vm.mockCall(address(freshPolicy), abi.encodeWithSignature("relayerRegistry()"), abi.encode(other));
-        _expectReady(
-            guard,
-            abi.encodeWithSelector(DisputeBypassTrustSurfaceChecks.FreshPolicyRelayerRegistryMismatch.selector, other)
         );
     }
 

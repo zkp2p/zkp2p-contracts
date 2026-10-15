@@ -15,6 +15,7 @@ import {OrchestratorV3} from "contracts/OrchestratorV3.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
 import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
+import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 
 contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
     bytes32 internal constant CONDITIONS = keccak256("signed conditions");
@@ -113,6 +114,45 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         assertEq(token.balanceOf(address(vault)), 0);
         _assertLock(id, address(0), 0);
         _assertFees();
+    }
+
+    function test_RelayerRegistryRotationRemovesOldRegistryBypass() public {
+        relayerRegistry.addRelayer(taker);
+        bytes32 id = _signalDefault();
+        RelayerRegistry replacement = new RelayerRegistry();
+        orchestrator.setRelayerRegistry(address(replacement));
+
+        assertTrue(relayerRegistry.isWhitelistedRelayer(taker));
+        assertFalse(replacement.isWhitelistedRelayer(taker));
+        _assertDeferredSettlement(id);
+        assertEq(token.balanceOf(other), 0);
+        assertEq(token.balanceOf(address(vault)), NET);
+    }
+
+    function test_RelayerRegistryRotationUsesNewRegistryBypass() public {
+        bytes32 id = _signalDefault();
+        RelayerRegistry replacement = new RelayerRegistry();
+        replacement.addRelayer(taker);
+        orchestrator.setRelayerRegistry(address(replacement));
+
+        assertFalse(relayerRegistry.isWhitelistedRelayer(taker));
+        _settleWhitelistedWithoutRecord(id);
+        assertEq(token.balanceOf(other), NET);
+        assertEq(token.balanceOf(address(vault)), 0);
+        _assertFees();
+    }
+
+    function test_RelayerRegistryRotationRespectsDepositOptOut() public {
+        vm.prank(depositor);
+        protection.setDepositOptOutForRelayerBypass(address(escrow), depositId, true);
+        bytes32 id = _signalDefault();
+        RelayerRegistry replacement = new RelayerRegistry();
+        replacement.addRelayer(taker);
+        orchestrator.setRelayerRegistry(address(replacement));
+
+        _assertDeferredSettlement(id);
+        assertEq(token.balanceOf(other), 0);
+        assertEq(token.balanceOf(address(vault)), NET);
     }
 
     function test_OptedOutRelayerTakerUsesStakeOwnerCollateral() public {

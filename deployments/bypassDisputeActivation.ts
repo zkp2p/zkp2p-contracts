@@ -32,7 +32,6 @@ export type BypassActivationSnapshot = {
     disputeNullifierRegistry: string;
     authorizedOrchestrators: string[];
     whitelistPolicy: string;
-    relayerRegistry: string;
   };
   verifier: {
     owner: string;
@@ -292,7 +291,6 @@ function commonInvariants(
     "freshPolicy.disputeNullifierRegistry": a.disputeRegistry,
     "freshPolicy.authorizedOrchestrators": [a.orchestratorV4],
     "freshPolicy.whitelistPolicy": a.whitelistPolicy,
-    "freshPolicy.relayerRegistry": a.relayerRegistry,
     "verifier.owner": e.governance,
     "verifier.orchestratorRegistry": a.orchestratorRegistry,
     "verifier.nullifierRegistry": a.nullifierRegistryV2,
@@ -687,7 +685,6 @@ export const BYPASS_GUARD_BOUND_FIELDS = [
   "freshPolicy.disputeNullifierRegistry",
   "freshPolicy.authorizedOrchestrators",
   "freshPolicy.whitelistPolicy",
-  "freshPolicy.relayerRegistry",
   "verifier.owner",
   "verifier.orchestratorRegistry",
   "verifier.nullifierRegistry",

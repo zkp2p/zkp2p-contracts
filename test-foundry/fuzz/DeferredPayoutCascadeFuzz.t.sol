@@ -31,7 +31,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
     StakeVaultV2 internal vault;
     DisputeProtectionPolicyV2 internal policy;
     WhitelistPolicy internal whitelist;
-    RelayerRegistry internal relayerRegistry;
+    RelayerRegistry public relayerRegistry;
 
     function setUp() public {
         token = new USDCMock(1e18, "USDC", "USDC");
@@ -42,7 +42,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
         NullifierRegistry disputes = new NullifierRegistry();
         if (address(whitelist) == address(0)) whitelist = new WhitelistPolicy(new AddressGroupRegistry(), new EscrowRegistry(), new OrchestratorRegistry());
         if (address(relayerRegistry) == address(0)) relayerRegistry = new RelayerRegistry();
-        policy = new DisputeProtectionPolicyV2(address(this), vault, verifier, disputes, whitelist, relayerRegistry);
+        policy = new DisputeProtectionPolicyV2(address(this), vault, verifier, disputes, whitelist);
         vault.setController(address(policy), true);
         policy.setOrchestratorAuthorization(address(this), true);
         disputes.addWritePermission(address(policy));

@@ -3,11 +3,11 @@ pragma solidity ^0.8.18;
 
 import {IIntentSettlementPolicy} from "./IIntentSettlementPolicy.sol";
 import {IStakeVaultV2} from "./IStakeVaultV2.sol";
-import {IRelayerRegistry} from "./IRelayerRegistry.sol";
 
 /// @notice Selects dispute collateral, with pay-now exemptions for whitelisted takers and for registered
 /// relayer takers on deposits that have not opted out of relayer bypass. Manual and zero-window releases
-/// and non-stake tokens also pay now without a record or event.
+/// and non-stake tokens also pay now without a record or event. Relayer membership uses the calling
+/// authorized orchestrator's current registry at settlement.
 interface IDisputeProtectionPolicyV2 is IIntentSettlementPolicy {
     enum DisputeProtectionIntentStatus { NONE, SETTLED, RELEASED, DISPUTED }
     /// @dev Exempt takers settle without creating a record.
@@ -36,6 +36,7 @@ interface IDisputeProtectionPolicyV2 is IIntentSettlementPolicy {
     event DepositOptOutForRelayerBypassUpdated(address indexed escrow, uint256 indexed depositId, bool optedOut);
 
     error ZeroAddress();
+    error ZeroRelayerRegistry();
     error InvalidContract(address dependency);
     error UnauthorizedOrchestrator(address caller);
     error NotDepositor(address escrow, uint256 depositId, address caller);
@@ -58,8 +59,6 @@ interface IDisputeProtectionPolicyV2 is IIntentSettlementPolicy {
     function setOrchestratorAuthorization(address orchestrator, bool isAuthorized) external;
     /// @notice Returns the collateral vault.
     function stakeVault() external view returns (IStakeVaultV2);
-    /// @notice Returns the immutable relayer registry shared with OrchestratorV4.
-    function relayerRegistry() external view returns (IRelayerRegistry);
     /// @notice Returns whether a deposit has opted out of the default registered-relayer collateral bypass.
     function isDepositOptedOutForRelayerBypass(address escrow, uint256 depositId) external view returns (bool);
     /// @notice Lets only the deposit's depositor opt out of or restore registered-relayer collateral bypass.
