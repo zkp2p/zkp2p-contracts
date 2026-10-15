@@ -100,7 +100,6 @@ function expected(network = "base") {
     escrow: address(3),
     freshVault: address(4),
     freshPolicy: address(5),
-    freshHook: address(6),
     verifier: address(7),
     retiredVerifier: address(8),
     predecessorVault: address(9),
@@ -176,12 +175,8 @@ function snapshot(wanted, k = 0) {
       stakeVault: a.freshVault,
       disputeVerifier: a.disputeVerifier,
       disputeNullifierRegistry: a.disputeRegistry,
-      authorizedHooks: [a.freshHook],
-    },
-    freshHook: {
-      orchestratorRegistry: a.orchestratorRegistry,
+      authorizedOrchestrators: [a.orchestratorV4],
       whitelistPolicy: a.whitelistPolicy,
-      disputeProtectionPolicy: a.freshPolicy,
     },
     verifier: {
       owner,
@@ -236,7 +231,8 @@ function snapshot(wanted, k = 0) {
       owner,
       paused: false,
       chainId: wanted.chainId,
-      lifecycleHook: a.freshHook,
+      settlementPolicy: a.freshPolicy,
+      whitelistPolicy: a.whitelistPolicy,
       escrowRegistry: a.escrowRegistry,
       paymentVerifierRegistry: a.paymentVerifierRegistry,
       relayerRegistry: a.relayerRegistry,
@@ -385,6 +381,9 @@ test("bypass reducer names trust and ordered registry drift", () => {
   const wanted = expected("base_staging");
   /** @type {Array<[string, (state: Snapshot) => void]>} */
   const cases = [
+    ["freshPolicy.authorizedOrchestrators", (s) => { s.freshPolicy.authorizedOrchestrators = []; }],
+    ["freshPolicy.authorizedOrchestrators", (s) => { s.freshPolicy.authorizedOrchestrators.push(address(90)); }],
+    ["freshPolicy.whitelistPolicy", (s) => { s.freshPolicy.whitelistPolicy = address(90); }],
     [
       "disputeRegistry.writers",
       (s) => {
@@ -761,7 +760,7 @@ function manifest() {
   });
   /** @type {Omit<Manifest, "manifestSha256">} */
   const unsigned = {
-    version: 6,
+    version: 7,
     kind: "dispute-bypass-cutover",
     chainId: 8453,
     safe: wanted.addresses.safe,
@@ -784,7 +783,7 @@ function manifest() {
   };
 }
 
-test("unsigned v6 bypass manifests validate and reject v5 and tampering", () => {
+test("unsigned v7 bypass manifests validate and reject v6 and tampering", () => {
   const valid = manifest();
   assert.deepEqual(
     deriveBypassConstructorArgs(valid, "guard"),
@@ -794,7 +793,7 @@ test("unsigned v6 bypass manifests validate and reject v5 and tampering", () => 
     deriveBypassConstructorArgs(valid, "postcondition"),
     valid.postcondition.constructorArgs
   );
-  const oldVersion = { ...valid, version: 5 };
+  const oldVersion = { ...valid, version: 6 };
   const { manifestSha256: oldDigest, ...oldUnsigned } = oldVersion;
   oldVersion.manifestSha256 = manifests.computeBypassManifestSha256(
     /** @type {any} */ (oldUnsigned)
@@ -809,7 +808,7 @@ test("unsigned v6 bypass manifests validate and reject v5 and tampering", () => 
   /** @type {Array<(value: Manifest) => void>} */
   const mutations = [
     (m) => {
-      Object.assign(m, { version: 5 });
+      Object.assign(m, { version: 6 });
     },
     (m) => {
       Object.assign(m, { chainId: 31337 });
@@ -998,7 +997,7 @@ test("lane 46 classifies bypass policy activity across O4 registration", () => {
       transactionHash: hash(1),
     });
   const configuration = [
-    "LifecycleHookAuthorizationUpdated",
+    "OrchestratorAuthorizationUpdated",
     "OwnershipTransferStarted",
   ].map(event);
   assert.deepEqual(lane.BYPASS_POLICY_LIFECYCLE_EVENTS, [
@@ -1303,7 +1302,8 @@ test("O4 and registry trust drift fails closed", () => {
     owner: address(99),
     paused: true,
     chainId: "1",
-    lifecycleHook: ZERO,
+    settlementPolicy: ZERO,
+    whitelistPolicy: ZERO,
     escrowRegistry: ZERO,
     paymentVerifierRegistry: ZERO,
     relayerRegistry: ZERO,
@@ -1324,7 +1324,7 @@ test("O4 and registry trust drift fails closed", () => {
   const state = snapshot(wanted);
   state.orchestratorRegistry.owner = ZERO;
   assertViolation(state, wanted, "orchestratorRegistry.owner");
-  state.orchestrator.lifecycleHook = wanted.addresses.freshHook;
+  state.orchestrator.lifecycleHook = wanted.addresses.freshPolicy;
   assertViolation(state, wanted, "orchestrator.lifecycleHook");
 });
 

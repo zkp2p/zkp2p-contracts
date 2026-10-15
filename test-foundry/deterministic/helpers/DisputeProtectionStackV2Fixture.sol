@@ -6,7 +6,6 @@ import {IPaymentVerifierV2} from "contracts/interfaces/IPaymentVerifierV2.sol";
 import {OrchestratorV4Fixture} from "./OrchestratorV4Fixture.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
 import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicyV2.sol";
-import {IntentLifecycleHookV2} from "contracts/hooks/IntentLifecycleHookV2.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
@@ -27,7 +26,6 @@ abstract contract DisputeProtectionStackV2Fixture is OrchestratorV4Fixture {
     DisputeProtectionPolicyV2 internal protection;
     NullifierRegistry internal disputeNullifiers;
     DisputeVerifier internal disputeVerifier;
-    WhitelistPolicy internal whitelist;
     MultiAttestationVerifier internal witnesses;
     UnifiedPaymentVerifierV4 internal upv;
     NullifierRegistryV2 internal nullifiers;
@@ -49,13 +47,11 @@ abstract contract DisputeProtectionStackV2Fixture is OrchestratorV4Fixture {
         vault = new StakeVault(address(this), token, address(0), 0);
         disputeNullifiers = new NullifierRegistry();
         disputeVerifier = new DisputeVerifier(address(this), nullifiers, witnesses);
-        protection = new DisputeProtectionPolicyV2(address(this), vault, disputeVerifier, disputeNullifiers);
+        protection = new DisputeProtectionPolicyV2(address(this), vault, disputeVerifier, disputeNullifiers, whitelist);
         vault.initializeController(address(protection));
         disputeNullifiers.addWritePermission(address(protection));
-        whitelist = new WhitelistPolicy(new AddressGroupRegistry(), escrowRegistry, orchestratorRegistry);
-        IntentLifecycleHookV2 hook = new IntentLifecycleHookV2(orchestratorRegistry, whitelist, protection);
-        protection.setLifecycleHookAuthorization(address(hook), true);
-        orchestrator.setLifecycleHook(hook);
+        protection.setOrchestratorAuthorization(address(orchestrator), true);
+        orchestrator.setSettlementPolicy(protection);
         orchestrator.setProtocolFee(PROTOCOL_FEE);
     }
 

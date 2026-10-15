@@ -50,7 +50,6 @@ contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
             assertEq(attestation.releaseAmount, index == 2 ? 45e6 : INTENT_AMOUNT);
             uint256 net = attestation.releaseAmount - attestation.releaseAmount * PROTOCOL_FEE / 1e18
                 - attestation.releaseAmount * REFERRAL_FEE / 1e18;
-            if (whitelisted) vm.mockCallRevert(address(protection), bytes(""), bytes("policy called"));
             vm.recordLogs();
             orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, id, ""));
             Vm.Log[] memory logs = vm.getRecordedLogs();

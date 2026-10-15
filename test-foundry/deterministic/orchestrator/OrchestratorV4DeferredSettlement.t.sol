@@ -5,21 +5,21 @@ import {OrchestratorV4Fixture} from "../helpers/OrchestratorV4Fixture.sol";
 import {OrchestratorV3} from "contracts/OrchestratorV3.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
-import {IIntentLifecycleHookV2} from "contracts/interfaces/IIntentLifecycleHookV2.sol";
+import {IIntentSettlementPolicy} from "contracts/interfaces/IIntentSettlementPolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {IWhitelistPolicy} from "contracts/interfaces/IWhitelistPolicy.sol";
 import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionPolicy.sol";
 import {PaymentVerifierMock} from "contracts/mocks/PaymentVerifierMock.sol";
-import {LifecycleHookV2Mock} from "../../mocks/LifecycleHookV2Mock.sol";
+import {SettlementPolicyMock} from "../../mocks/SettlementPolicyMock.sol";
 
-contract WrongLifecycleInterface {
-    /// @notice Rejects only the hook interface, including an invalid ERC-165 advertisement.
+contract WrongSettlementInterface {
+    /// @notice Rejects only the settlement interface, including an invalid ERC-165 advertisement.
     function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
-        return interfaceId != type(IIntentLifecycleHookV2).interfaceId;
+        return interfaceId != type(IIntentSettlementPolicy).interfaceId;
     }
 }
 
-contract ERC165OnlyHook {
+contract ERC165OnlyPolicy {
     function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
         return interfaceId == 0x01ffc9a7;
     }
@@ -35,7 +35,7 @@ contract ShortERC165Response {
 
 contract InvalidERC165Response {
     fallback() external {
-        bytes4 marker = type(IIntentLifecycleHookV2).interfaceId;
+        bytes4 marker = type(IIntentSettlementPolicy).interfaceId;
         assembly {
             mstore(0, or(marker, 1))
             return(0, 32)
@@ -46,12 +46,12 @@ contract InvalidERC165Response {
 contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
     event IntentPayoutDeferred(bytes32 indexed intentHash, address indexed recipient, address indexed vault, uint256 amount);
     event IntentFulfilled(bytes32 indexed intentHash, address indexed fundsTransferredTo, uint256 amount, bool manual);
-    LifecycleHookV2Mock internal hook;
+    SettlementPolicyMock internal hook;
 
     function setUp() public override {
         super.setUp();
-        hook = new LifecycleHookV2Mock();
-        orchestrator.setLifecycleHook(hook);
+        hook = new SettlementPolicyMock();
+        orchestrator.setSettlementPolicy(hook);
     }
 
     function test_PayNowTransfersToRecipientWithoutPostIntentHook() public {
@@ -80,7 +80,7 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
         assertEq(hook.lastFundedIntentHash(), hash);
         assertEq(token.balanceOf(taker), 0);
         assertEq(orchestrator.getIntent(hash).owner, address(0));
-        assertEq(address(orchestrator.getIntentLifecycleHook(hash)), address(0));
+        assertEq(address(orchestrator.getIntentSettlementPolicy(hash)), address(0));
     }
 
     function test_DeferredPaysVaultWithoutPostIntentHook() public {
@@ -145,7 +145,7 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
         assertEq(token.balanceOf(taker), 0);
     }
 
-    function test_HookRevertOnFundingRollsBackFulfil() public {
+    function test_PolicyRevertOnFundingRollsBackFulfil() public {
         hook.setDeferralVault(address(hook));
         hook.setRevertOnFunding(true);
         orchestrator.setProtocolFee(1e16);
@@ -154,7 +154,7 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
         vm.expectRevert("risk funding failed");
         _fulfill(hash, INTENT_AMOUNT, CONVERSION_RATE);
         assertEq(orchestrator.getIntent(hash).owner, taker);
-        assertEq(address(orchestrator.getIntentLifecycleHook(hash)), address(hook));
+        assertEq(address(orchestrator.getIntentSettlementPolicy(hash)), address(hook));
         assertEq(token.balanceOf(address(escrow)), escrowBalance);
         assertEq(token.balanceOf(protocolFeeRecipient), 0);
         assertEq(token.balanceOf(address(hook)), 0);
@@ -167,8 +167,8 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
         assertTrue(orchestrator.supportsInterface(type(IOrchestratorV4).interfaceId));
         assertTrue(orchestrator.supportsInterface(0x01ffc9a7));
         assertFalse(orchestrator.supportsInterface(0xffffffff));
-        assertFalse(orchestrator.supportsInterface(type(IIntentLifecycleHookV2).interfaceId));
-        assertTrue(hook.supportsInterface(type(IIntentLifecycleHookV2).interfaceId));
+        assertFalse(orchestrator.supportsInterface(type(IIntentSettlementPolicy).interfaceId));
+        assertTrue(hook.supportsInterface(type(IIntentSettlementPolicy).interfaceId));
         assertTrue(hook.supportsInterface(0x01ffc9a7));
         assertFalse(hook.supportsInterface(0xffffffff));
     }
@@ -194,32 +194,32 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
         assertEq(orchestrator.intentCounter(), oldOrchestrator.intentCounter());
     }
 
-    function test_SetLifecycleHookRejectsV1Hook() public {
+    function test_SetSettlementPolicyRejectsV1Hook() public {
         IntentLifecycleHookV1 oldHook = new IntentLifecycleHookV1(
             orchestratorRegistry, IWhitelistPolicy(address(token)), IDisputeProtectionPolicy(address(token))
         );
         _rejectHook(address(oldHook));
     }
 
-    function test_SetLifecycleHookRejectsWrongInterfaceAndCodeless() public {
-        _rejectHook(address(new WrongLifecycleInterface()));
-        _rejectHook(address(new ERC165OnlyHook()));
+    function test_SetSettlementPolicyRejectsWrongInterfaceAndCodeless() public {
+        _rejectHook(address(new WrongSettlementInterface()));
+        _rejectHook(address(new ERC165OnlyPolicy()));
         _rejectHook(address(token));
         _rejectHook(other);
         _rejectHook(address(new ShortERC165Response()));
         _rejectHook(address(new InvalidERC165Response()));
     }
 
-    function test_SetLifecycleHookAcceptsV2AndZero() public {
-        orchestrator.setLifecycleHook(hook);
-        assertEq(address(orchestrator.lifecycleHook()), address(hook));
-        orchestrator.setLifecycleHook(IIntentLifecycleHookV2(address(0)));
-        assertEq(address(orchestrator.lifecycleHook()), address(0));
+    function test_SetSettlementPolicyAcceptsPolicyAndZero() public {
+        orchestrator.setSettlementPolicy(hook);
+        assertEq(address(orchestrator.settlementPolicy()), address(hook));
+        orchestrator.setSettlementPolicy(IIntentSettlementPolicy(address(0)));
+        assertEq(address(orchestrator.settlementPolicy()), address(0));
     }
 
     function _rejectHook(address candidate) internal {
-        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.InvalidLifecycleHook.selector, candidate));
-        orchestrator.setLifecycleHook(IIntentLifecycleHookV2(candidate));
-        assertEq(address(orchestrator.lifecycleHook()), address(hook));
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.InvalidSettlementPolicy.selector, candidate));
+        orchestrator.setSettlementPolicy(IIntentSettlementPolicy(candidate));
+        assertEq(address(orchestrator.settlementPolicy()), address(hook));
     }
 }

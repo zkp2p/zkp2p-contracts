@@ -59,8 +59,6 @@ export const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
     "contracts/unifiedVerifier/DisputeVerifier.sol/DisputeVerifier.json",
   IntentLifecycleHookV1:
     "contracts/hooks/IntentLifecycleHookV1.sol/IntentLifecycleHookV1.json",
-  IntentLifecycleHookV2:
-    "contracts/hooks/IntentLifecycleHookV2.sol/IntentLifecycleHookV2.json",
   StakeVault: "contracts/StakeVault.sol/StakeVault.json",
 };
 
@@ -125,6 +123,12 @@ export async function extractABIs(): Promise<void> {
 
   const contractsDir = path.join(ABIS_DIR, "contracts");
   ensureDir(contractsDir);
+  // Source ABI exports are authoritative; remove artifacts retired from this catalog.
+  for (const file of fs.readdirSync(contractsDir)) {
+    if (file.endsWith(".json") && !Object.prototype.hasOwnProperty.call(SOURCE_ABI_ARTIFACTS, file.slice(0, -5))) {
+      fs.unlinkSync(path.join(contractsDir, file));
+    }
+  }
   const sourceIndex: string[] = [];
   for (const [name, artifactRelativePath] of Object.entries(
     SOURCE_ABI_ARTIFACTS

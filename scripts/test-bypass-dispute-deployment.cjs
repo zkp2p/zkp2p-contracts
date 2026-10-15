@@ -95,14 +95,12 @@ test("lane 45 exports its cascade identity, live flags, and zero controller dela
   assert.deepEqual(BYPASS_DEPLOYMENT_NAMES, [
     "StakeVaultV2",
     "DisputeProtectionPolicyV2",
-    "IntentLifecycleHookV2",
     "UnifiedPaymentVerifierV4",
     "OrchestratorV4",
   ]);
   assert.deepEqual(BYPASS_ARTIFACT_NAMES, {
     StakeVaultV2: "StakeVault",
     DisputeProtectionPolicyV2: "DisputeProtectionPolicyV2",
-    IntentLifecycleHookV2: "IntentLifecycleHookV2",
     UnifiedPaymentVerifierV4: "UnifiedPaymentVerifierV4",
     OrchestratorV4: "OrchestratorV4",
   });
@@ -123,8 +121,6 @@ test("lane 45 pins exact live step order and classifies only contiguous prefixes
     "deploy-vault",
     "deploy-policy",
     "initialize-controller",
-    "deploy-hook",
-    "authorize-hook",
     "deploy-verifier",
     "add-verifier-method:zelle",
     "add-verifier-method:monzo",
@@ -141,14 +137,13 @@ test("lane 45 pins exact live step order and classifies only contiguous prefixes
     "add-verifier-method:upi",
     "add-verifier-method:xmoney",
     "deploy-orchestrator",
-    "set-orchestrator-hook",
+    "authorize-orchestrator",
+    "set-orchestrator-policy",
   ]);
   assert.deepEqual(lane45.LANE_45_STEP_KINDS.base, [
     "deploy-vault",
     "deploy-policy",
     "initialize-controller",
-    "deploy-hook",
-    "authorize-hook",
     "deploy-verifier",
     "add-verifier-method:alipay",
     "add-verifier-method:chime",
@@ -164,7 +159,8 @@ test("lane 45 pins exact live step order and classifies only contiguous prefixes
     "add-verifier-method:xmoney",
     "add-verifier-method:monobank",
     "deploy-orchestrator",
-    "set-orchestrator-hook",
+    "authorize-orchestrator",
+    "set-orchestrator-policy",
     "set-allow-multiple-intents",
     "transfer-vault-owner",
     "transfer-policy-owner",
@@ -619,10 +615,9 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
   for (const name of BYPASS_DEPLOYMENT_NAMES)
     assert.ok(state.records.get(name), name);
   const requiredAbiFunctions = /** @type {Array<[string, string[]]>} */ ([
-    ["DisputeProtectionPolicyV2", ["claimFor", "onDeferredPayoutFunded"]],
+    ["DisputeProtectionPolicyV2", ["claimFor", "settleIntent", "onDeferredPayoutFunded", "supportsInterface"]],
     ["StakeVaultV2", ["payOutStake"]],
     ["OrchestratorV4", ["supportsInterface"]],
-    ["IntentLifecycleHookV2", ["supportsInterface"]],
     ["UnifiedPaymentVerifierV4", ["addPaymentMethod", "DOMAIN_SEPARATOR"]],
   ]);
   for (const [recordName, functionNames] of requiredAbiFunctions) {
@@ -637,7 +632,7 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
       );
     }
   }
-  assert.equal(state.deployCalls(), initialCalls + 5);
+  assert.equal(state.deployCalls(), initialCalls + 4);
   const vault = await ethers.getContractAt(
     "StakeVault",
     state.records.get("StakeVaultV2").address
@@ -646,7 +641,7 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
     "DisputeProtectionPolicyV2",
     state.records.get("DisputeProtectionPolicyV2").address
   );
-  const hook = state.records.get("IntentLifecycleHookV2").address;
+  const o4Address = state.records.get("OrchestratorV4").address;
   const upv4 = await ethers.getContractAt(
     "UnifiedPaymentVerifierV4",
     state.records.get("UnifiedPaymentVerifierV4").address
@@ -656,7 +651,7 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
     "0"
   );
   assert.equal(await vault.controller(), policy.address);
-  assert.equal(await policy.isLifecycleHookAuthorized(hook), true);
+  assert.equal(await policy.isOrchestratorAuthorized(o4Address), true);
   const checkedMethods = new Set([
     ...ACTIVE_PAYMENT_METHODS,
     ...RETIRED_DISPUTABLE_PAYMENT_METHODS,
@@ -698,14 +693,6 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
       ),
       false
     );
-  const settleParams = policyAbi.find((/** @type {{name?: string}} */ entry) => entry.name === "onIntentSettled")
-    .inputs[0].components;
-  assert.deepEqual(settleParams.map((/** @type {{name: string, type: string}} */ entry) => [entry.name, entry.type]), [
-    ["intentHash", "bytes32"], ["taker", "address"], ["recipient", "address"],
-    ["depositor", "address"], ["token", "address"], ["paymentMethod", "bytes32"],
-    ["releaseAmount", "uint256"], ["netAmount", "uint256"],
-    ["riskWindow", "uint64"],
-  ]);
   assert.equal(policyAbi.find((/** @type {{name?: string}} */ entry) => entry.name === "DisputeProtectionIntentSettled")
     .inputs.some((/** @type {{name?: string}} */ entry) => entry.name === "isManualRelease"), false);
   const intentRecord = policyAbi.find((/** @type {{name?: string}} */ entry) => entry.name === "getDisputeProtectionIntent")
@@ -748,7 +735,7 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
     ]
   );
   const settlementContext = state.records
-    .get("IntentLifecycleHookV2")
+    .get("DisputeProtectionPolicyV2")
     .abi.find(
       (/** @type {{name?: string}} */ entry) => entry.name === "settleIntent"
     ).inputs[0].components;
@@ -759,9 +746,9 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
     [
       ["intentHash", "bytes32"],
       ["token", "address"],
-      ["depositor", "address"],
       ["taker", "address"],
       ["recipient", "address"],
+      ["depositor", "address"],
       ["escrow", "address"],
       ["depositId", "uint256"],
       ["paymentMethod", "bytes32"],
@@ -772,15 +759,9 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
       ["isManualRelease", "bool"],
     ]
   );
-  const hookInterface = new ethers.utils.Interface(
-    state.records.get("IntentLifecycleHookV2").abi
-  );
-  assert.equal(
-    hookInterface.getFunction("onIntentSignaled").format(),
-    "onIntentSignaled(bytes32,bytes)"
-  );
-  assert.equal("conditionsHashOf(bytes)" in hookInterface.functions, false);
-  assert.equal("InvalidLifecycleHookData()" in hookInterface.errors, false);
+  const policyInterface = new ethers.utils.Interface(policyAbi);
+  for (const name of ["onIntentSignaled", "onIntentCancelled", "onIntentSettled", "conditionsHashOf"])
+    assert.equal(Object.values(policyInterface.functions).some((entry) => entry.name === name), false);
   const o4Abi = state.records.get("OrchestratorV4").abi;
   const v3Abi = state.records.get("OrchestratorV3").abi;
   /** @param {any[]} abi */
@@ -807,7 +788,7 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
     state.records.get("OrchestratorV4").address
   );
   assert.equal(await state.orchestrators.isOrchestrator(o4.address), true);
-  assert.equal(await o4.lifecycleHook(), hook);
+  assert.equal(await o4.settlementPolicy(), policy.address);
   await assertO4Config(state, o4);
   const activated = expectedRouting(
     state,
@@ -1125,7 +1106,7 @@ test("supersededBypassLifecycleHookRuntimeHash resolves only the staging stale h
   assert.equal(
     isSupersededStagingRecord(
       "base_staging",
-      "IntentLifecycleHookV2",
+      "DisputeProtectionPolicyV2",
       hook.address
     ),
     false
@@ -1166,22 +1147,22 @@ async function assertO4Config(state, o4) {
     );
 }
 
-test("local lane 45 prepares five inert records and mirrors O3 config", async () => {
+test("local lane 45 prepares four inert records and mirrors O3 config", async () => {
   for (const multiple of [false, true]) {
     const state = await localhostFixture();
     await (await state.orchestrator.setAllowMultipleIntents(multiple)).wait();
     const before = await routingSnapshot(state);
     const calls = state.deployCalls();
     await deployLane45(state.fakeHre);
-    assert.equal(state.deployCalls(), calls + 5);
+    assert.equal(state.deployCalls(), calls + 4);
     const o4 = await ethers.getContractAt(
       "OrchestratorV4",
       state.records.get("OrchestratorV4").address
     );
     await assertO4Config(state, o4);
     assert.equal(
-      await o4.lifecycleHook(),
-      state.records.get("IntentLifecycleHookV2").address
+      await o4.settlementPolicy(),
+      state.records.get("DisputeProtectionPolicyV2").address
     );
     assert.equal(await state.orchestrators.isOrchestrator(o4.address), false);
     assert.deepEqual(await routingSnapshot(state), before);
@@ -1466,8 +1447,8 @@ test("staging lane 45 sequential replacement", async (t) => {
           return tx();
         },
       },
-      hook: { address: "0x0000000000000000000000000000000000000002" },
-      orchestrator: { setLifecycleHook: tx },
+      policy: { address: "0x0000000000000000000000000000000000000002", setOrchestratorAuthorization: tx },
+      orchestrator: { address: "0x0000000000000000000000000000000000000003", setSettlementPolicy: tx },
     },
   };
   /** @type {any} */
@@ -1686,18 +1667,18 @@ test("lane 45 live step handlers only configure the fresh stack on Base and stag
         },
         policy: {
           address: addresses.DisputeProtectionPolicyV2,
-          setLifecycleHookAuthorization: transaction(
-            "policy.setLifecycleHookAuthorization"
+          setOrchestratorAuthorization: transaction(
+            "policy.setOrchestratorAuthorization"
           ),
           transferOwnership: transaction("policy.transferOwnership"),
         },
-        hook: { address: addresses.IntentLifecycleHookV2 },
         verifier: {
           addPaymentMethod: transaction("verifier.addPaymentMethod"),
           transferOwnership: transaction("verifier.transferOwnership"),
         },
         orchestrator: {
-          setLifecycleHook: transaction("O4.setLifecycleHook"),
+          address: addresses.OrchestratorV4,
+          setSettlementPolicy: transaction("O4.setSettlementPolicy"),
           setAllowMultipleIntents: transaction("O4.setAllowMultipleIntents"),
           transferOwnership: transaction("O4.transferOwnership"),
         },
@@ -1711,6 +1692,7 @@ test("lane 45 live step handlers only configure the fresh stack on Base and stag
       addresses.StakeVaultV2,
       pins.disputeVerifier.address,
       pins.disputeNullifierRegistry.address,
+      pins.whitelistPolicy.address,
     ]);
     assert.deepEqual(records.get("OrchestratorV4").args, [
       pins.deployer,
@@ -1720,6 +1702,7 @@ test("lane 45 live step handlers only configure the fresh stack on Base and stag
       expected.relayerRegistry,
       "0",
       expected.protocolFeeRecipient,
+      pins.whitelistPolicy.address,
     ]);
     assert.equal(
       writes.filter(([name]) => name.endsWith("transferOwnership")).length,
@@ -1730,8 +1713,12 @@ test("lane 45 live step handlers only configure the fresh stack on Base and stag
       network === "base" ? [["O4.setAllowMultipleIntents", [true]]] : []
     );
     assert.deepEqual(
-      writes.filter(([name]) => name.endsWith("setLifecycleHook")),
-      [["O4.setLifecycleHook", [addresses.IntentLifecycleHookV2]]]
+      writes.filter(([name]) => name.endsWith("setSettlementPolicy")),
+      [["O4.setSettlementPolicy", [addresses.DisputeProtectionPolicyV2]]]
+    );
+    assert.deepEqual(
+      writes.filter(([name]) => name === "policy.setOrchestratorAuthorization"),
+      [["policy.setOrchestratorAuthorization", [addresses.OrchestratorV4, true]]]
     );
     assert.ok(
       writes.every(([name]) => /^(vault|policy|verifier|O4)\./.test(name))

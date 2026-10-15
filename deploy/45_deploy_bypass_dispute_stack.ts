@@ -66,7 +66,7 @@ export const LIVE_FLAGS: Record<BypassNetwork, string> = {
 
 export const BYPASS_POLICY_GOVERNANCE_EVENTS = [
   "DisputeVerifierUpdated",
-  "LifecycleHookAuthorizationUpdated",
+  "OrchestratorAuthorizationUpdated",
   "OwnershipTransferStarted",
   "OwnershipTransferred",
 ] as const;
@@ -152,37 +152,37 @@ async function assertFreshPolicyUnused(
   );
 }
 
-async function assertOnlySuccessorHookAuthorization(
+async function assertOnlySuccessorOrchestratorAuthorization(
   hre: HardhatRuntimeEnvironment,
   policy: Contract,
   deployment: Deployment,
-  freshHook: string
+  freshOrchestrator: string
 ): Promise<boolean> {
   const logs = await policy.queryFilter(
-    policy.filters.LifecycleHookAuthorizationUpdated(),
+    policy.filters.OrchestratorAuthorizationUpdated(),
     deploymentBlock(deployment),
     await hre.ethers.provider.getBlockNumber()
   );
   const authorization = new Map<string, boolean>();
   for (const log of logs) {
-    const hook = log.args?.hook || log.args?.[0];
+    const orchestrator = log.args?.orchestrator || log.args?.[0];
     const authorized = log.args?.isAuthorized ?? log.args?.[1];
-    if (typeof hook !== "string" || typeof authorized !== "boolean") {
-      throw new Error("Unable to decode lifecycle-hook authorization history");
+    if (typeof orchestrator !== "string" || typeof authorized !== "boolean") {
+      throw new Error("Unable to decode orchestrator authorization history");
     }
-    authorization.set(hook.toLowerCase(), authorized);
+    authorization.set(orchestrator.toLowerCase(), authorized);
   }
   const active = [...authorization.entries()]
     .filter(([, authorized]) => authorized)
-    .map(([hook]) => hook);
+    .map(([orchestrator]) => orchestrator);
   requireState(
-    active.every((hook) => sameAddress(hook, freshHook)),
-    "Fresh policy authorized an unexpected lifecycle hook"
+    active.every((orchestrator) => sameAddress(orchestrator, freshOrchestrator)),
+    "Fresh policy authorized an unexpected orchestrator"
   );
-  const authorized: boolean = await policy.isLifecycleHookAuthorized(freshHook);
+  const authorized: boolean = await policy.isOrchestratorAuthorized(freshOrchestrator);
   requireState(
     authorized === (active.length === 1),
-    "Fresh lifecycle-hook authorization history mismatch"
+    "Fresh orchestrator authorization history mismatch"
   );
   return authorized;
 }
@@ -704,7 +704,6 @@ type Lane45State = {
   contracts: {
     vault?: Contract;
     policy?: Contract;
-    hook?: Contract;
     verifier?: Contract;
     orchestrator?: Contract;
   };
@@ -719,6 +718,7 @@ function orchestratorArgs(context: StackContext): unknown[] {
     context.relayerRegistry,
     context.protocolFee,
     context.protocolFeeRecipient,
+    context.whitelistPolicy,
   ];
 }
 
@@ -801,7 +801,6 @@ async function readFreshState(
   const [
     vaultRecord,
     policyRecord,
-    hookRecord,
     verifierRecord,
     orchestratorRecord,
   ] = deployments;
@@ -810,7 +809,6 @@ async function readFreshState(
   const completed: Record<string, boolean> = {
     "deploy-vault": Boolean(vaultRecord),
     "deploy-policy": Boolean(policyRecord),
-    "deploy-hook": Boolean(hookRecord),
     "deploy-verifier": Boolean(verifierRecord),
     "deploy-orchestrator": Boolean(orchestratorRecord),
   };
@@ -868,6 +866,7 @@ async function readFreshState(
     ));
     requireState(
       sameAddress(await policy.stakeVault(), vaultRecord!.address) &&
+        sameAddress(await policy.whitelistPolicy(), context.whitelistPolicy) &&
         sameAddress(await policy.disputeVerifier(), context.disputeVerifier) &&
         sameAddress(
           await policy.disputeNullifierRegistry(),
@@ -875,15 +874,15 @@ async function readFreshState(
         ),
       "Fresh bypass policy dependency state drifted"
     );
-    completed["authorize-hook"] = await assertOnlySuccessorHookAuthorization(
+    completed["authorize-orchestrator"] = await assertOnlySuccessorOrchestratorAuthorization(
       hre,
       policy,
       policyRecord,
-      hookRecord?.address || constants.AddressZero
+      orchestratorRecord?.address || constants.AddressZero
     );
     requireState(
-      Boolean(hookRecord) || !completed["authorize-hook"],
-      "Fresh policy authorized a hook before deployment"
+      Boolean(orchestratorRecord) || !completed["authorize-orchestrator"],
+      "Fresh policy authorized an orchestrator before deployment"
     );
     if (context.transferOwnership) {
       completed["transfer-policy-owner"] = ownershipStepState(
@@ -900,24 +899,6 @@ async function readFreshState(
         "DisputeProtectionPolicyV2"
       );
     }
-  }
-  if (hookRecord) {
-    const hook = (contracts.hook = await hre.ethers.getContractAt(
-      "IntentLifecycleHookV2",
-      hookRecord.address
-    ));
-    requireState(
-      sameAddress(
-        await hook.orchestratorRegistry(),
-        context.orchestratorRegistry
-      ) &&
-        sameAddress(await hook.whitelistPolicy(), context.whitelistPolicy) &&
-        sameAddress(
-          await hook.disputeProtectionPolicy(),
-          policyRecord!.address
-        ),
-      "Fresh bypass lifecycle hook state drifted"
-    );
   }
   if (verifierRecord) {
     const verifier = (contracts.verifier = await hre.ethers.getContractAt(
@@ -965,6 +946,7 @@ async function readFreshState(
       ));
     for (const field of [
       "escrowRegistry",
+      "whitelistPolicy",
       "paymentVerifierRegistry",
       "relayerRegistry",
       "protocolFeeRecipient",
@@ -984,15 +966,15 @@ async function readFreshState(
       !(await orchestrator.paused()),
       "Fresh OrchestratorV4 paused state drifted"
     );
-    const lifecycleHook = await orchestrator.lifecycleHook();
+    const settlementPolicy = await orchestrator.settlementPolicy();
     requireState(
-      sameAddress(lifecycleHook, constants.AddressZero) ||
-        sameAddress(lifecycleHook, hookRecord!.address),
-      "Fresh OrchestratorV4 lifecycle hook drifted"
+      sameAddress(settlementPolicy, constants.AddressZero) ||
+        sameAddress(settlementPolicy, policyRecord!.address),
+      "Fresh OrchestratorV4 settlement policy drifted"
     );
-    completed["set-orchestrator-hook"] = sameAddress(
-      lifecycleHook,
-      hookRecord!.address
+    completed["set-orchestrator-policy"] = sameAddress(
+      settlementPolicy,
+      policyRecord!.address
     );
     const multiple = await orchestrator.allowMultipleIntents();
     requireState(
@@ -1129,25 +1111,13 @@ export async function executeLane45Step(
       state.contracts.vault!.address,
       context.disputeVerifier,
       context.disputeNullifierRegistry,
+      context.whitelistPolicy,
     ]);
   } else if (step === "initialize-controller") {
     await initializeBypassController(
       state.contracts.vault!,
       state.contracts.policy!
     );
-  } else if (step === "deploy-hook") {
-    await deployFresh(hre, "IntentLifecycleHookV2", context.deployer, [
-      context.orchestratorRegistry,
-      context.whitelistPolicy,
-      state.contracts.policy!.address,
-    ]);
-  } else if (step === "authorize-hook") {
-    await (
-      await state.contracts.policy!.setLifecycleHookAuthorization(
-        state.contracts.hook!.address,
-        true
-      )
-    ).wait();
   } else if (step === "deploy-verifier") {
     await deployLane45Verifier(hre, network, context.deployer, [
       context.orchestratorRegistry,
@@ -1168,10 +1138,17 @@ export async function executeLane45Step(
       context.deployer,
       orchestratorArgs(context)
     );
-  } else if (step === "set-orchestrator-hook") {
+  } else if (step === "authorize-orchestrator") {
     await (
-      await state.contracts.orchestrator!.setLifecycleHook(
-        state.contracts.hook!.address
+      await state.contracts.policy!.setOrchestratorAuthorization(
+        state.contracts.orchestrator!.address,
+        true
+      )
+    ).wait();
+  } else if (step === "set-orchestrator-policy") {
+    await (
+      await state.contracts.orchestrator!.setSettlementPolicy(
+        state.contracts.policy!.address
       )
     ).wait();
   } else if (step === "set-allow-multiple-intents") {
@@ -1311,12 +1288,11 @@ function localSteps(context: StackContext): string[] {
     "deploy-vault",
     "deploy-policy",
     "initialize-controller",
-    "deploy-hook",
-    "authorize-hook",
     "deploy-verifier",
     ...context.paymentMethods.map((method) => `add-verifier-method:${method}`),
     "deploy-orchestrator",
-    "set-orchestrator-hook",
+    "authorize-orchestrator",
+    "set-orchestrator-policy",
     ...(context.allowMultipleIntents ? ["set-allow-multiple-intents"] : []),
   ];
 }
@@ -1357,6 +1333,7 @@ async function deployLocalBypassStack(
     vaultRecord.address,
     context.disputeVerifier,
     context.disputeNullifierRegistry,
+    context.whitelistPolicy,
   ]);
   let state = await readFreshState(hre, context);
   while (!state.completed["initialize-controller"]) {
@@ -1366,21 +1343,6 @@ async function deployLocalBypassStack(
     );
     await waitForDeploymentDelay(hre);
     state = await readFreshState(hre, context);
-  }
-  const hookRecord = await deploy("IntentLifecycleHookV2", [
-    context.orchestratorRegistry,
-    context.whitelistPolicy,
-    policyRecord.address,
-  ]);
-  state = await readFreshState(hre, context);
-  if (!state.completed["authorize-hook"]) {
-    await (
-      await state.contracts.policy!.setLifecycleHookAuthorization(
-        hookRecord.address,
-        true
-      )
-    ).wait();
-    await waitForDeploymentDelay(hre);
   }
   await deploy("UnifiedPaymentVerifierV4", [
     context.orchestratorRegistry,
@@ -1397,9 +1359,17 @@ async function deployLocalBypassStack(
   }
   await deploy("OrchestratorV4", orchestratorArgs(context));
   state = await readFreshState(hre, context);
-  if (!state.completed["set-orchestrator-hook"]) {
+  if (!state.completed["authorize-orchestrator"]) {
     await (
-      await state.contracts.orchestrator!.setLifecycleHook(hookRecord.address)
+      await state.contracts.policy!.setOrchestratorAuthorization(
+        state.contracts.orchestrator!.address, true
+      )
+    ).wait();
+    await waitForDeploymentDelay(hre);
+  }
+  if (!state.completed["set-orchestrator-policy"]) {
+    await (
+      await state.contracts.orchestrator!.setSettlementPolicy(policyRecord.address)
     ).wait();
     await waitForDeploymentDelay(hre);
   }
@@ -1435,7 +1405,7 @@ export async function bypassDisputeStackPrepared(
     !isSupersededStagingRecord(
       network,
       "UnifiedPaymentVerifierV4",
-      records[3]!.address
+      records[BYPASS_DEPLOYMENT_NAMES.indexOf("UnifiedPaymentVerifierV4")]!.address
     )
   ) {
     const registry = await hre.ethers.getContractAt(

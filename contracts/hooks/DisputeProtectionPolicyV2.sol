@@ -2,6 +2,9 @@
 
 pragma solidity ^0.8.18;
 
+import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
+import {IIntentSettlementPolicy} from "../interfaces/IIntentSettlementPolicy.sol";
+import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
@@ -15,18 +18,18 @@ import {IStakeVault} from "../interfaces/IStakeVault.sol";
  * @notice Selects existing stake or deferred payout collateral at settlement.
  * @dev Deferred payouts are stake locks funded by the payout. The token must have no transfer callbacks
  * (canonical USDC only). StakeVault owns collateral accounting; the dedicated dispute registry owns replay state.
- * TRUST: Registered orchestrators must invoke callbacks only for their own validated intents and escrows.
+ * TRUST: Authorized orchestrators must invoke callbacks only for their own validated intents and escrows.
  * Settlement uses the depositor and token captured before escrow unlock; this policy never reads escrow.
  * Intent hashes must embed the originating orchestrator so identities cannot collide. Governance must keep
- * predecessor hooks authorized and orchestrators registered until their snapshotted intents drain, and drain
+ * orchestrators authorized on predecessor policies until their snapshotted intents drain, and drain
  * active locks before moving vault control unless the successor explicitly adopts their state.
- * Protection applies only to stake-token deposits with a nonzero attested window supplied by the hook.
+ * Protection applies only to stake-token deposits with a nonzero attested window supplied in the signed extension.
  * There are no per-method windows or paused admissions. Whitelisted takers, manual releases and zero
- * windows settle in the hook without any policy call or event. Non-stake tokens return without a record
+ * windows settle without a record or event. Non-stake tokens return without a record
  * or event. Protected settlements lock gross stake or defer the net payout until now plus the attested
  * window; only these STAKE and DEFERRED_PAYOUT settlements emit DisputeProtectionIntentSettled.
  */
-contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, ReentrancyGuard {
+contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, ReentrancyGuard, ERC165 {
     /* ============ Constants ============ */
 
     uint64 public constant MAX_RISK_WINDOW = 180 days;
@@ -36,14 +39,17 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
     /// @notice Stake custody and lock accounting controlled by this policy.
     IStakeVault public immutable override stakeVault;
 
+    /// @notice Live deposit/payment-method whitelist used to exempt allowed takers.
+    IWhitelistPolicy public immutable whitelistPolicy;
+
     /// @notice Dedicated replay registry for payment-method-scoped dispute nullifiers.
     INullifierRegistry public immutable disputeNullifierRegistry;
 
     /// @notice Verifier used to validate signed dispute evidence.
     IDisputeVerifier public disputeVerifier;
 
-    /// @dev Lifecycle-hook authorization keyed by lifecycle hook address.
-    mapping(address => bool) internal isLifecycleHookAuthorizedByHook;
+    /// @dev Orchestrator authorization keyed by caller address.
+    mapping(address => bool) internal isOrchestratorAuthorizedByAddress;
 
     /// @dev Dispute protection lifecycle state keyed by globally unique intent hash.
     mapping(bytes32 => DisputeProtectionIntent) internal disputeProtectionIntentByIntentHash;
@@ -58,18 +64,22 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
      * @param _stakeVault Vault holding and locking taker collateral.
      * @param _disputeVerifier Verifier for signed dispute evidence.
      * @param _disputeNullifierRegistry Dedicated registry that rejects reused dispute nullifiers.
+     * @param _whitelistPolicy Live whitelist for settlement exemptions.
      */
     constructor(
         address _owner,
         IStakeVault _stakeVault,
         IDisputeVerifier _disputeVerifier,
-        INullifierRegistry _disputeNullifierRegistry
+        INullifierRegistry _disputeNullifierRegistry,
+        IWhitelistPolicy _whitelistPolicy
     ) {
         if (_owner == address(0)) revert ZeroAddress();
         _validateDependency(address(_stakeVault));
         _validateDependency(address(_disputeVerifier));
         _validateDependency(address(_disputeNullifierRegistry));
 
+        _validateDependency(address(_whitelistPolicy));
+        whitelistPolicy = _whitelistPolicy;
         stakeVault = _stakeVault;
         disputeVerifier = _disputeVerifier;
         disputeNullifierRegistry = _disputeNullifierRegistry;
@@ -78,40 +88,52 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
 
     /* ============ Modifiers ============ */
 
-    modifier onlyLifecycleHook() {
-        if (!isLifecycleHookAuthorizedByHook[msg.sender]) {
-            revert UnauthorizedLifecycleHook(msg.sender);
+    modifier onlyAuthorizedOrchestrator() {
+        if (!isOrchestratorAuthorizedByAddress[msg.sender]) {
+            revert UnauthorizedOrchestrator(msg.sender);
         }
         _;
     }
 
     /* ============ Lifecycle Functions ============ */
 
-    /// @inheritdoc IDisputeProtectionPolicyV2
-    function onIntentSettled(SettleParams calldata _params)
-        external override onlyLifecycleHook returns (bool deferred)
+    /// @inheritdoc IIntentSettlementPolicy
+    function settleIntent(SettlementContext calldata _context)
+        external override onlyAuthorizedOrchestrator returns (address deferralVault)
     {
-        if (_params.token != address(stakeVault.stakeToken())) return false;
-        uint64 riskWindow = _params.riskWindow;
-        if (riskWindow > MAX_RISK_WINDOW) revert InvalidRiskWindow(riskWindow);
-        if (riskWindow == 0) return false;
-        if (disputeProtectionIntentByIntentHash[_params.intentHash].status != DisputeProtectionIntentStatus.NONE) {
-            revert DisputeProtectionIntentAlreadyExists(_params.intentHash);
+        if (_context.isManualRelease) return address(0);
+        if (_context.extensionData.length < 32) revert MissingDisputeWindow();
+        uint256 window = abi.decode(_context.extensionData[:32], (uint256));
+        if (window > MAX_RISK_WINDOW) revert InvalidDisputeWindow(window);
+        bytes32 expected = bytes32(_context.data);
+        bytes32 attested = _context.extensionData.length >= 64
+            ? abi.decode(_context.extensionData[32:64], (bytes32)) : bytes32(0);
+        if (attested != expected) revert ConditionsNotAttested(_context.intentHash);
+        if (window == 0) return address(0);
+        if (
+            whitelistPolicy.enabled(_context.escrow, _context.depositId, _context.paymentMethod)
+                && whitelistPolicy.isTakerAllowed(
+                    _context.escrow, _context.depositId, _context.paymentMethod, _context.taker
+                )
+        ) return address(0);
+        if (_context.token != address(stakeVault.stakeToken())) return address(0);
+        if (disputeProtectionIntentByIntentHash[_context.intentHash].status != DisputeProtectionIntentStatus.NONE) {
+            revert DisputeProtectionIntentAlreadyExists(_context.intentHash);
         }
-        if (_params.releaseAmount == 0 || _params.netAmount == 0) {
-            revert InvalidSettlementAmount(_params.releaseAmount, _params.netAmount);
+        if (_context.releaseAmount == 0 || _context.netAmount == 0) {
+            revert InvalidSettlementAmount(_context.releaseAmount, _context.netAmount);
         }
-        return _settleProtectedIntent(_params);
+        return _settleProtectedIntent(_context, uint64(window));
     }
 
     /// @dev Apply the reentrancy guard only to protected settlements that change state.
-    function _settleProtectedIntent(SettleParams calldata _params) internal nonReentrant returns (bool deferred) {
+    function _settleProtectedIntent(SettlementContext calldata _params, uint64 _riskWindow) internal nonReentrant returns (address deferralVault) {
         DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_params.intentHash];
         intent.taker = _params.taker;
         intent.recipient = _params.recipient;
         intent.depositor = _params.depositor;
         intent.paymentMethod = _params.paymentMethod;
-        intent.releaseEligibleAt = _calculateReleaseEligibleAt(_params.riskWindow);
+        intent.releaseEligibleAt = _calculateReleaseEligibleAt(_riskWindow);
         intent.status = DisputeProtectionIntentStatus.SETTLED;
         address stakeOwner = stakeVault.stakeOwnerOf(_params.taker);
         if (stakeVault.freeStake(stakeOwner) >= _params.releaseAmount) {
@@ -123,17 +145,17 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
             intent.collateralSource = CollateralSource.DEFERRED_PAYOUT;
             intent.stakeOwner = _params.recipient;
             intent.lockedAmount = _params.netAmount;
-            deferred = true;
+            deferralVault = address(stakeVault);
         }
         emit DisputeProtectionIntentSettled(
             _params.intentHash, intent.taker, intent.depositor, intent.recipient, intent.paymentMethod,
-            _params.riskWindow, intent.collateralSource, intent.stakeOwner, _params.releaseAmount,
+            _riskWindow, intent.collateralSource, intent.stakeOwner, _params.releaseAmount,
             intent.lockedAmount, intent.releaseEligibleAt
         );
     }
 
-    /// @inheritdoc IDisputeProtectionPolicyV2
-    function onDeferredPayoutFunded(bytes32 _intentHash) external override onlyLifecycleHook nonReentrant {
+    /// @inheritdoc IIntentSettlementPolicy
+    function onDeferredPayoutFunded(bytes32 _intentHash) external override onlyAuthorizedOrchestrator nonReentrant {
         DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_intentHash];
         if (intent.status != DisputeProtectionIntentStatus.SETTLED) {
             revert UnexpectedStatus(_intentHash, intent.status);
@@ -228,16 +250,16 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
     }
 
     /**
-     * @notice GOVERNANCE ONLY: Authorizes or revokes one lifecycle hook.
-     * @dev Authorize a hook before configuring it on an Orchestrator. Revoke a predecessor only after every intent
-     * snapshotted to it has been cancelled or settled.
-     * @param _hook Lifecycle hook whose callback authority is updated.
-     * @param _isAuthorized Whether the hook may mutate dispute protection intent state.
+     * @notice GOVERNANCE ONLY: Authorizes or revokes one orchestrator.
+     * @dev Authorize an orchestrator before configuring this policy on it. Revoke it only after every intent
+     * snapshotted to this policy has been cancelled or settled.
+     * @param _orchestrator Orchestrator whose callback authority is updated.
+     * @param _isAuthorized Whether the orchestrator may mutate dispute protection intent state.
      */
-    function setLifecycleHookAuthorization(address _hook, bool _isAuthorized) external onlyOwner {
-        if (_isAuthorized) _validateDependency(_hook);
-        isLifecycleHookAuthorizedByHook[_hook] = _isAuthorized;
-        emit LifecycleHookAuthorizationUpdated(_hook, _isAuthorized);
+    function setOrchestratorAuthorization(address _orchestrator, bool _isAuthorized) external override onlyOwner {
+        if (_isAuthorized) _validateDependency(_orchestrator);
+        isOrchestratorAuthorizedByAddress[_orchestrator] = _isAuthorized;
+        emit OrchestratorAuthorizationUpdated(_orchestrator, _isAuthorized);
     }
 
     /**
@@ -268,11 +290,16 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
     }
 
     /**
-     * @notice Returns whether a lifecycle hook may mutate dispute protection intent state.
-     * @param _hook Lifecycle hook whose callback authorization is queried.
+     * @notice Returns whether a orchestrator may mutate dispute protection intent state.
+     * @param _orchestrator Orchestrator whose callback authorization is queried.
      */
-    function isLifecycleHookAuthorized(address _hook) external view override returns (bool) {
-        return isLifecycleHookAuthorizedByHook[_hook];
+    function isOrchestratorAuthorized(address _orchestrator) external view override returns (bool) {
+        return isOrchestratorAuthorizedByAddress[_orchestrator];
+    }
+
+    /// @notice Reports ERC-165 and the minimal settlement interface supported by this policy.
+    function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
+        return interfaceId == type(IIntentSettlementPolicy).interfaceId || super.supportsInterface(interfaceId);
     }
 
     /* ============ Internal Functions ============ */

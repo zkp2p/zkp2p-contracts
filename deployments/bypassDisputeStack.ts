@@ -15,7 +15,6 @@ export const LANE_46_TAG = "46_activate_bypass_dispute_stack";
 export const BYPASS_DEPLOYMENT_NAMES = [
   "StakeVaultV2",
   "DisputeProtectionPolicyV2",
-  "IntentLifecycleHookV2",
   "UnifiedPaymentVerifierV4",
   "OrchestratorV4",
 ] as const;
@@ -23,7 +22,6 @@ export type BypassDeploymentName = (typeof BYPASS_DEPLOYMENT_NAMES)[number];
 export const BYPASS_ARTIFACT_NAMES: Record<BypassDeploymentName, string> = {
   StakeVaultV2: "StakeVault",
   DisputeProtectionPolicyV2: "DisputeProtectionPolicyV2",
-  IntentLifecycleHookV2: "IntentLifecycleHookV2",
   UnifiedPaymentVerifierV4: "UnifiedPaymentVerifierV4",
   OrchestratorV4: "OrchestratorV4",
 };
@@ -353,14 +351,13 @@ function deploymentSteps(network: BypassNetwork): string[] {
     "deploy-vault",
     "deploy-policy",
     "initialize-controller",
-    "deploy-hook",
-    "authorize-hook",
     "deploy-verifier",
     ...BYPASS_EXPECTED_LIVE[network].paymentMethods.map(
       (method) => `add-verifier-method:${method}`
     ),
     "deploy-orchestrator",
-    "set-orchestrator-hook",
+    "authorize-orchestrator",
+    "set-orchestrator-policy",
     ...(BYPASS_EXPECTED_LIVE[network].allowMultipleIntents
       ? ["set-allow-multiple-intents"]
       : []),

@@ -33,9 +33,9 @@ export type BypassActivationSnapshot = {
     stakeVault: string;
     disputeVerifier: string;
     disputeNullifierRegistry: string;
-    authorizedHooks: string[];
+    authorizedOrchestrators: string[];
+    whitelistPolicy: string;
   };
-  freshHook: Hook;
   verifier: {
     owner: string;
     orchestratorRegistry: string;
@@ -75,7 +75,8 @@ export type BypassActivationSnapshot = {
     chainId: string;
     owner: string;
     paused: boolean;
-    lifecycleHook: string;
+    settlementPolicy: string;
+    whitelistPolicy: string;
     escrowRegistry: string;
     paymentVerifierRegistry: string;
     relayerRegistry: string;
@@ -111,7 +112,6 @@ export type BypassExpectedActivationState = {
     | "escrow"
     | "freshVault"
     | "freshPolicy"
-    | "freshHook"
     | "verifier"
     | "retiredVerifier"
     | "predecessorVault"
@@ -177,7 +177,6 @@ export type BypassTrustSurfaceInput = {
   predecessorHook: string;
   freshVault: string;
   freshPolicy: string;
-  freshHook: string;
   paymentMethods: string[];
   currencies: string[];
   currencyCounts: string[];
@@ -296,10 +295,8 @@ function commonInvariants(
     "freshPolicy.stakeVault": a.freshVault,
     "freshPolicy.disputeVerifier": a.disputeVerifier,
     "freshPolicy.disputeNullifierRegistry": a.disputeRegistry,
-    "freshPolicy.authorizedHooks": [a.freshHook],
-    "freshHook.orchestratorRegistry": a.orchestratorRegistry,
-    "freshHook.whitelistPolicy": a.whitelistPolicy,
-    "freshHook.disputeProtectionPolicy": a.freshPolicy,
+    "freshPolicy.authorizedOrchestrators": [a.orchestratorV4],
+    "freshPolicy.whitelistPolicy": a.whitelistPolicy,
     "verifier.owner": e.governance,
     "verifier.orchestratorRegistry": a.orchestratorRegistry,
     "verifier.nullifierRegistry": a.nullifierRegistryV2,
@@ -341,7 +338,8 @@ function commonInvariants(
     "orchestratorV4.protocolFeeRecipient": a.protocolFeeRecipient,
     "orchestratorV4.allowMultipleIntents": e.allowMultipleIntents,
     "orchestratorV4.chainId": e.chainId,
-    "orchestratorV4.lifecycleHook": a.freshHook,
+    "orchestratorV4.settlementPolicy": a.freshPolicy,
+    "orchestratorV4.whitelistPolicy": a.whitelistPolicy,
     "orchestratorRegistry.owner": e.governance,
     "whitelistPolicy.escrowRegistry": a.escrowRegistry,
     "whitelistPolicy.groupRegistry": a.groupRegistry,
@@ -639,7 +637,6 @@ export function buildBypassTrustSurface(
     predecessorHook: a.predecessorHook,
     freshVault: a.freshVault,
     freshPolicy: a.freshPolicy,
-    freshHook: a.freshHook,
     paymentMethods,
     currencies: expected.paymentMethods.flatMap((method) => method.currencies),
     currencyCounts: expected.paymentMethods.map((method) =>
@@ -677,7 +674,6 @@ export function bypassTrustSurfaceTuple(
     s.predecessorHook,
     s.freshVault,
     s.freshPolicy,
-    s.freshHook,
     s.paymentMethods,
     s.currencies,
     s.currencyCounts,
@@ -696,10 +692,8 @@ export const BYPASS_GUARD_BOUND_FIELDS = [
   "freshPolicy.stakeVault",
   "freshPolicy.disputeVerifier",
   "freshPolicy.disputeNullifierRegistry",
-  "freshPolicy.authorizedHooks",
-  "freshHook.orchestratorRegistry",
-  "freshHook.whitelistPolicy",
-  "freshHook.disputeProtectionPolicy",
+  "freshPolicy.authorizedOrchestrators",
+  "freshPolicy.whitelistPolicy",
   "verifier.owner",
   "verifier.orchestratorRegistry",
   "verifier.nullifierRegistry",
@@ -734,7 +728,8 @@ export const BYPASS_GUARD_BOUND_FIELDS = [
   "orchestrator.registered",
   "orchestratorV4.owner",
   "orchestratorV4.paused",
-  "orchestratorV4.lifecycleHook",
+  "orchestratorV4.settlementPolicy",
+  "orchestratorV4.whitelistPolicy",
   "orchestratorV4.escrowRegistry",
   "orchestratorV4.paymentVerifierRegistry",
   "orchestratorV4.relayerRegistry",

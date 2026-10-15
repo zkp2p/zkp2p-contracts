@@ -6,7 +6,6 @@ import {Vm} from "forge-std/Vm.sol";
 import {OrchestratorV3Fixture} from "../helpers/OrchestratorV3Fixture.sol";
 import {OrchestratorV4} from "contracts/OrchestratorV4.sol";
 import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicyV2.sol";
-import {IntentLifecycleHookV2} from "contracts/hooks/IntentLifecycleHookV2.sol";
 import {IDisputeProtectionPolicyV2 as P} from "contracts/interfaces/IDisputeProtectionPolicyV2.sol";
 import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionPolicy.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
@@ -22,6 +21,7 @@ import {UnifiedPaymentVerifierV3} from "contracts/unifiedVerifier/UnifiedPayment
 import {UnifiedPaymentVerifierV4} from "contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol";
 import {IStakeVault} from "contracts/interfaces/IStakeVault.sol";
 import {INullifierRegistryV2} from "contracts/interfaces/INullifierRegistryV2.sol";
+import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {IPaymentVerifier} from "contracts/interfaces/IPaymentVerifier.sol";
@@ -46,7 +46,6 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
     DisputeProtectionPolicy internal predecessorPolicy;
     DisputeProtectionPolicyV2 internal freshPolicy;
     IntentLifecycleHookV1 internal predecessorHook;
-    IntentLifecycleHookV2 internal freshHook;
     OrchestratorV4 internal orchestratorV4;
     UnifiedPaymentVerifierV4 internal staleVerifier;
     StakeVault internal staleVault;
@@ -106,10 +105,9 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
 
     function _deployLane45() private {
         freshVault = new StakeVault(address(this), token, address(0), 0);
-        freshPolicy = new DisputeProtectionPolicyV2(address(this), freshVault, disputeVerifier, disputeNullifiers);
+        freshPolicy =
+            new DisputeProtectionPolicyV2(address(this), freshVault, disputeVerifier, disputeNullifiers, whitelist);
         freshVault.initializeController(address(freshPolicy));
-        freshHook = new IntentLifecycleHookV2(orchestratorRegistry, whitelist, freshPolicy);
-        freshPolicy.setLifecycleHookAuthorization(address(freshHook), true);
         successor = new UnifiedPaymentVerifierV4(orchestratorRegistry, nullifiers, witnesses);
         for (uint256 index; index < originalMethods.length; index++) {
             successor.addPaymentMethod(originalMethods[index]);
@@ -121,9 +119,11 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
             address(orchestrator.paymentVerifierRegistry()),
             address(orchestrator.relayerRegistry()),
             orchestrator.protocolFee(),
-            orchestrator.protocolFeeRecipient()
+            orchestrator.protocolFeeRecipient(),
+            whitelist
         );
-        orchestratorV4.setLifecycleHook(freshHook);
+        freshPolicy.setOrchestratorAuthorization(address(orchestratorV4), true);
+        orchestratorV4.setSettlementPolicy(freshPolicy);
         if (orchestrator.allowMultipleIntents()) orchestratorV4.setAllowMultipleIntents(true);
     }
 
@@ -199,11 +199,11 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         expected[1] = address(freshPolicy);
         assertEq(disputeNullifiers.getWriters(), expected);
         assertEq(address(orchestrator.lifecycleHook()), address(predecessorHook));
-        assertEq(address(orchestratorV4.lifecycleHook()), address(freshHook));
+        assertEq(address(orchestratorV4.settlementPolicy()), address(freshPolicy));
         assertTrue(orchestratorRegistry.isOrchestrator(address(orchestratorV4)));
         assertTrue(orchestratorRegistry.isOrchestrator(address(orchestrator)));
         assertTrue(predecessorPolicy.isLifecycleHookAuthorized(address(predecessorHook)));
-        assertTrue(freshPolicy.isLifecycleHookAuthorized(address(freshHook)));
+        assertTrue(freshPolicy.isOrchestratorAuthorized(address(orchestratorV4)));
         assertEq(predecessorVault.controller(), address(predecessorPolicy));
     }
 
@@ -262,7 +262,9 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
     function test_O4SignalRevertsBeforeRegistration() public {
         IOrchestratorV4.SignalIntentParams memory params = _defaultV4Params();
         vm.expectRevert(
-            abi.encodeWithSelector(IntentLifecycleHookV2.UnauthorizedOrchestrator.selector, address(orchestratorV4))
+            abi.encodeWithSelector(
+                IEscrowV2.UnauthorizedCaller.selector, address(orchestratorV4), address(orchestratorRegistry)
+            )
         );
         vm.prank(taker);
         orchestratorV4.signalIntent(params);
@@ -278,7 +280,9 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         assertEq(orchestratorV4.protocolFee(), orchestrator.protocolFee());
         assertEq(orchestratorV4.protocolFeeRecipient(), orchestrator.protocolFeeRecipient());
         assertEq(orchestratorV4.allowMultipleIntents(), orchestrator.allowMultipleIntents());
-        assertEq(address(orchestratorV4.lifecycleHook()), address(freshHook));
+        assertEq(address(orchestratorV4.settlementPolicy()), address(freshPolicy));
+        assertEq(address(orchestratorV4.whitelistPolicy()), address(whitelist));
+        assertEq(address(freshPolicy.whitelistPolicy()), address(whitelist));
         assertFalse(orchestratorRegistry.isOrchestrator(address(orchestratorV4)));
     }
 
@@ -331,7 +335,9 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         uint64 window = 37 hours;
         _settleO4(id, _signedProof(id, PAYMENT_ID, successor.DOMAIN_SEPARATOR(), true, window));
         assertEq(freshPolicy.getDisputeProtectionIntent(id).releaseEligibleAt, block.timestamp + window);
-        assertEq(uint256(freshPolicy.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.SETTLED));
+        assertEq(
+            uint256(freshPolicy.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.SETTLED)
+        );
         assertEq(token.balanceOf(other), 0);
         assertEq(token.balanceOf(address(freshVault)), INTENT_AMOUNT);
         (address owner, uint256 amount,) = freshVault.locks(id);
@@ -368,22 +374,26 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         assertEq(uint256(freshPolicy.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.NONE));
     }
 
-    function test_O4WhitelistedTakerSkipsPolicyAfterCutover() public {
+    function test_O4WhitelistedTakerSkipsCollateralAfterCutover() public {
         _activateLane46();
         address[] memory takers = new address[](1);
         takers[0] = taker;
         vm.prank(depositor);
         whitelist.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), takers);
         bytes32 id = _signalO4();
-        vm.mockCallRevert(address(freshPolicy), bytes(""), bytes("policy called"));
+        vm.mockCallRevert(address(freshVault), bytes(""), bytes("vault called"));
         vm.recordLogs();
         _settleO4(id, _signedProof(id, PAYMENT_ID, successor.DOMAIN_SEPARATOR(), true, RISK_WINDOW));
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].emitter != address(freshPolicy));
+        for (uint256 i; i < logs.length; ++i) {
+            assertTrue(logs[i].emitter != address(freshPolicy));
+        }
         vm.clearMockedCalls();
         assertEq(token.balanceOf(other), INTENT_AMOUNT);
         assertEq(token.balanceOf(address(freshVault)), 0);
-        assertEq(uint256(freshPolicy.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
+        assertEq(
+            uint256(freshPolicy.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE)
+        );
         assertEq(uint256(freshPolicy.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.NONE));
     }
 
@@ -421,7 +431,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         IOrchestratorV4.SignalIntentParams memory params = _defaultV4Params();
         vm.expectRevert(
             abi.encodeWithSelector(
-                IntentLifecycleHookV2.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker
+                IOrchestratorV4.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker
             )
         );
         vm.prank(taker);

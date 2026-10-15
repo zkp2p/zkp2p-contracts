@@ -4,7 +4,6 @@ pragma solidity ^0.8.18;
 import {DisputeProtectionStackV2Fixture} from "../helpers/DisputeProtectionStackV2Fixture.sol";
 import {IDisputeProtectionPolicyV2 as P} from "contracts/interfaces/IDisputeProtectionPolicyV2.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
-import {IntentLifecycleHookV2} from "contracts/hooks/IntentLifecycleHookV2.sol";
 import {UnifiedPaymentVerifierV4} from "contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol";
 
 contract DeferredPayoutDepositClosureTest is DisputeProtectionStackV2Fixture {
@@ -38,7 +37,7 @@ contract DeferredPayoutDepositClosureTest is DisputeProtectionStackV2Fixture {
         uint256 dustRecipientBalance = token.balanceOf(address(this));
         uint256 depositorBalance = token.balanceOf(depositor);
 
-        vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV2.ConditionsNotAttested.selector, id));
+        vm.expectRevert(abi.encodeWithSelector(P.ConditionsNotAttested.selector, id));
         orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(invalidProof, id, ""));
 
         assertEq(orchestrator.getIntent(id).owner, taker);
@@ -124,7 +123,7 @@ contract DeferredPayoutDepositClosureTest is DisputeProtectionStackV2Fixture {
         assertEq(address(escrow.getDeposit(depositId).token), address(0));
         assertEq(escrow.getDepositIntent(depositId, id).amount, 0);
         assertEq(orchestrator.getIntent(id).owner, address(0));
-        assertEq(address(orchestrator.getIntentLifecycleHook(id)), address(0));
+        assertEq(address(orchestrator.getIntentSettlementPolicy(id)), address(0));
         assertEq(token.balanceOf(address(escrow)), 0);
         assertEq(token.balanceOf(address(orchestrator)), 0);
         assertEq(token.balanceOf(protocolFeeRecipient), INTENT_AMOUNT * PROTOCOL_FEE / 1e18);

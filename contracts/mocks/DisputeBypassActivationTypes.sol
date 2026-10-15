@@ -4,7 +4,6 @@ pragma solidity ^0.8.18;
 import {
     IActivationAttestationVerifier,
     IActivationDisputeVerifier,
-    IActivationLifecycleHook,
     IActivationOrchestrator,
     IActivationOrchestratorRegistry,
     IActivationOwned,
@@ -41,13 +40,16 @@ struct BypassTrustSurface {
     address predecessorHook;
     address freshVault;
     address freshPolicy;
-    address freshHook;
     bytes32[] paymentMethods;
     bytes32[] currencies;
     uint256[] currencyCounts;
 }
 
 interface IBypassActivationOrchestrator is IActivationOrchestrator {
+    /// @notice Returns the configured settlement policy.
+    function settlementPolicy() external view returns (address);
+    /// @notice Returns the immutable whitelist policy.
+    function whitelistPolicy() external view returns (address);
     /// @notice Returns the orchestrator signing chain ID.
     function chainId() external view returns (uint256);
 }
@@ -63,8 +65,10 @@ interface IBypassActivationCascadePolicy is IActivationOwned {
     function disputeNullifierRegistry() external view returns (address);
     /// @notice Returns the stake vault.
     function stakeVault() external view returns (address);
-    /// @notice Returns whether a lifecycle hook is authorized.
-    function isLifecycleHookAuthorized(address hook) external view returns (bool);
+    /// @notice Returns whether an orchestrator is authorized.
+    function isOrchestratorAuthorized(address orchestrator) external view returns (bool);
+    /// @notice Returns the immutable whitelist policy.
+    function whitelistPolicy() external view returns (address);
 }
 
 interface IBypassActivationPaymentVerifierRegistry is IActivationOwned {
@@ -108,7 +112,7 @@ abstract contract DisputeBypassTrustSurfaceChecks {
     error OrchestratorV4ProtocolFeeMismatch(uint256 actual);
     error OrchestratorV4ProtocolFeeRecipientMismatch(address actual);
     error OrchestratorV4AllowMultipleIntentsMismatch(bool actual);
-    error OrchestratorV4LifecycleHookMismatch(address actual);
+    error OrchestratorV4SettlementPolicyMismatch(address actual);
     error OrchestratorV4RegistrationMismatch(bool actual);
 
     error OrchestratorOwnerMismatch(address actual);
@@ -120,9 +124,8 @@ abstract contract DisputeBypassTrustSurfaceChecks {
     error OrchestratorProtocolFeeRecipientMismatch(address actual);
     error OrchestratorAllowMultipleIntentsMismatch(bool actual);
     error OrchestratorRegistrationMismatch(bool actual);
-    error FreshHookOrchestratorRegistryMismatch(address actual);
-    error FreshHookWhitelistPolicyMismatch(address actual);
-    error FreshHookDisputeProtectionPolicyMismatch(address actual);
+    error OrchestratorV4WhitelistPolicyMismatch(address actual);
+    error FreshPolicyWhitelistPolicyMismatch(address actual);
     error WhitelistPolicyOwnerMismatch(address actual);
     error WhitelistPolicyEscrowRegistryMismatch(address actual);
     error WhitelistPolicyGroupRegistryMismatch(address actual);
@@ -152,8 +155,8 @@ abstract contract DisputeBypassTrustSurfaceChecks {
     error FreshVaultPendingOwnerMismatch(address actual);
     error FreshPolicyOwnerMismatch(address actual);
     error FreshPolicyPendingOwnerMismatch(address actual);
-    error FreshHookAuthorizationMismatch(bool actual);
-    error PredecessorHookAuthorizationMismatch(bool actual);
+    error FreshOrchestratorAuthorizationMismatch(bool actual);
+    error PredecessorOrchestratorAuthorizationMismatch(bool actual);
     error DisputeWriterCountMismatch(uint256 actual);
     error DisputeWriterMismatch(uint256 index, address actual);
     error LifecycleHookMismatch(address actual);
@@ -204,7 +207,6 @@ abstract contract DisputeBypassTrustSurfaceChecks {
         if (actual != expected.safe) revert OrchestratorRegistryOwnerMismatch(actual);
         _assertOrchestratorSurface();
         _assertOrchestratorV4Surface();
-        _assertFreshHookSurface();
         _assertWhitelistSurface();
         _assertAttestationSurface();
         _assertDisputeVerifierSurface();
@@ -269,26 +271,16 @@ abstract contract DisputeBypassTrustSurfaceChecks {
         if (actualUint256 != IBypassActivationOrchestrator(expected.orchestrator).chainId()) {
             revert OrchestratorV4ChainIdMismatch(actualUint256);
         }
-        actualAddress = targetOrchestrator.lifecycleHook();
-        if (actualAddress != expected.freshHook) revert OrchestratorV4LifecycleHookMismatch(actualAddress);
+        actualAddress = targetOrchestrator.settlementPolicy();
+        if (actualAddress != expected.freshPolicy) revert OrchestratorV4SettlementPolicyMismatch(actualAddress);
+        actualAddress = targetOrchestrator.whitelistPolicy();
+        if (actualAddress != expected.whitelistPolicy) revert OrchestratorV4WhitelistPolicyMismatch(actualAddress);
     }
 
     function _assertOrchestratorV4Registration(bool wanted) internal view {
         bool actual =
             IBypassActivationOwnedRegistry(expected.orchestratorRegistry).isOrchestrator(expected.orchestratorV4);
         if (actual != wanted) revert OrchestratorV4RegistrationMismatch(actual);
-    }
-
-    function _assertFreshHookSurface() private view {
-        IActivationLifecycleHook targetHook = IActivationLifecycleHook(expected.freshHook);
-        address actualAddress = targetHook.orchestratorRegistry();
-        if (actualAddress != expected.orchestratorRegistry) {
-            revert FreshHookOrchestratorRegistryMismatch(actualAddress);
-        }
-        actualAddress = targetHook.whitelistPolicy();
-        if (actualAddress != expected.whitelistPolicy) revert FreshHookWhitelistPolicyMismatch(actualAddress);
-        actualAddress = targetHook.disputeProtectionPolicy();
-        if (actualAddress != expected.freshPolicy) revert FreshHookDisputeProtectionPolicyMismatch(actualAddress);
     }
 
     function _assertWhitelistSurface() private view {
@@ -368,6 +360,8 @@ abstract contract DisputeBypassTrustSurfaceChecks {
         if (actualAddress != expected.disputeVerifier) revert FreshPolicyDisputeVerifierMismatch(actualAddress);
         actualAddress = fresh.disputeNullifierRegistry();
         if (actualAddress != expected.disputeRegistry) revert FreshPolicyDisputeRegistryMismatch(actualAddress);
+        actualAddress = fresh.whitelistPolicy();
+        if (actualAddress != expected.whitelistPolicy) revert FreshPolicyWhitelistPolicyMismatch(actualAddress);
         actualAddress = fresh.stakeVault();
         if (actualAddress != expected.freshVault) revert FreshPolicyStakeVaultMismatch(actualAddress);
 
@@ -388,10 +382,10 @@ abstract contract DisputeBypassTrustSurfaceChecks {
 
     function _assertFreshPolicyConfiguration() internal view {
         IBypassActivationCascadePolicy fresh = IBypassActivationCascadePolicy(expected.freshPolicy);
-        bool actualBool = fresh.isLifecycleHookAuthorized(expected.freshHook);
-        if (!actualBool) revert FreshHookAuthorizationMismatch(actualBool);
-        actualBool = fresh.isLifecycleHookAuthorized(expected.predecessorHook);
-        if (actualBool) revert PredecessorHookAuthorizationMismatch(actualBool);
+        bool actualBool = fresh.isOrchestratorAuthorized(expected.orchestratorV4);
+        if (!actualBool) revert FreshOrchestratorAuthorizationMismatch(actualBool);
+        actualBool = fresh.isOrchestratorAuthorized(expected.orchestrator);
+        if (actualBool) revert PredecessorOrchestratorAuthorizationMismatch(actualBool);
     }
 
     function _assertFreshSafeOwnership() internal view {

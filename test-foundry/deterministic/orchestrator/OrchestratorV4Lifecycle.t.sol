@@ -1,99 +1,39 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-import {IIntentLifecycleHookV2} from "contracts/interfaces/IIntentLifecycleHookV2.sol";
+import {OrchestratorV4} from "contracts/OrchestratorV4.sol";
+import {IWhitelistPolicy} from "contracts/interfaces/IWhitelistPolicy.sol";
+import {IIntentSettlementPolicy} from "contracts/interfaces/IIntentSettlementPolicy.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
-import {LifecycleHookV2Mock} from "../../mocks/LifecycleHookV2Mock.sol";
+import {SettlementPolicyMock} from "../../mocks/SettlementPolicyMock.sol";
 import {OrchestratorV4Fixture} from "../helpers/OrchestratorV4Fixture.sol";
 
 contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
     event IntentFulfilled(bytes32 indexed intentHash, address indexed fundsTransferredTo, uint256 amount, bool manual);
 
-    LifecycleHookV2Mock internal lifecycleHookMock;
+    SettlementPolicyMock internal policyMock;
 
     function setUp() public override {
         super.setUp();
-        lifecycleHookMock = new LifecycleHookV2Mock();
+        policyMock = new SettlementPolicyMock();
     }
 
-    function test_SignalWithoutLifecycleHookSnapshotsZeroAddress() public {
+    function test_SignalWithoutPolicySnapshotsZeroAddress() public {
         bytes32 intentHash = _signalDefault();
-        assertEq(address(orchestrator.getIntentLifecycleHook(intentHash)), address(0));
+        assertEq(address(orchestrator.getIntentSettlementPolicy(intentHash)), address(0));
     }
 
-    function test_SignalWithLifecycleHookExecutesAdmissionAndSnapshotsHook() public {
-        orchestrator.setLifecycleHook(IIntentLifecycleHookV2(address(lifecycleHookMock)));
+    function test_SignalWithPolicySnapshotsPolicy() public {
+        orchestrator.setSettlementPolicy(IIntentSettlementPolicy(address(policyMock)));
 
         bytes32 intentHash = _signalDefault();
 
-        assertEq(lifecycleHookMock.signaledCalls(), 1);
-        assertEq(address(orchestrator.getIntentLifecycleHook(intentHash)), address(lifecycleHookMock));
+        assertEq(address(orchestrator.getIntentSettlementPolicy(intentHash)), address(policyMock));
     }
 
-    function test_RevertingAdmissionFailsClosedBeforeEscrowLock() public {
-        orchestrator.setLifecycleHook(lifecycleHookMock);
-        lifecycleHookMock.setRevertOnCreate(true);
-        uint256 counterBefore = orchestrator.intentCounter();
-        uint256 availableBefore = escrow.getDeposit(depositId).remainingDeposits;
-        vm.expectRevert(bytes("risk admission failed"));
-        _signalCall(taker, _defaultParams());
-        assertEq(orchestrator.intentCounter(), counterBefore);
-        assertEq(escrow.getDeposit(depositId).remainingDeposits, availableBefore);
-    }
-
-    function test_CancelHealthyHookUnlocksAndCallsCallback() public {
-        orchestrator.setLifecycleHook(lifecycleHookMock);
-        bytes32 intentHash = _signalDefault();
-        vm.prank(taker);
-        orchestrator.cancelIntent(intentHash);
-        assertEq(lifecycleHookMock.cancelledCalls(), 1);
-        assertEq(escrow.getDeposit(depositId).remainingDeposits, 500e6);
-    }
-
-    function test_CancelRevertingHookBlocksCancellation() public {
-        orchestrator.setLifecycleHook(lifecycleHookMock);
-        bytes32 intentHash = _signalDefault();
-        lifecycleHookMock.setRevertOnCallback(true);
-        vm.expectRevert(bytes("risk cancellation failed"));
-        vm.prank(taker);
-        orchestrator.cancelIntent(intentHash);
-        assertNotEq(orchestrator.getIntent(intentHash).owner, address(0));
-        assertEq(escrow.getDeposit(depositId).remainingDeposits, 500e6 - INTENT_AMOUNT);
-
-        lifecycleHookMock.setRevertOnCallback(false);
-        vm.prank(taker);
-        orchestrator.cancelIntent(intentHash);
-        assertEq(orchestrator.getIntent(intentHash).owner, address(0));
-        assertEq(escrow.getDeposit(depositId).remainingDeposits, 500e6);
-    }
-
-    function test_EscrowPruneRevertingHookBlocksPrune() public {
-        orchestrator.setLifecycleHook(lifecycleHookMock);
-        bytes32 intentHash = _signalDefault();
-        lifecycleHookMock.setRevertOnCallback(true);
-        vm.warp(block.timestamp + 3601);
-        vm.expectRevert(bytes("risk cancellation failed"));
-        escrow.pruneExpiredIntents(depositId);
-        assertNotEq(orchestrator.getIntent(intentHash).owner, address(0));
-    }
-
-    function test_OrphanCleanupRevertingHookBlocksCleanup() public {
-        orchestrator.setLifecycleHook(lifecycleHookMock);
-        bytes32 intentHash = _signalDefault();
-        bytes32 depositIntentsSlot = keccak256(abi.encode(depositId, uint256(14)));
-        bytes32 storageSlot = keccak256(abi.encode(intentHash, depositIntentsSlot));
-        vm.store(address(escrow), storageSlot, bytes32(0));
-        lifecycleHookMock.setRevertOnCallback(true);
-        bytes32[] memory hashes = new bytes32[](1);
-        hashes[0] = intentHash;
-        vm.expectRevert(bytes("risk cancellation failed"));
-        orchestrator.cleanupOrphanedIntents(hashes);
-        assertNotEq(orchestrator.getIntent(intentHash).owner, address(0));
-    }
-
-    function test_SettlementNotifiesHookAndFundsFlowNormally() public {
+    function test_SettlementCallsPolicyAndFundsFlowNormally() public {
         verifier.setExtensionData(abi.encode(uint256(1)));
-        orchestrator.setLifecycleHook(lifecycleHookMock);
+        orchestrator.setSettlementPolicy(policyMock);
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.referralFees = _twoReferralFees();
         bytes32 intentHash = _signal(taker, params);
@@ -102,8 +42,8 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         uint256 otherBefore = token.balanceOf(other);
         _fulfill(intentHash, INTENT_AMOUNT, CONVERSION_RATE);
 
-        assertEq(lifecycleHookMock.settlementCalls(), 1);
-        IIntentLifecycleHookV2.SettlementContext memory context = lifecycleHookMock.getLastSettlementContext();
+        assertEq(policyMock.settlementCalls(), 1);
+        IIntentSettlementPolicy.SettlementContext memory context = policyMock.getLastSettlementContext();
         assertEq(context.intentHash, intentHash);
         assertEq(context.token, address(token));
         assertEq(context.depositor, depositor);
@@ -136,15 +76,15 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
     }
 
     function test_SettlementRevertFailsClosed() public {
-        orchestrator.setLifecycleHook(lifecycleHookMock);
-        lifecycleHookMock.setRevertOnCallback(true);
+        orchestrator.setSettlementPolicy(policyMock);
+        policyMock.setRevertOnCallback(true);
         bytes32 intentHash = _signalDefault();
         vm.expectRevert(bytes("risk settlement failed"));
         _fulfill(intentHash, INTENT_AMOUNT, CONVERSION_RATE);
     }
 
-    function test_ManualReleaseRoutesThroughLifecycleToRecipient() public {
-        orchestrator.setLifecycleHook(lifecycleHookMock);
+    function test_ManualReleaseRoutesThroughPolicyToRecipient() public {
+        orchestrator.setSettlementPolicy(policyMock);
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.referralFees = _twoReferralFees();
         params.to = delegate;
@@ -156,9 +96,9 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         emit IntentFulfilled(intentHash, delegate, netAmount, true);
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(intentHash);
-        assertEq(lifecycleHookMock.settlementCalls(), 1);
-        (,,,,,,,,,, bytes memory lifecycleHookData, bytes memory extensionData, bool isManualRelease) = lifecycleHookMock.lastSettlementContext();
-        assertEq(lifecycleHookData, "");
+        assertEq(policyMock.settlementCalls(), 1);
+        (,,,,,,,,,, bytes memory policyData, bytes memory extensionData, bool isManualRelease) = policyMock.lastSettlementContext();
+        assertEq(policyData, "");
         assertEq(extensionData, "");
         assertTrue(isManualRelease);
         assertEq(token.balanceOf(taker), recipientBefore);
@@ -166,15 +106,15 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         assertEq(postIntentHook.lastPostIntentHookData(), "");
     }
 
-    function test_GovernanceLifecycleHookSetterValidatesOwnerAndCode() public {
+    function test_GovernancePolicySetterValidatesOwnerAndCode() public {
         vm.expectRevert("Ownable: caller is not the owner");
         vm.prank(other);
-        orchestrator.setLifecycleHook(lifecycleHookMock);
-        orchestrator.setLifecycleHook(lifecycleHookMock);
-        assertEq(address(orchestrator.lifecycleHook()), address(lifecycleHookMock));
-        orchestrator.setLifecycleHook(IIntentLifecycleHookV2(address(0)));
-        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.InvalidLifecycleHook.selector, other));
-        orchestrator.setLifecycleHook(IIntentLifecycleHookV2(other));
+        orchestrator.setSettlementPolicy(policyMock);
+        orchestrator.setSettlementPolicy(policyMock);
+        assertEq(address(orchestrator.settlementPolicy()), address(policyMock));
+        orchestrator.setSettlementPolicy(IIntentSettlementPolicy(address(0)));
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.InvalidSettlementPolicy.selector, other));
+        orchestrator.setSettlementPolicy(IIntentSettlementPolicy(other));
     }
 
     function test_DepositWhitelistSelectorsNoLongerExist() public view {
@@ -195,4 +135,94 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
             address(orchestrator).staticcall(abi.encodeWithSignature("getIntentMinAtSignal(bytes32)", bytes32(0)));
         assertFalse(success);
     }
+    function test_SignalDoesNotCallPolicy() public {
+        orchestrator.setSettlementPolicy(policyMock);
+        vm.mockCallRevert(address(policyMock), bytes(""), bytes("policy called"));
+        bytes32 id = _signalDefault();
+        assertEq(address(orchestrator.getIntentSettlementPolicy(id)), address(policyMock));
+    }
+
+    function test_CancelAndPruneDoNotCallPolicyAndClearSnapshot() public {
+        orchestrator.setSettlementPolicy(policyMock);
+        bytes32 cancelled = _signalDefault();
+        bytes32 expired = _signalDefault();
+        vm.mockCallRevert(address(policyMock), bytes(""), bytes("policy called"));
+        vm.prank(taker);
+        orchestrator.cancelIntent(cancelled);
+        vm.warp(block.timestamp + 3601);
+        escrow.pruneExpiredIntents(depositId);
+        assertEq(orchestrator.getIntent(cancelled).owner, address(0));
+        assertEq(orchestrator.getIntent(expired).owner, address(0));
+        assertEq(address(orchestrator.getIntentSettlementPolicy(cancelled)), address(0));
+        assertEq(address(orchestrator.getIntentSettlementPolicy(expired)), address(0));
+        assertEq(escrow.getDeposit(depositId).remainingDeposits, 500e6);
+    }
+
+    function test_OrphanCleanupDoesNotCallPolicyAndClearsSnapshot() public {
+        orchestrator.setSettlementPolicy(policyMock);
+        bytes32 id = _signalDefault();
+        vm.store(address(escrow), keccak256(abi.encode(id, uint256(15))), bytes32(0));
+        vm.warp(block.timestamp + 3601);
+        escrow.pruneExpiredIntents(depositId);
+        vm.mockCallRevert(address(policyMock), bytes(""), bytes("policy called"));
+        bytes32[] memory ids = new bytes32[](1);
+        ids[0] = id;
+        orchestrator.cleanupOrphanedIntents(ids);
+        assertEq(orchestrator.getIntent(id).owner, address(0));
+        assertEq(address(orchestrator.getIntentSettlementPolicy(id)), address(0));
+    }
+
+    function test_PolicyReplacementOnlyAffectsNewIntents() public {
+        orchestrator.setSettlementPolicy(policyMock);
+        bytes32 first = _signalDefault();
+        SettlementPolicyMock next = new SettlementPolicyMock();
+        next.setDeferralVault(address(next));
+        orchestrator.setSettlementPolicy(next);
+        bytes32 second = _signalDefault();
+        _fulfill(first, INTENT_AMOUNT, CONVERSION_RATE);
+        _fulfill(second, INTENT_AMOUNT, CONVERSION_RATE);
+        assertEq(policyMock.settlementCalls(), 1);
+        assertEq(next.settlementCalls(), 1);
+        assertEq(token.balanceOf(taker), INTENT_AMOUNT);
+        assertEq(token.balanceOf(address(next)), INTENT_AMOUNT);
+    }
+
+    function test_ZeroPolicySnapshotPaysNowAfterPolicyEnabled() public {
+        bytes32 id = _signalDefault();
+        policyMock.setRevertOnCallback(true);
+        orchestrator.setSettlementPolicy(policyMock);
+        _fulfill(id, INTENT_AMOUNT, CONVERSION_RATE);
+        assertEq(token.balanceOf(taker), INTENT_AMOUNT);
+        assertEq(policyMock.settlementCalls(), 0);
+    }
+
+    function test_WhitelistAdmissionAppliesWithZeroPolicyAndUsesTakerNotRecipient() public {
+        address[] memory allowed = new address[](1);
+        allowed[0] = other;
+        vm.prank(depositor);
+        whitelist.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), allowed);
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
+        params.to = other;
+        relayerRegistry.addRelayer(taker);
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker));
+        _signalCall(taker, params);
+        assertEq(orchestrator.intentCounter(), 0);
+        assertEq(escrow.getDeposit(depositId).outstandingIntentAmount, 0);
+        allowed[0] = taker;
+        vm.prank(depositor);
+        whitelist.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), allowed);
+        bytes32 id = _signal(taker, params);
+        assertEq(orchestrator.getIntent(id).owner, taker);
+        vm.prank(depositor);
+        whitelist.setEnabled(address(escrow), depositId, METHOD, false);
+        _signal(other, params);
+    }
+
+    function test_ConstructorRequiresDeployedWhitelist() public {
+        vm.expectRevert(IOrchestratorV4.ZeroAddress.selector);
+        new OrchestratorV4(address(this), CHAIN_ID, address(escrowRegistry), address(paymentVerifierRegistry), address(relayerRegistry), 0, protocolFeeRecipient, IWhitelistPolicy(address(0)));
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.InvalidWhitelistPolicy.selector, other));
+        new OrchestratorV4(address(this), CHAIN_ID, address(escrowRegistry), address(paymentVerifierRegistry), address(relayerRegistry), 0, protocolFeeRecipient, IWhitelistPolicy(other));
+    }
+
 }

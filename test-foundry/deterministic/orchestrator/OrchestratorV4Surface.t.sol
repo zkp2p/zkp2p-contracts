@@ -166,7 +166,7 @@ contract OrchestratorV4SurfaceTest is OrchestratorV4Fixture {
         bytes32[] memory hashes = orchestrator.getAccountIntents(taker);
         assertEq(hashes.length, 1);
         assertEq(hashes[0], hash);
-        assertEq(address(orchestrator.getIntentLifecycleHook(hash)), address(0));
+        assertEq(address(orchestrator.getIntentSettlementPolicy(hash)), address(0));
         vm.prank(depositor);
         orchestrator.setDepositPreIntentHook(address(escrow), depositId, IPreIntentHook(address(0)));
         assertEq(address(orchestrator.getDepositPreIntentHook(address(escrow), depositId)), address(0));

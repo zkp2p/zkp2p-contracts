@@ -84,8 +84,6 @@ const sourceAbiArtifacts = {
     "artifacts/contracts/unifiedVerifier/DisputeVerifier.sol/DisputeVerifier.json",
   IntentLifecycleHookV1:
     "artifacts/contracts/hooks/IntentLifecycleHookV1.sol/IntentLifecycleHookV1.json",
-  IntentLifecycleHookV2:
-    "artifacts/contracts/hooks/IntentLifecycleHookV2.sol/IntentLifecycleHookV2.json",
   StakeVault: "artifacts/contracts/StakeVault.sol/StakeVault.json",
 };
 const requiredDisputeContracts = [
@@ -549,13 +547,26 @@ for (const [contractName, artifactPath] of Object.entries(sourceAbiArtifacts)) {
   }
 }
 
+requireFile("types/contracts/interfaces/IIntentSettlementPolicy.d.ts");
+const settlementInterfaceExports = fs.readFileSync(requireFile("types/contracts/interfaces/index.d.ts"), "utf8");
+if (!settlementInterfaceExports.includes('export type { IIntentSettlementPolicy }')) {
+  fail("generated interface types do not export IIntentSettlementPolicy");
+}
+
+if (sourceEsmWrapper.includes("IntentLifecycleHookV2") || sourceCjsWrapper.includes("IntentLifecycleHookV2")) {
+  fail("removed IntentLifecycleHookV2 ABI remains exported");
+}
+
 for (const removedExport of [
   "utils/riskMath.js",
   "types/contracts/RiskManager.js",
   "abis/contracts/RiskManager.json",
+  "abis/contracts/IntentLifecycleHookV2.json",
+  "types/contracts/hooks/IntentLifecycleHookV2.d.ts",
+  "types/contracts/interfaces/IIntentLifecycleHookV2.d.ts",
 ]) {
   if (fs.existsSync(path.join(packageRoot, removedExport))) {
-    fail(`stale noncanonical affine-risk export remains: ${removedExport}`);
+    fail(`stale removed export remains: ${removedExport}`);
   }
 }
 

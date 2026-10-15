@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
+import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
+import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -44,6 +46,7 @@ abstract contract OrchestratorV4Fixture is Test {
     USDCMock internal token;
     EscrowV2 internal escrow;
     OrchestratorV4 internal orchestrator;
+    WhitelistPolicy internal whitelist;
     EscrowRegistry internal escrowRegistry;
     OrchestratorRegistry internal orchestratorRegistry;
     PaymentVerifierRegistry internal paymentVerifierRegistry;
@@ -87,6 +90,7 @@ abstract contract OrchestratorV4Fixture is Test {
             20,
             1 hours
         );
+        whitelist = new WhitelistPolicy(new AddressGroupRegistry(), escrowRegistry, orchestratorRegistry);
         orchestrator = new OrchestratorV4(
             address(this),
             CHAIN_ID,
@@ -94,7 +98,8 @@ abstract contract OrchestratorV4Fixture is Test {
             address(paymentVerifierRegistry),
             address(relayerRegistry),
             0,
-            protocolFeeRecipient
+            protocolFeeRecipient,
+            whitelist
         );
         orchestrator.setAllowMultipleIntents(true);
         postIntentHook = new PostIntentHookV2Mock(address(token), address(orchestrator));
@@ -266,13 +271,13 @@ abstract contract OrchestratorV4Fixture is Test {
         return abi.encodePacked(r, s, v);
     }
 
-    function _lifecycleHookDataSignature(IOrchestratorV4.SignalIntentParams memory params, bytes memory lifecycleHookData)
+    function _policyDataSignature(IOrchestratorV4.SignalIntentParams memory params, bytes memory policyData)
         internal view returns (bytes memory)
     {
         bytes memory message = abi.encodePacked(
             address(orchestrator), params.escrow, params.depositId, params.amount, taker, params.to,
             params.paymentMethod, params.fiatCurrency, params.conversionRate, _referralHash(params.referralFees),
-            params.signatureExpiration, CHAIN_ID, keccak256(lifecycleHookData)
+            params.signatureExpiration, CHAIN_ID, keccak256(policyData)
         );
         assertEq(message.length, 368);
         bytes32 digest = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", keccak256(message)));
@@ -280,10 +285,10 @@ abstract contract OrchestratorV4Fixture is Test {
         return abi.encodePacked(r, s, v);
     }
 
-    function _signalWithLifecycleHookData(bytes memory lifecycleHookData) internal returns (bytes32 hash) {
+    function _signalWithPolicyData(bytes memory policyData) internal returns (bytes32 hash) {
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
-        params.data = lifecycleHookData;
-        params.gatingServiceSignature = _lifecycleHookDataSignature(params, lifecycleHookData);
+        params.data = policyData;
+        params.gatingServiceSignature = _policyDataSignature(params, policyData);
         hash = _intentHash(orchestrator.intentCounter());
         vm.prank(taker);
         orchestrator.signalIntent(params);

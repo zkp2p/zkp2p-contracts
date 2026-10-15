@@ -16,7 +16,7 @@ export { canonicalJson } from "./activationBatchManifest";
 export type { ContractIdentity } from "./activationBatchManifest";
 
 export type BypassActivationBatchManifest = {
-  version: 6;
+  version: 7;
   kind: "dispute-bypass-cutover";
   chainId: 8453;
   safe: string;
@@ -130,9 +130,9 @@ const snapshot = object({
     stakeVault: address,
     disputeVerifier: address,
     disputeNullifierRegistry: address,
-    authorizedHooks: addresses,
+    authorizedOrchestrators: addresses,
+    whitelistPolicy: address,
   }),
-  freshHook: hook,
   verifier: object({
     owner: address,
     orchestratorRegistry: address,
@@ -173,7 +173,8 @@ const snapshot = object({
     chainId: uint256,
     owner: address,
     paused: boolean,
-    lifecycleHook: address,
+    settlementPolicy: address,
+    whitelistPolicy: address,
     escrowRegistry: address,
     paymentVerifierRegistry: address,
     relayerRegistry: address,
@@ -227,7 +228,6 @@ const trustSurface = object({
   predecessorHook: address,
   freshVault: address,
   freshPolicy: address,
-  freshHook: address,
   paymentMethods: hashes,
   currencies: hashes,
   currencyCounts: array(uint256),
@@ -252,7 +252,7 @@ const transaction = object({
 });
 const manifestSchema = object({
   version: (value) => {
-    if (value !== 6) throw new Error("Invalid version");
+    if (value !== 7) throw new Error("Invalid version");
   },
   kind: (value) => {
     if (value !== "dispute-bypass-cutover") throw new Error("Invalid kind");

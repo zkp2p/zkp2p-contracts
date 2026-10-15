@@ -14,7 +14,6 @@ import {UnifiedPaymentVerifierV4} from "contracts/unifiedVerifier/UnifiedPayment
 import {OrchestratorV3} from "contracts/OrchestratorV3.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
 import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
-import {IntentLifecycleHookV2} from "contracts/hooks/IntentLifecycleHookV2.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 
 contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
@@ -24,7 +23,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.data = abi.encodePacked(CONDITIONS);
         bytes32 id = _intentHash(orchestrator.intentCounter());
-        vm.expectRevert(IOrchestratorV4.LifecycleHookDataRequiresGatingService.selector);
+        vm.expectRevert(IOrchestratorV4.DataRequiresGatingService.selector);
         _signalCall(taker, params);
         assertEq(orchestrator.getIntent(id).owner, address(0));
         assertEq(orchestrator.getIntent(id).data, "");
@@ -49,7 +48,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         depositId = _createDeposit(gatingService, delegate);
         vm.stopPrank();
         if (staked) _stake(vault, taker, INTENT_AMOUNT);
-        bytes32 id = _signalWithLifecycleHookData(abi.encodePacked(CONDITIONS));
+        bytes32 id = _signalWithPolicyData(abi.encodePacked(CONDITIONS));
         UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(
             _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, payNow ? 0 : RISK_WINDOW),
             (UnifiedPaymentVerifierV4.PaymentAttestation)
@@ -61,7 +60,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
             bytes memory invalidProof = _signedProof(
                 id, bytes.concat(attestation.data, invalidExtensions[i]), INTENT_AMOUNT
             );
-            vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV2.ConditionsNotAttested.selector, id));
+            vm.expectRevert(abi.encodeWithSelector(P.ConditionsNotAttested.selector, id));
             orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(invalidProof, id, ""));
             assertEq(orchestrator.getIntent(id).data, abi.encodePacked(CONDITIONS));
             assertEq(orchestrator.getIntent(id).owner, taker);
@@ -123,14 +122,14 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         _whitelistTaker();
         bytes32 id = _signalDefault();
         assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
-        _settleWhitelistedWithoutPolicy(id);
+        _settleWhitelistedWithoutRecord(id);
         assertEq(token.balanceOf(other), NET);
         assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.NONE));
         _assertLock(id, address(0), 0);
         _assertFees();
     }
 
-    function test_RelayerManualReleaseSkipsPolicy() public {
+    function test_RelayerManualReleaseCreatesNoRecord() public {
         relayerRegistry.addRelayer(taker);
         bytes32 id = _signalDefault();
         vm.prank(depositor);
@@ -139,8 +138,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.NONE));
     }
 
-    function test_ZeroWindowPaysNormallyWithoutPolicyAuthorizationOrRecord() public {
-        protection.setLifecycleHookAuthorization(address(orchestrator.lifecycleHook()), false);
+    function test_ZeroWindowPaysNormallyWithoutRecord() public {
         bytes32 id = _signalDefault();
         _settle(id, INTENT_AMOUNT, 0);
         assertEq(token.balanceOf(other), NET);
@@ -171,13 +169,12 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         whitelist.configureDeposit(address(escrow), depositId, METHOD, true, ids, new address[](0));
     }
 
-    function _settleWhitelistedWithoutPolicy(bytes32 id) internal {
-        vm.mockCallRevert(address(protection), bytes(""), bytes("policy called"));
+    function _settleWhitelistedWithoutRecord(bytes32 id) internal {
         vm.recordLogs();
         vm.record();
         _settle(id, INTENT_AMOUNT, RISK_WINDOW);
-        (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(protection));
-        assertEq(reads.length, 0);
+        (, bytes32[] memory writes) = vm.accesses(address(protection));
+
         assertEq(writes.length, 0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].emitter != address(protection));
@@ -199,7 +196,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         _stake(vault, taker, INTENT_AMOUNT - 1);
         bytes32 id = _signalDefault();
         assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
-        _settleWhitelistedWithoutPolicy(id);
+        _settleWhitelistedWithoutRecord(id);
         assertEq(token.balanceOf(other), NET);
         _assertLock(id, address(0), 0);
         assertEq(vault.lockedStake(taker), 0);
@@ -244,7 +241,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         _assertDeferredSettlement(id);
     }
 
-    function test_WhitelistedTakerManualReleaseSkipsPolicy() public {
+    function test_WhitelistedTakerManualReleaseCreatesNoRecord() public {
         _whitelistTaker();
         bytes32 id = _signalDefault();
         vm.prank(depositor);
@@ -259,14 +256,14 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         vm.startPrank(depositor);
         depositId = _createDeposit(gatingService, delegate);
         vm.stopPrank();
-        bytes32 id = _signalWithLifecycleHookData(abi.encodePacked(bytes32(0)));
+        bytes32 id = _signalWithPolicyData(abi.encodePacked(bytes32(0)));
         _assertDeferredSettlement(id);
     }
 
     function test_EnabledWhitelistRejectsNonMemberBeforeEscrowLock() public {
         vm.prank(depositor);
         whitelist.setEnabled(address(escrow), depositId, METHOD, true);
-        vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV2.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker));
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker));
         _signalCall(taker, _defaultParams());
         assertEq(escrow.getDeposit(depositId).outstandingIntentAmount, 0);
     }
@@ -306,7 +303,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         assertEq(attestation.data.length, 480);
         bytes memory proof = _signedProof(id, bytes.concat(attestation.data, abi.encode(CONDITIONS)), INTENT_AMOUNT);
         uint256 escrowBalance = token.balanceOf(address(escrow));
-        vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV2.ConditionsNotAttested.selector, id));
+        vm.expectRevert(abi.encodeWithSelector(P.ConditionsNotAttested.selector, id));
         orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, id, ""));
         assertEq(orchestrator.getIntent(id).data, "");
         assertEq(orchestrator.getIntent(id).owner, taker);
@@ -425,7 +422,6 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
     }
 
     function test_ManualReleasePaysOutImmediately() public {
-        protection.setLifecycleHookAuthorization(address(orchestrator.lifecycleHook()), false);
         bytes32 id = _signalDefault();
         uint256 vaultBefore = token.balanceOf(address(vault));
         vm.prank(depositor);

@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
+import {IIntentSettlementPolicy as S} from "contracts/interfaces/IIntentSettlementPolicy.sol";
+import {IWhitelistPolicy} from "contracts/interfaces/IWhitelistPolicy.sol";
+import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
+import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
+import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
+import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicyV2.sol";
@@ -17,6 +23,7 @@ import {AttestationVerifierMock} from "../../mocks/AttestationVerifierMock.sol";
 
 contract DisputeProtectionPolicyV2Test is Test {
     event DisputeProtectionIntentSettled(bytes32 indexed intentHash, address indexed taker, address indexed depositor, address recipient, bytes32 paymentMethod, uint64 riskWindow, P.CollateralSource collateralSource, address stakeOwner, uint256 releaseAmount, uint256 lockedAmount, uint64 releaseEligibleAt);
+    event OrchestratorAuthorizationUpdated(address indexed orchestrator, bool isAuthorized);
     event DisputeVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
     uint64 internal constant WINDOW = 14 days;
     uint256 internal constant GROSS = 100e6;
@@ -31,6 +38,7 @@ contract DisputeProtectionPolicyV2Test is Test {
     USDCMock internal usdc;
     StakeVault internal vault;
     DisputeProtectionPolicyV2 internal policy;
+    WhitelistPolicy internal whitelist;
     DisputeVerifier internal verifier;
     NullifierRegistry internal disputes;
     NullifierRegistryV2 internal payments;
@@ -47,12 +55,13 @@ contract DisputeProtectionPolicyV2Test is Test {
     }
 
     function _newPolicy() internal {
-        policy = new DisputeProtectionPolicyV2(address(this), vault, verifier, disputes);
-        policy.setLifecycleHookAuthorization(address(this), true);
+        if (address(whitelist) == address(0)) whitelist = new WhitelistPolicy(new AddressGroupRegistry(), new EscrowRegistry(), new OrchestratorRegistry());
+        policy = new DisputeProtectionPolicyV2(address(this), vault, verifier, disputes, whitelist);
+        policy.setOrchestratorAuthorization(address(this), true);
         disputes.addWritePermission(address(policy));
     }
     function _settle(bytes32 id, uint256 gross, uint256 net) internal returns (bool) {
-        return policy.onIntentSettled(P.SettleParams(id, TAKER, RECIPIENT, DEPOSITOR, address(usdc), METHOD, gross, net, WINDOW));
+        return (policy.settleIntent(S.SettlementContext(id, address(usdc), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, gross, net, "", abi.encode(uint256(WINDOW)), false)) != address(0));
     }
     function _stake(address owner, uint256 amount) internal {
         usdc.transfer(owner, amount);
@@ -123,7 +132,7 @@ contract DisputeProtectionPolicyV2Test is Test {
     }
     function test_SettlementZeroWindowCreatesNoRecord() public {
         vm.recordLogs();
-        assertFalse(policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(usdc), METHOD, GROSS, NET, 0)));
+        assertFalse((policy.settleIntent(S.SettlementContext(ID, address(usdc), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, GROSS, NET, "", abi.encode(uint256(0)), false)) != address(0)));
         assertEq(vm.getRecordedLogs().length, 0);
         _status(P.DisputeProtectionIntentStatus.NONE);
     }
@@ -131,14 +140,14 @@ contract DisputeProtectionPolicyV2Test is Test {
     function test_NonStakeTokenCreatesNoRecordOrEvent() public {
         vm.recordLogs();
         vm.record();
-        assertFalse(policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, STRANGER, METHOD, GROSS, NET, WINDOW)));
+        assertFalse((policy.settleIntent(S.SettlementContext(ID, STRANGER, TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, GROSS, NET, "", abi.encode(uint256(WINDOW)), false)) != address(0)));
         (, bytes32[] memory writes) = vm.accesses(address(policy));
         assertEq(writes.length, 0);
         assertEq(vm.getRecordedLogs().length, 0);
         _status(P.DisputeProtectionIntentStatus.NONE);
     }
     function test_SettlementUsesSuppliedDepositorWithoutEscrow() public {
-        assertTrue(policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, STRANGER, address(usdc), METHOD, GROSS, NET, WINDOW)));
+        assertTrue((policy.settleIntent(S.SettlementContext(ID, address(usdc), TAKER, RECIPIENT, STRANGER, address(0), 0, METHOD, GROSS, NET, "", abi.encode(uint256(WINDOW)), false)) != address(0)));
         assertEq(_record().depositor, STRANGER);
     }
     function test_CollateralSourceOrdinals() public pure {
@@ -211,8 +220,8 @@ contract DisputeProtectionPolicyV2Test is Test {
         assertLe(vault.lockedStake(TAKER), vault.stakeBalance(TAKER));
     }
     function test_SettlementSnapshotsAttestedWindowPerIntent() public {
-        assertTrue(policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(usdc), METHOD, GROSS, NET, 1 days)));
-        assertTrue(policy.onIntentSettled(P.SettleParams(ID2, TAKER, RECIPIENT, DEPOSITOR, address(usdc), METHOD, GROSS, NET, 2 days)));
+        assertTrue((policy.settleIntent(S.SettlementContext(ID, address(usdc), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, GROSS, NET, "", abi.encode(uint256(1 days)), false)) != address(0)));
+        assertTrue((policy.settleIntent(S.SettlementContext(ID2, address(usdc), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, GROSS, NET, "", abi.encode(uint256(2 days)), false)) != address(0)));
         assertEq(_record().releaseEligibleAt, block.timestamp + 1 days);
         assertEq(policy.getDisputeProtectionIntent(ID2).releaseEligibleAt, block.timestamp + 2 days);
     }
@@ -372,7 +381,7 @@ contract DisputeProtectionPolicyV2Test is Test {
         _fund();
         _mature();
         policy.releaseMaturedDisputeProtectionIntent(ID);
-        assertFalse(policy.onIntentSettled(P.SettleParams(ID2, RECIPIENT, STRANGER, DEPOSITOR, address(usdc), METHOD, 60e6, 59e6, WINDOW)));
+        assertFalse((policy.settleIntent(S.SettlementContext(ID2, address(usdc), RECIPIENT, STRANGER, DEPOSITOR, address(0), 0, METHOD, 60e6, 59e6, "", abi.encode(uint256(WINDOW)), false)) != address(0)));
         _claim(TAKER);
         assertEq(usdc.balanceOf(RECIPIENT), 39.05e6);
         assertEq(_record().claimedAmount, 39.05e6);
@@ -397,13 +406,32 @@ contract DisputeProtectionPolicyV2Test is Test {
         _unexpected(P.DisputeProtectionIntentStatus.DISPUTED);
         _claim(TAKER);
     }
-    function test_LifecycleEntrypointsRequireAuthorizedHook() public {
+    function test_LifecycleEntrypointsRequireAuthorizedOrchestrator() public {
         vm.startPrank(STRANGER);
-        vm.expectRevert(abi.encodeWithSelector(P.UnauthorizedLifecycleHook.selector, STRANGER));
+        vm.expectRevert(abi.encodeWithSelector(P.UnauthorizedOrchestrator.selector, STRANGER));
         _settle(ID, GROSS, NET);
-        vm.expectRevert(abi.encodeWithSelector(P.UnauthorizedLifecycleHook.selector, STRANGER));
+        vm.expectRevert(abi.encodeWithSelector(P.UnauthorizedOrchestrator.selector, STRANGER));
         policy.onDeferredPayoutFunded(ID);
         vm.stopPrank();
+    }
+    function test_OrchestratorAuthorizationRetainsOwnerAndContractGuards() public {
+        vm.expectRevert("Ownable: caller is not the owner");
+        vm.prank(STRANGER);
+        policy.setOrchestratorAuthorization(address(this), false);
+        vm.expectRevert(P.ZeroAddress.selector);
+        policy.setOrchestratorAuthorization(address(0), true);
+        vm.expectRevert(abi.encodeWithSelector(P.InvalidContract.selector, STRANGER));
+        policy.setOrchestratorAuthorization(STRANGER, true);
+        vm.expectEmit(true, false, false, true, address(policy));
+        emit OrchestratorAuthorizationUpdated(address(this), false);
+        policy.setOrchestratorAuthorization(address(this), false);
+        assertFalse(policy.isOrchestratorAuthorized(address(this)));
+        vm.expectRevert(abi.encodeWithSelector(P.UnauthorizedOrchestrator.selector, address(this)));
+        _settle(ID, GROSS, NET);
+        policy.setOrchestratorAuthorization(address(this), true);
+        assertTrue(policy.isOrchestratorAuthorized(address(this)));
+        // Revocation does not require code; it must remain possible after a caller is retired.
+        policy.setOrchestratorAuthorization(STRANGER, false);
     }
     function test_RenounceDisabled() public {
         vm.expectRevert(P.OwnershipRenunciationDisabled.selector);
@@ -411,13 +439,13 @@ contract DisputeProtectionPolicyV2Test is Test {
     }
     function test_ConstructorRejectsZeroOrCodelessDependencies() public {
         vm.expectRevert(P.ZeroAddress.selector);
-        new DisputeProtectionPolicyV2(address(0), vault, verifier, disputes);
-        for (uint256 i; i < 3; ++i) {
+        new DisputeProtectionPolicyV2(address(0), vault, verifier, disputes, whitelist);
+        for (uint256 i; i < 4; ++i) {
             for (uint256 j; j < 2; ++j) {
                 address bad = j == 0 ? address(0) : STRANGER;
                 if (j == 0) vm.expectRevert(P.ZeroAddress.selector);
                 else vm.expectRevert(abi.encodeWithSelector(P.InvalidContract.selector, bad));
-                new DisputeProtectionPolicyV2(address(this), i == 0 ? IStakeVault(bad) : vault, i == 1 ? IDisputeVerifier(bad) : verifier, i == 2 ? INullifierRegistry(bad) : disputes);
+                new DisputeProtectionPolicyV2(address(this), i == 0 ? IStakeVault(bad) : vault, i == 1 ? IDisputeVerifier(bad) : verifier, i == 2 ? INullifierRegistry(bad) : disputes, i == 3 ? IWhitelistPolicy(bad) : whitelist);
             }
         }
     }
@@ -457,10 +485,10 @@ contract DisputeProtectionPolicyV2Test is Test {
     }
     function test_SettlementWindowBoundedAsDefenceInDepth() public {
         uint64 max = 180 days;
-        vm.expectRevert(abi.encodeWithSelector(P.InvalidRiskWindow.selector, max + 1));
-        policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(usdc), METHOD, GROSS, NET, max + 1));
+        vm.expectRevert(abi.encodeWithSelector(P.InvalidDisputeWindow.selector, max + 1));
+        policy.settleIntent(S.SettlementContext(ID, address(usdc), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, GROSS, NET, "", abi.encode(uint256(max + 1)), false));
         assertEq(policy.MAX_RISK_WINDOW(), max);
-        assertTrue(policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(usdc), METHOD, GROSS, NET, max)));
+        assertTrue((policy.settleIntent(S.SettlementContext(ID, address(usdc), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, GROSS, NET, "", abi.encode(uint256(max)), false)) != address(0)));
         assertEq(_record().releaseEligibleAt, block.timestamp + max);
     }
 
@@ -471,8 +499,8 @@ contract DisputeProtectionPolicyV2Test is Test {
         assertEq(r.taker, TAKER);
         assertEq(r.depositor, DEPOSITOR);
         assertEq(r.paymentMethod, METHOD);
-        assertTrue(policy.isLifecycleHookAuthorized(address(this)));
-        assertFalse(policy.isLifecycleHookAuthorized(STRANGER));
+        assertTrue(policy.isOrchestratorAuthorized(address(this)));
+        assertFalse(policy.isOrchestratorAuthorized(STRANGER));
         assertEq(address(policy.stakeVault()), address(vault));
         assertEq(address(policy.disputeNullifierRegistry()), address(disputes));
     }

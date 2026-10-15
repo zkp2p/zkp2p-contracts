@@ -19,7 +19,8 @@ import { IReferralFee } from "./interfaces/IReferralFee.sol";
 import { IEscrow } from "./interfaces/IEscrow.sol";
 import { IEscrowV2 } from "./interfaces/IEscrowV2.sol";
 import { IEscrowRegistry } from "./interfaces/IEscrowRegistry.sol";
-import { IIntentLifecycleHookV2 } from "./interfaces/IIntentLifecycleHookV2.sol";
+import { IWhitelistPolicy } from "./interfaces/IWhitelistPolicy.sol";
+import { IIntentSettlementPolicy } from "./interfaces/IIntentSettlementPolicy.sol";
 import { IPreIntentHook } from "./interfaces/IPreIntentHook.sol";
 import { IPaymentVerifierV2 } from "./interfaces/IPaymentVerifierV2.sol";
 import { IPaymentVerifier } from "./interfaces/IPaymentVerifier.sol";
@@ -31,9 +32,9 @@ import { ReferralFeeLib } from "./lib/ReferralFeeLib.sol";
  * @title OrchestratorV4
  * @notice Standalone V4 orchestrator for the ZKP2P protocol. Owns the complete intent (order)
  * lifecycle — signal, cancel, fulfill, manual release, prune, orphan cleanup — and extends it
- * with snapshotted governance-selected fail-closed lifecycle callbacks and deferred settlement.
- * @dev Intent keeps V3 field order with the post-intent hook removed. Its data is opaque lifecycle hook data.
- * IntentLifecycleHookV2 uses a raw 32-byte conditions hash (or empty); only the snapshotted hook interprets data.
+ * with a snapshotted governance-selected settlement policy and deferred settlement.
+ * @dev Intent keeps V3 field order with the post-intent hook removed. Its data is opaque settlement policy data.
+ * DisputeProtectionPolicyV2 uses a raw 32-byte conditions hash (or empty); only the snapshotted policy interprets data.
  */
 contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
 
@@ -64,13 +65,14 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     // Optional pre-intent hooks configured per escrow + depositId.
     mapping(address => mapping(uint256 => IPreIntentHook)) internal depositPreIntentHooks;
 
-    // Governance-selected lifecycle hook; snapshotted per intent at signal.
-    IIntentLifecycleHookV2 public lifecycleHook;
-    mapping(bytes32 => IIntentLifecycleHookV2) internal intentLifecycleHooks;
+    // Governance-selected settlement policy; snapshotted per intent at signal.
+    IIntentSettlementPolicy public settlementPolicy;
+    mapping(bytes32 => IIntentSettlementPolicy) internal intentSettlementPolicies;
 
     // Contract references
     IEscrowRegistry public escrowRegistry;                              // Registry of escrow contracts
     IPaymentVerifierRegistry public  paymentVerifierRegistry;          // Registry of payment verifiers
+    IWhitelistPolicy public immutable whitelistPolicy;
     IRelayerRegistry public relayerRegistry;                           // Registry of relayers
 
     // Protocol fee configuration
@@ -89,10 +91,14 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         address _paymentVerifierRegistry,
         address _relayerRegistry,
         uint256 _protocolFee,
-        address _protocolFeeRecipient
+        address _protocolFeeRecipient,
+        IWhitelistPolicy _whitelistPolicy
     )
         Ownable()
     {
+        if (address(_whitelistPolicy) == address(0)) revert ZeroAddress();
+        if (address(_whitelistPolicy).code.length == 0) revert InvalidWhitelistPolicy(address(_whitelistPolicy));
+        whitelistPolicy = _whitelistPolicy;
         chainId = _chainId;
         escrowRegistry = IEscrowRegistry(_escrowRegistry);
         paymentVerifierRegistry = IPaymentVerifierRegistry(_paymentVerifierRegistry);
@@ -109,11 +115,11 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      * @notice Signals intent to pay the depositor defined in the _depositId the _amount * deposit conversionRate off-chain at 
      * their given _payeeId in order to unlock _amount of funds on-chain. Caller must provide a signature from the deposit's gating
      * service to prove their eligibility to take liquidity. This function captures and stores all values required for fullfilling
-     * the intent to give strong guarantees to the buyer. Snapshots the global lifecycle hook and executes fail-closed risk
+     * the intent to give strong guarantees to the buyer. Snapshots the global settlement policy and checks whitelist
      * admission before locking liquidity for the corresponding deposit on the escrow contract.
-     * Non-empty data requires a lifecycle hook and appends its keccak256 hash to the gating message;
+     * Non-empty data requires a settlement policy and appends its keccak256 hash to the gating message;
      * empty data preserves the plain V3 gating message byte-for-byte. The data is opaque to this contract.
-     * IntentLifecycleHookV2 expects abi.encodePacked(conditionsHash) or empty data; O4 checks no data format.
+     * DisputeProtectionPolicyV2 expects abi.encodePacked(conditionsHash) or empty data; O4 checks no data format.
      *
      * @param _params                   Struct containing all the intent parameters
      */
@@ -181,14 +187,11 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         // Emit manager fee snapshot last for easier indexing
         emit IntentManagerFeeSnapshotted(intentHash, managerFeeRecipient, managerFee);
 
-        // Snapshot and execute fail-closed admission for the governance-selected global hook.
-        IIntentLifecycleHookV2 snapshottedLifecycleHook = lifecycleHook;
-        intentLifecycleHooks[intentHash] = snapshottedLifecycleHook;
+        // Snapshot the governance-selected settlement policy.
+        IIntentSettlementPolicy snapshottedPolicy = settlementPolicy;
+        intentSettlementPolicies[intentHash] = snapshottedPolicy;
 
-        if (address(snapshottedLifecycleHook) != address(0)) {
-            snapshottedLifecycleHook.onIntentSignaled(intentHash, _params.data);
-        }
-        emit IntentLifecycleHookSnapshotted(intentHash, address(snapshottedLifecycleHook));
+        emit IntentSettlementPolicySnapshotted(intentHash, address(snapshottedPolicy));
 
         // Interactions
         IEscrow(_params.escrow).lockFunds(_params.depositId, intentHash, _params.amount);
@@ -197,7 +200,6 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     /**
      * @notice Only callable by the originator of the intent. Cancels an outstanding intent. Unlocks liquidity
      * for the corresponding deposit on the escrow contract.
-     * @dev Guarded because cancellation invokes an external lifecycle callback during resolution.
      *
      * @param _intentHash    Hash of intent being cancelled
      */
@@ -209,7 +211,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (intent.owner != msg.sender) revert UnauthorizedCaller(msg.sender, intent.owner);
 
         // Effects
-        _pruneIntentAndNotify(_intentHash);
+        _pruneCancelledIntent(_intentHash);
 
         // Interactions
         IEscrow(intent.escrow).unlockFunds(intent.depositId, _intentHash);
@@ -234,10 +236,10 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     /**
      * @notice Anyone can submit a fulfill intent transaction, even if caller isn't the intent owner. Upon submission the
      * offchain payment proof is verified, payment details are validated, intent is removed, and escrow state is updated.
-     * Settlement unlocks escrow funds, transfers fees, notifies the snapshotted lifecycle hook (fail-closed),
+     * Settlement unlocks escrow funds, transfers fees, notifies the snapshotted settlement policy (fail-closed),
      * and transfers the net payout to intent.to or the deferral vault.
-     * @dev Stored lifecycle hook data and raw signed extension bytes are forwarded opaquely to the snapshotted hook.
-     * @dev Guarded against reentrancy through verifiers, tokens and lifecycle hooks.
+     * @dev Stored settlement policy data and raw signed extension bytes are forwarded opaquely to the snapshotted policy.
+     * @dev Guarded against reentrancy through verifiers, tokens and settlement policies.
      *
      * @param _params               Struct containing all the fulfill intent parameters
      */
@@ -288,7 +290,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      * @notice Allows depositor to release funds to the payer in case of a failed fulfill intent or because of some other arrangement
      * between the two parties. Upon submission we check to make sure the msg.sender is the depositor, the intent is removed, and 
      * escrow state is updated. Manual release routes through the shared post-funds lifecycle-settlement gate, then
-     * transfers the net payout to the recipient or the hook-selected deferral vault.
+     * transfers the net payout to the recipient or the policy-selected deferral vault.
      *
      * @param _intentHash        Hash of intent to resolve by releasing the funds
      */
@@ -340,7 +342,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
                     intent.timestamp != 0 && // Only prune if intent exists on this contract; otherwise skip
                     intent.escrow == msg.sender // Ensure only the escrow that owns the intent can prune it; otherwise skip
                 ) {
-                    _pruneIntentAndNotify(intentHash);
+                    _pruneCancelledIntent(intentHash);
                 }
             }
         }
@@ -352,7 +354,6 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      * @notice ANYONE: Cleans up orphaned intents that were pruned from the Escrow but not from the Orchestrator.
      * An intent is considered orphaned if it exists on the Orchestrator but no longer exists on the Escrow.
      * This can happen when Escrow._tryOrchestratorPruneIntents runs out of gas and the revert is silently caught.
-     * @dev Guarded because cleanup invokes an external lifecycle callback during resolution.
      *
      * @param _intentHashes    Array of intent hashes to check and clean up
      */
@@ -372,7 +373,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
 
             // If intent doesn't exist on escrow, it's orphaned — prune it
             if (escrowIntent.intentHash == bytes32(0)) {
-                _pruneIntentAndNotify(intentHash);
+                _pruneCancelledIntent(intentHash);
             }
         }
     }
@@ -380,24 +381,22 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     /* ============ Governance Functions ============ */
 
     /**
-     * @notice GOVERNANCE ONLY: Updates the global lifecycle hook used by future intents.
-     * @dev Existing intents retain their snapshotted hook. The zero address disables callbacks
+     * @notice GOVERNANCE ONLY: Updates the global settlement policy used by future intents.
+     * @dev Existing intents retain their snapshotted policy. The zero address disables protection
      * for future intents.
      *
-     * @param _hook   New global lifecycle hook
+     * @param _policy   New global settlement policy
      */
-    function setLifecycleHook(IIntentLifecycleHookV2 _hook) external onlyOwner {
-        address hookAddress = address(_hook);
-        // V2-only selectors make a V1 hook revert at signal without stranding any intents.
-        // Reject the wrong hook with InvalidLifecycleHook at configuration time instead of
-        // making every signal fail.
-        if (hookAddress != address(0) && !ERC165Checker.supportsInterface(hookAddress, type(IIntentLifecycleHookV2).interfaceId)) {
-            revert InvalidLifecycleHook(hookAddress);
+    function setSettlementPolicy(IIntentSettlementPolicy _policy) external onlyOwner {
+        address policyAddress = address(_policy);
+        // Reject the wrong contract at configuration time instead of failing every fulfil.
+        if (policyAddress != address(0) && !ERC165Checker.supportsInterface(policyAddress, type(IIntentSettlementPolicy).interfaceId)) {
+            revert InvalidSettlementPolicy(policyAddress);
         }
 
-        address previousHook = address(lifecycleHook);
-        lifecycleHook = _hook;
-        emit LifecycleHookUpdated(previousHook, hookAddress);
+        address previousPolicy = address(settlementPolicy);
+        settlementPolicy = _policy;
+        emit SettlementPolicyUpdated(previousPolicy, policyAddress);
     }
 
     /**
@@ -505,27 +504,18 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     }
 
     /**
-     * @notice Returns the immutable hook snapshot for an active intent.
+     * @notice Returns the immutable policy snapshot for an active intent.
      */
-    function getIntentLifecycleHook(bytes32 _intentHash) external view returns (IIntentLifecycleHookV2) {
-        return intentLifecycleHooks[_intentHash];
+    function getIntentSettlementPolicy(bytes32 _intentHash) external view returns (IIntentSettlementPolicy) {
+        return intentSettlementPolicies[_intentHash];
     }
 
     /* ============ Internal Functions ============ */
 
-    /**
-     * @notice Prunes a cancelled (cancel / escrow prune / orphan cleanup) intent, then executes the fail-closed
-     * cancellation callback on the snapshotted lifecycle hook. A reverting hook aborts the entire cancellation,
-     * including escrow prune and withdrawal flows that prune expired intents.
-     */
-    function _pruneIntentAndNotify(bytes32 _intentHash) internal {
-        IIntentLifecycleHookV2 snapshottedLifecycleHook = intentLifecycleHooks[_intentHash];
+    /// @notice Prunes a cancelled intent and clears its settlement policy snapshot.
+    function _pruneCancelledIntent(bytes32 _intentHash) internal {
         _pruneIntent(_intentHash);
-        delete intentLifecycleHooks[_intentHash];
-
-        if (address(snapshottedLifecycleHook) != address(0)) {
-            snapshottedLifecycleHook.onIntentCancelled(_intentHash);
-        }
+        delete intentSettlementPolicies[_intentHash];
     }
 
     /**
@@ -562,10 +552,17 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (minConversionRate == 0) revert CurrencyNotSupported(_intent.paymentMethod, _intent.fiatCurrency);
         if (_intent.conversionRate < minConversionRate) revert RateBelowMinimum(_intent.conversionRate, minConversionRate);
 
+        if (
+            whitelistPolicy.enabled(_intent.escrow, _intent.depositId, _intent.paymentMethod)
+                && !whitelistPolicy.isTakerAllowed(_intent.escrow, _intent.depositId, _intent.paymentMethod, msg.sender)
+        ) {
+            revert TakerNotWhitelisted(_intent.escrow, _intent.depositId, _intent.paymentMethod, msg.sender);
+        }
+
         address intentGatingService = IEscrow(_intent.escrow).getDepositGatingService(_intent.depositId, _intent.paymentMethod);
         if (_intent.data.length != 0) {
-            if (address(lifecycleHook) == address(0)) revert LifecycleHookDataRequiresHook();
-            if (intentGatingService == address(0)) revert LifecycleHookDataRequiresGatingService();
+            if (address(settlementPolicy) == address(0)) revert DataRequiresPolicy();
+            if (intentGatingService == address(0)) revert DataRequiresGatingService();
         }
         if (intentGatingService != address(0)) {
             // Check if signature has expired
@@ -601,7 +598,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
 
     /**
      * @notice Executes a pre-intent hook if the address is non-zero.
-     * @dev Shared by both the generic pre-intent hook and the dedicated whitelist hook.
+     * @dev Used by the deposit pre-intent hook.
      */
     function _executeHookIfSet(IPreIntentHook _hook, SignalIntentParams calldata _params) internal {
         if (address(_hook) == address(0)) return;
@@ -694,11 +691,11 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     }
 
     /**
-     * @notice Transfers fees, notifies the snapshotted lifecycle hook of settlement (fail-closed), then routes the
+     * @notice Transfers fees, notifies the snapshotted settlement policy of settlement (fail-closed), then routes the
      * executable remainder to the deferral vault or directly to the recipient.
-     * @dev A reverting lifecycle hook aborts the entire settlement, including the preceding fee transfers.
-     * The lifecycle hook receives the depositor captured before escrow unlock and no token allowance.
-     * Manual release passes an empty extension to the lifecycle hook.
+     * @dev A reverting settlement policy aborts the entire settlement, including the preceding fee transfers.
+     * The settlement policy receives the depositor captured before escrow unlock and no token allowance.
+     * Manual release passes an empty extension to the settlement policy.
      */
     function _collectFeesTransferFundsAndExecuteAction(
         IERC20 _token,
@@ -711,16 +708,16 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         bool _isManualRelease,
         address _depositor
     ) internal {
-        IIntentLifecycleHookV2 snapshottedLifecycleHook = intentLifecycleHooks[_intentHash];
-        delete intentLifecycleHooks[_intentHash];
+        IIntentSettlementPolicy snapshottedPolicy = intentSettlementPolicies[_intentHash];
+        delete intentSettlementPolicies[_intentHash];
 
         uint256 netFees = _calculateAndTransferFees(_token, _intentHash, _intent, _releaseAmount, _managerFeeRecipient, _managerFee);
         uint256 netAmount = _releaseAmount - netFees;
 
         address vault;
-        if (address(snapshottedLifecycleHook) != address(0)) {
-            vault = snapshottedLifecycleHook.settleIntent(
-                IIntentLifecycleHookV2.SettlementContext({
+        if (address(snapshottedPolicy) != address(0)) {
+            vault = snapshottedPolicy.settleIntent(
+                IIntentSettlementPolicy.SettlementContext({
                     intentHash: _intentHash,
                     token: address(_token),
                     depositor: _depositor,
@@ -741,7 +738,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         address fundsTransferredTo = _intent.to;
         if (vault != address(0)) {
             _token.safeTransfer(vault, netAmount);
-            snapshottedLifecycleHook.onDeferredPayoutFunded(_intentHash);
+            snapshottedPolicy.onDeferredPayoutFunded(_intentHash);
             emit IntentPayoutDeferred(_intentHash, _intent.to, vault, netAmount);
             fundsTransferredTo = vault;
         } else {

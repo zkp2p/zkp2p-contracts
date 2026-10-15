@@ -99,7 +99,6 @@ const RECORD_NAMES = {
   escrow: "EscrowV2",
   freshVault: "StakeVaultV2",
   freshPolicy: "DisputeProtectionPolicyV2",
-  freshHook: "IntentLifecycleHookV2",
   verifier: "UnifiedPaymentVerifierV4",
   predecessorVault: BYPASS_PREDECESSOR_DEPLOYMENT_NAMES.vault,
   predecessorPolicy: BYPASS_PREDECESSOR_DEPLOYMENT_NAMES.policy,
@@ -455,7 +454,7 @@ async function contextAt(
   );
 }
 
-async function authorizedHooks(
+async function authorizedOrchestrators(
   hre: HardhatRuntimeEnvironment,
   record: Deployment,
   block: number
@@ -465,7 +464,7 @@ async function authorizedHooks(
     hre,
     {
       address: record.address,
-      topics: [iface.getEventTopic("LifecycleHookAuthorizationUpdated")],
+      topics: [iface.getEventTopic("OrchestratorAuthorizationUpdated")],
     },
     deploymentBlock(record),
     block
@@ -474,12 +473,12 @@ async function authorizedHooks(
   for (const log of logs) {
     const { args } = iface.parseLog(log);
     requireState(
-      typeof args.hook === "string" && typeof args.isAuthorized === "boolean",
-      "Invalid lifecycle authorization event"
+      typeof args.orchestrator === "string" && typeof args.isAuthorized === "boolean",
+      "Invalid orchestrator authorization event"
     );
-    authorized.set(lower(args.hook), args.isAuthorized);
+    authorized.set(lower(args.orchestrator), args.isAuthorized);
   }
-  return [...authorized].filter(([, enabled]) => enabled).map(([hook]) => hook);
+  return [...authorized].filter(([, enabled]) => enabled).map(([orchestrator]) => orchestrator);
 }
 async function assertStagingDrain(
   hre: HardhatRuntimeEnvironment,
@@ -582,13 +581,13 @@ export async function readBypassActivationSnapshot(
         policy,
         "disputeNullifierRegistry"
       ),
-      authorizedHooks: await authorizedHooks(
+      whitelistPolicy: await address(policy, "whitelistPolicy"),
+      authorizedOrchestrators: await authorizedOrchestrators(
         hre,
         context.records.freshPolicy,
         block.number
       ),
     },
-    freshHook: await hook(await at("IntentLifecycleHookV2", a.freshHook)),
     verifier: {
       owner: await address(verifier, "owner"),
       orchestratorRegistry: await address(verifier, "orchestratorRegistry"),
@@ -670,7 +669,8 @@ export async function readBypassActivationSnapshot(
       chainId: await number(orchestratorV4, "chainId"),
       owner: await address(orchestratorV4, "owner"),
       paused: await bool(orchestratorV4, "paused"),
-      lifecycleHook: await address(orchestratorV4, "lifecycleHook"),
+      settlementPolicy: await address(orchestratorV4, "settlementPolicy"),
+      whitelistPolicy: await address(orchestratorV4, "whitelistPolicy"),
       escrowRegistry: await address(orchestratorV4, "escrowRegistry"),
       paymentVerifierRegistry: await address(
         orchestratorV4,
@@ -1101,7 +1101,7 @@ export async function prepareBaseCutoverBatch(
     expected.addresses.safe
   );
   const unsigned: Omit<BypassActivationBatchManifest, "manifestSha256"> = {
-    version: 6,
+    version: 7,
     kind: "dispute-bypass-cutover",
     chainId: 8453,
     safe: expected.addresses.safe,

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
+import {IIntentSettlementPolicy} from "contracts/interfaces/IIntentSettlementPolicy.sol";
 import {Test} from "forge-std/Test.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
@@ -102,6 +103,27 @@ contract OrchestratorV4StructLayoutTest is Test {
         assertEq(v4.intentHash, v3.intentHash);
         assertEq(v4.verificationData, v3.verificationData);
         assertEq(IOrchestratorV4.fulfillIntent.selector, bytes4(keccak256("fulfillIntent((bytes,bytes32,bytes))")));
+    }
+
+    function test_SettlementInterfaceAndContextLayout() public pure {
+        assertEq(IIntentSettlementPolicy.settleIntent.selector, bytes4(keccak256(
+            "settleIntent((bytes32,address,address,address,address,address,uint256,bytes32,uint256,uint256,bytes,bytes,bool))"
+        )));
+        assertEq(type(IIntentSettlementPolicy).interfaceId,
+            IIntentSettlementPolicy.settleIntent.selector ^ IIntentSettlementPolicy.onDeferredPayoutFunded.selector);
+        IIntentSettlementPolicy.SettlementContext memory context = IIntentSettlementPolicy.SettlementContext(
+            bytes32(uint256(1)), address(2), address(3), address(4), address(5), address(6), 7,
+            bytes32(uint256(8)), 9, 10, hex"aabb", hex"cc", true
+        );
+        bytes memory expected = bytes.concat(
+            abi.encode(uint256(32), bytes32(uint256(1)), address(2), address(3), address(4), address(5), address(6)),
+            abi.encode(uint256(7), bytes32(uint256(8)), uint256(9), uint256(10), uint256(416), uint256(480), true),
+            abi.encode(uint256(2), bytes32(hex"aabb"), uint256(1), bytes32(hex"cc"))
+        );
+        assertEq(abi.encode(context), expected);
+        assertEq(context.taker, address(3));
+        assertEq(context.recipient, address(4));
+        assertEq(context.depositor, address(5));
     }
 
     function _fees() private pure returns (IReferralFee.ReferralFee[] memory fees) {

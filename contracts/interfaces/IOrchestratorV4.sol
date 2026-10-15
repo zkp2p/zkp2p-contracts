@@ -3,14 +3,14 @@
 pragma solidity ^0.8.18;
 
 import { IReferralFee } from "./IReferralFee.sol";
-import { IIntentLifecycleHookV2 } from "./IIntentLifecycleHookV2.sol";
+import { IIntentSettlementPolicy } from "./IIntentSettlementPolicy.sol";
 import { IPreIntentHook } from "./IPreIntentHook.sol";
 
 /**
  * @title IOrchestratorV4
  * @notice Interface for the V4 orchestrator with deferred settlement.
- * @dev Intent keeps V3 field order with the post-intent hook removed; data holds opaque lifecycle hook data.
- * IntentLifecycleHookV2 uses a raw 32-byte conditions hash (or empty); only the snapshotted hook interprets data.
+ * @dev Intent keeps V3 field order with the post-intent hook removed; data holds opaque settlement policy data.
+ * DisputeProtectionPolicyV2 uses a raw 32-byte conditions hash (or empty); only the snapshotted policy interprets data.
  */
 interface IOrchestratorV4 {
 
@@ -28,7 +28,7 @@ interface IOrchestratorV4 {
         uint256 conversionRate;                     // Conversion rate of deposit token to fiat currency at the time of intent
         bytes32 payeeId;                            // Hashed payee identifier to whom the owner will pay offchain
         IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker
-        bytes data;                                 // Opaque lifecycle hook data; empty = none
+        bytes data;                                 // Opaque settlement policy data; empty = none
     }
 
     struct SignalIntentParams {
@@ -43,7 +43,7 @@ interface IOrchestratorV4 {
         bytes gatingServiceSignature;               // Signature from the deposit's gating service
         uint256 signatureExpiration;                // Timestamp when the gating service signature expires
         bytes preIntentHookData;                    // Ephemeral data passed only to the pre-intent hook during signalIntent
-        bytes data;                                 // Opaque lifecycle hook data persisted in Intent; empty = none
+        bytes data;                                 // Opaque settlement policy data persisted in Intent; empty = none
     }
 
     struct FulfillIntentParams {
@@ -87,8 +87,8 @@ interface IOrchestratorV4 {
     );
     event IntentManagerFeeSnapshotted(bytes32 indexed intentHash, address indexed feeRecipient, uint256 fee);
     event DepositPreIntentHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
-    event LifecycleHookUpdated(address indexed previousHook, address indexed newHook);
-    event IntentLifecycleHookSnapshotted(bytes32 indexed intentHash, address indexed lifecycleHook);
+    event SettlementPolicyUpdated(address indexed previousPolicy, address indexed newPolicy);
+    event IntentSettlementPolicySnapshotted(bytes32 indexed intentHash, address indexed settlementPolicy);
     event AllowMultipleIntentsUpdated(bool allowMultiple);
 
     event RelayerRegistryUpdated(address indexed relayerRegistry);
@@ -116,6 +116,8 @@ interface IOrchestratorV4 {
     // Whitelist errors
     error PaymentMethodNotWhitelisted(bytes32 paymentMethod);
     error EscrowNotWhitelisted(address escrow);
+    error TakerNotWhitelisted(address escrow, uint256 depositId, bytes32 paymentMethod, address taker);
+    error InvalidWhitelistPolicy(address policy);
 
     // Amount and fee errors
     error AmountBelowMin(uint256 amount, uint256 min);
@@ -127,10 +129,10 @@ interface IOrchestratorV4 {
     // Validation errors
     error AccountHasActiveIntent(address account, bytes32 existingIntent);
     error InvalidPreIntentHook(address hook);
-    error InvalidLifecycleHook(address hook);
+    error InvalidSettlementPolicy(address policy);
     error InvalidSignature();
-    error LifecycleHookDataRequiresHook();
-    error LifecycleHookDataRequiresGatingService();
+    error DataRequiresPolicy();
+    error DataRequiresGatingService();
     error SignatureExpired(uint256 expiration, uint256 currentTime);
 
     // Verification errors
@@ -146,29 +148,29 @@ interface IOrchestratorV4 {
     function getIntent(bytes32 intentHash) external view returns (Intent memory);
     function getAccountIntents(address account) external view returns (bytes32[] memory);
     function getDepositPreIntentHook(address escrow, uint256 depositId) external view returns (IPreIntentHook);
-    function lifecycleHook() external view returns (IIntentLifecycleHookV2);
-    function getIntentLifecycleHook(bytes32 intentHash) external view returns (IIntentLifecycleHookV2);
+    function settlementPolicy() external view returns (IIntentSettlementPolicy);
+    function getIntentSettlementPolicy(bytes32 intentHash) external view returns (IIntentSettlementPolicy);
 
     /* ============ External Functions for Users ============ */
 
-    /// @notice Signals an intent and locks its escrow funds, with optional opaque lifecycle hook data.
-    /// @dev Non-empty data requires a lifecycle hook and a gating service for the deposit's payment method.
+    /// @notice Signals an intent and locks its escrow funds, with optional opaque settlement policy data.
+    /// @dev Non-empty data requires a settlement policy and a gating service for the deposit's payment method.
     /// Its keccak256(data) is appended to the gating message covered by the service's signature.
-    /// Empty data preserves the plain V3 gating message byte-for-byte. Only the lifecycle hook interprets this data.
-    /// For IntentLifecycleHookV2, pass abi.encodePacked(conditionsHash) or empty data; O4 checks no data format.
+    /// Empty data preserves the plain V3 gating message byte-for-byte. Only the settlement policy interprets this data.
+    /// For DisputeProtectionPolicyV2, pass abi.encodePacked(conditionsHash) or empty data; O4 checks no data format.
     function signalIntent(SignalIntentParams calldata params) external;
 
     /// @notice Sets the deposit pre-intent hook as depositor or delegate.
     function setDepositPreIntentHook(address escrow, uint256 depositId, IPreIntentHook hook) external;
 
-    /// @notice Sets a compatible lifecycle hook for future intents; zero disables callbacks.
-    function setLifecycleHook(IIntentLifecycleHookV2 hook) external;
+    /// @notice Sets a compatible settlement policy for future intents; zero disables protection.
+    function setSettlementPolicy(IIntentSettlementPolicy policy) external;
 
     /// @notice Cancels the caller's intent and unlocks its funds.
     function cancelIntent(bytes32 intentHash) external;
 
     /// @notice Verifies payment and settles immediately or defers the net payout.
-    /// @dev Forwards stored lifecycle hook data and raw signed extension bytes to the snapshotted lifecycle hook.
+    /// @dev Forwards stored settlement policy data and raw signed extension bytes to the snapshotted settlement policy.
     function fulfillIntent(FulfillIntentParams calldata params) external;
 
     /// @notice Manually settles an intent as its depositor.

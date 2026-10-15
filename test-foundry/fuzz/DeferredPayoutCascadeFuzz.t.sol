@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
+import {IIntentSettlementPolicy as S} from "contracts/interfaces/IIntentSettlementPolicy.sol";
+import {IWhitelistPolicy} from "contracts/interfaces/IWhitelistPolicy.sol";
+import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
+import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
+import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
+import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DisputeProtectionStackV2Fixture} from "../deterministic/helpers/DisputeProtectionStackV2Fixture.sol";
@@ -23,6 +29,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
     USDCMock internal token;
     StakeVault internal vault;
     DisputeProtectionPolicyV2 internal policy;
+    WhitelistPolicy internal whitelist;
 
     function setUp() public {
         token = new USDCMock(1e18, "USDC", "USDC");
@@ -31,9 +38,10 @@ contract DeferredPayoutCascadeFuzzTest is Test {
         signers[0] = vm.addr(0xA11CE);
         DisputeVerifier verifier = new DisputeVerifier(address(this), new NullifierRegistryV2(new NullifierRegistry()), new MultiAttestationVerifier(signers, 1));
         NullifierRegistry disputes = new NullifierRegistry();
-        policy = new DisputeProtectionPolicyV2(address(this), vault, verifier, disputes);
+        if (address(whitelist) == address(0)) whitelist = new WhitelistPolicy(new AddressGroupRegistry(), new EscrowRegistry(), new OrchestratorRegistry());
+        policy = new DisputeProtectionPolicyV2(address(this), vault, verifier, disputes, whitelist);
         vault.initializeController(address(policy));
-        policy.setLifecycleHookAuthorization(address(this), true);
+        policy.setOrchestratorAuthorization(address(this), true);
         disputes.addWritePermission(address(policy));
     }
 
@@ -73,7 +81,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
     function testFuzz_AttestedWindowSetsMaturity(uint64 window, bool staked) public {
         window = uint64(bound(window, 1, 180 days));
         if (staked) _deposit(TAKER, 100e6);
-        bool deferred = policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(token), METHOD, 100e6, 99e6, window));
+        bool deferred = (policy.settleIntent(S.SettlementContext(ID, address(token), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, 100e6, 99e6, "", abi.encode(uint256(window)), false)) != address(0));
         P.DisputeProtectionIntent memory record = policy.getDisputeProtectionIntent(ID);
         assertEq(deferred, !staked);
         assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.SETTLED));
@@ -95,7 +103,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
             uint256 relocked = bound(seed, 0, available);
             bytes32 lockId = keccak256(abi.encode("relock", step));
             if (relocked != 0) {
-                assertFalse(policy.onIntentSettled(P.SettleParams(lockId, RECIPIENT, TAKER, DEPOSITOR, address(token), METHOD, relocked, relocked, WINDOW)));
+                assertFalse((policy.settleIntent(S.SettlementContext(lockId, address(token), RECIPIENT, TAKER, DEPOSITOR, address(0), 0, METHOD, relocked, relocked, "", abi.encode(uint256(WINDOW)), false)) != address(0)));
                 _accounting();
             }
             paid += _claim(net - paid, step % 2 == 0 ? TAKER : RECIPIENT);
@@ -123,7 +131,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
         uint256 referralFee = gross * referralBps / 10000;
         net = gross - protocolFee - referralFee;
         if (freeStake != 0) _deposit(TAKER, freeStake);
-        bool deferred = policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(token), METHOD, gross, net, WINDOW));
+        bool deferred = (policy.settleIntent(S.SettlementContext(ID, address(token), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, gross, net, "", abi.encode(uint256(WINDOW)), false)) != address(0));
         _accounting();
         token.transfer(address(0x44), protocolFee);
         token.transfer(address(0x55), referralFee);
@@ -163,7 +171,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
 }
 
 contract WhitelistedPayoutFuzzTest is DisputeProtectionStackV2Fixture {
-    function testFuzz_WhitelistedWindowedSettlementSkipsPolicy(uint64 window, uint256 stake) public {
+    function testFuzz_WhitelistedWindowedSettlementCreatesNoRecord(uint64 window, uint256 stake) public {
         window = uint64(bound(window, 1, 180 days));
         stake = bound(stake, 0, 2 * INTENT_AMOUNT);
         if (stake != 0) _stake(vault, taker, stake);
@@ -172,12 +180,11 @@ contract WhitelistedPayoutFuzzTest is DisputeProtectionStackV2Fixture {
         vm.prank(depositor);
         whitelist.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), takers);
         bytes32 id = _signalDefault();
-        vm.mockCallRevert(address(protection), bytes(""), bytes("policy called"));
         vm.recordLogs();
         vm.record();
         _settle(id, INTENT_AMOUNT, window);
-        (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(protection));
-        assertEq(reads.length, 0);
+        (, bytes32[] memory writes) = vm.accesses(address(protection));
+
         assertEq(writes.length, 0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].emitter != address(protection));
