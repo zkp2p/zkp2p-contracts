@@ -690,6 +690,7 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
     "validatePayment", "setIntentNoStake", "paymentMethodRiskWindow",
     "setRiskWindow", "getRiskWindow", "RiskWindowUpdated",
     "admissionsPaused", "setAdmissionsPaused", "AdmissionsPausedUpdated",
+    "DeferredPayoutFunded",
   ])
     assert.equal(
       policyAbi.some(
@@ -707,6 +708,21 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
   ]);
   assert.equal(policyAbi.find((/** @type {{name?: string}} */ entry) => entry.name === "DisputeProtectionIntentSettled")
     .inputs.some((/** @type {{name?: string}} */ entry) => entry.name === "isManualRelease"), false);
+  const intentRecord = policyAbi.find((/** @type {{name?: string}} */ entry) => entry.name === "getDisputeProtectionIntent")
+    .outputs[0].components;
+  assert.deepEqual(intentRecord.map((/** @type {{name: string, type: string}} */ entry) => [entry.name, entry.type]), [
+    ["taker", "address"], ["recipient", "address"], ["stakeOwner", "address"],
+    ["depositor", "address"], ["paymentMethod", "bytes32"], ["status", "uint8"],
+    ["collateralSource", "uint8"], ["releaseEligibleAt", "uint64"],
+    ["lockedAmount", "uint256"], ["claimedAmount", "uint256"],
+  ]);
+  const settledEvent = policyAbi.find((/** @type {{name?: string}} */ entry) => entry.name === "DisputeProtectionIntentSettled");
+  assert.deepEqual(settledEvent.inputs.map((/** @type {{name: string, type: string}} */ entry) => [entry.name, entry.type]), [
+    ["intentHash", "bytes32"], ["taker", "address"], ["depositor", "address"],
+    ["recipient", "address"], ["paymentMethod", "bytes32"], ["riskWindow", "uint64"],
+    ["collateralSource", "uint8"], ["stakeOwner", "address"],
+    ["releaseAmount", "uint256"], ["lockedAmount", "uint256"], ["releaseEligibleAt", "uint64"],
+  ]);
   const verificationOutputs = state.records
     .get("UnifiedPaymentVerifierV4")
     .abi.find(
@@ -1227,7 +1243,7 @@ test("live lane 45 preserves the Base O3 hook precondition", async () => {
 });
 
 test("lane 45 rejects cascade lifecycle activity and removed stake-mode events", () => {
-  for (const name of ["DeferredPayoutFunded", "DeferredPayoutClaimed"]) {
+  for (const name of ["DisputeProtectionIntentSettled", "DeferredPayoutClaimed"]) {
     const events = [
       {
         name,

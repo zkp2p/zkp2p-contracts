@@ -41,6 +41,8 @@ interface IIntentLifecycleHookV2 {
     function settleIntent(SettlementContext calldata _context) external returns (address deferralVault);
 
     /// @notice Accounts for the net payout transferred to the deferral vault.
+    /// @dev OrchestratorV4 calls this in the same transaction right after settleIntent and transferring the net
+    /// payout. A caller that skips this callback leaves a SETTLED deferred policy record without a vault lock.
     function onDeferredPayoutFunded(bytes32 _intentHash) external;
 
 }

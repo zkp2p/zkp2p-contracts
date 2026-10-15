@@ -339,14 +339,23 @@ Historical O3 predecessor checks remain separate; old manifest versions are reje
 DisputeProtectionPolicyV2 has no signal/cancel records, per-method windows, admissions pause, or
 per-deposit opt-outs. It uses the supplied depositor and token without reading escrow. A non-stake-token
 deposit pays now with no record or policy event. Whitelisted takers never reach the policy, like window zero.
-For protected settlements the policy snapshots the attested window, locks gross stake (`STAKE`) or defers
-the net payout (`DEFERRED_PAYOUT`), and sets `releaseEligibleAt = now + window`.
-It rejects windows above its `MAX_RISK_WINDOW` (180 days) as defence in depth. Statuses remain `NONE`,
-`AWAITING_FUNDING`, `SETTLED`, `RELEASED`, and `DISPUTED`. Collateral ordinals are `NONE=0`, `STAKE=1`,
-`DEFERRED_PAYOUT=2`. `DisputeProtectionIntentSettled` fires only for `STAKE` and `DEFERRED_PAYOUT` and keeps
-all participant identities, method, window, collateral source, stake owner, amounts and eligibility time,
-with no manual flag. O4's `IntentFulfilled` carries `isManualRelease`. Only matured collateral releases emit
-`DisputeProtectionIntentReleased`. No Opened or Cancelled event is emitted.
+For protected settlements the policy locks gross stake (`STAKE`) or defers the net payout (`DEFERRED_PAYOUT`)
+and stores `releaseEligibleAt = now + window`. It rejects windows above its `MAX_RISK_WINDOW` (180 days)
+as defence in depth. Status ordinals are `NONE=0`, `SETTLED=1`, `RELEASED=2`, and `DISPUTED=3`.
+Collateral ordinals remain `NONE=0`, `STAKE=1`, `DEFERRED_PAYOUT=2`. Both protected paths create a
+`SETTLED` record; the deferred path still returns `deferred = true`. O4 calls `onDeferredPayoutFunded`
+in the same transaction right after `settleIntent` and transferring the net payout to the vault. Funding
+requires a `SETTLED` `DEFERRED_PAYOUT` record and calls `fundLock`; the vault rejects double funding
+with `LockAlreadyExists`. A caller that skips the callback leaves a `SETTLED` deferred record without a
+vault lock. Funding does not change the policy record or emit a policy event; `DeferredPayoutFunded` is removed.
+The stored record keeps `taker, recipient, stakeOwner, depositor, paymentMethod, status, collateralSource,
+releaseEligibleAt, lockedAmount, claimedAmount` in that order. It no longer stores `releaseAmount` or
+`riskWindow`; disputes, releases and claims use `lockedAmount` and `releaseEligibleAt`.
+`DisputeProtectionIntentSettled` fires only for `STAKE` and `DEFERRED_PAYOUT` and keeps both the gross
+`releaseAmount` and attested `riskWindow`, along with all participant identities, method, collateral source,
+stake owner, locked amount and eligibility time, with no manual flag. O4's `IntentFulfilled` carries
+`isManualRelease`. Only matured collateral releases emit `DisputeProtectionIntentReleased`.
+No Opened or Cancelled event is emitted.
 
 IntentLifecycleHookV2 reads `bytes32(data)`: clients send empty data for no conditions or
 `abi.encodePacked(conditionsHash)` for a raw 32-byte hash. Empty and all-zero data are unconditioned;

@@ -115,8 +115,11 @@ contract DisputeProtectionPolicyV2Test is Test {
         assertEq(record.recipient, RECIPIENT);
         assertEq(record.depositor, DEPOSITOR);
         assertEq(record.paymentMethod, METHOD);
-        assertEq(record.riskWindow, WINDOW);
-        _status(P.DisputeProtectionIntentStatus.AWAITING_FUNDING);
+        assertEq(record.releaseEligibleAt, block.timestamp + WINDOW);
+        _status(P.DisputeProtectionIntentStatus.SETTLED);
+        (address lockOwner, uint256 lockAmount,) = vault.locks(ID);
+        assertEq(lockOwner, address(0));
+        assertEq(lockAmount, 0);
     }
     function test_SettlementZeroWindowCreatesNoRecord() public {
         vm.recordLogs();
@@ -144,6 +147,13 @@ contract DisputeProtectionPolicyV2Test is Test {
         assertEq(uint256(P.CollateralSource.DEFERRED_PAYOUT), 2);
     }
 
+    function test_StatusOrdinals() public pure {
+        assertEq(uint256(P.DisputeProtectionIntentStatus.NONE), 0);
+        assertEq(uint256(P.DisputeProtectionIntentStatus.SETTLED), 1);
+        assertEq(uint256(P.DisputeProtectionIntentStatus.RELEASED), 2);
+        assertEq(uint256(P.DisputeProtectionIntentStatus.DISPUTED), 3);
+    }
+
     function test_StakeBoundaryEqualLocksStake() public {
         _stake(TAKER, GROSS);
         vm.expectEmit(true, true, true, true, address(policy));
@@ -159,7 +169,7 @@ contract DisputeProtectionPolicyV2Test is Test {
     function test_StakeBoundaryShortDefers() public {
         _stake(TAKER, GROSS - 1);
         _defer();
-        _status(P.DisputeProtectionIntentStatus.AWAITING_FUNDING);
+        _status(P.DisputeProtectionIntentStatus.SETTLED);
         assertEq(vault.lockedStake(TAKER), 0);
     }
     function _delegate() internal {
@@ -203,9 +213,7 @@ contract DisputeProtectionPolicyV2Test is Test {
     function test_SettlementSnapshotsAttestedWindowPerIntent() public {
         assertTrue(policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(usdc), METHOD, GROSS, NET, 1 days)));
         assertTrue(policy.onIntentSettled(P.SettleParams(ID2, TAKER, RECIPIENT, DEPOSITOR, address(usdc), METHOD, GROSS, NET, 2 days)));
-        assertEq(_record().riskWindow, 1 days);
         assertEq(_record().releaseEligibleAt, block.timestamp + 1 days);
-        assertEq(policy.getDisputeProtectionIntent(ID2).riskWindow, 2 days);
         assertEq(policy.getDisputeProtectionIntent(ID2).releaseEligibleAt, block.timestamp + 2 days);
     }
     function test_ZeroAmountsFailClosed() public {
@@ -216,6 +224,11 @@ contract DisputeProtectionPolicyV2Test is Test {
     }
     function test_SettleTwiceReverts() public {
         _settleStake();
+        vm.expectRevert(abi.encodeWithSelector(P.DisputeProtectionIntentAlreadyExists.selector, ID));
+        _settle(ID, GROSS, NET);
+    }
+    function test_SettleUnfundedDeferredTwiceReverts() public {
+        _defer();
         vm.expectRevert(abi.encodeWithSelector(P.DisputeProtectionIntentAlreadyExists.selector, ID));
         _settle(ID, GROSS, NET);
     }
@@ -234,8 +247,46 @@ contract DisputeProtectionPolicyV2Test is Test {
         vm.expectRevert(abi.encodeWithSelector(IStakeVault.InsufficientUnaccountedTokens.selector, 0, NET));
         policy.onDeferredPayoutFunded(ID);
     }
+    function test_FundTwiceRevertsInVault() public {
+        _fund();
+        usdc.transfer(address(vault), NET);
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.LockAlreadyExists.selector, ID));
+        policy.onDeferredPayoutFunded(ID);
+        _status(P.DisputeProtectionIntentStatus.SETTLED);
+        assertEq(vault.lockedStake(RECIPIENT), NET);
+        assertEq(vault.totalAccounted(), NET);
+        assertEq(vault.unaccountedBalance(), NET);
+    }
+    function test_FundStakeSourceReverts() public {
+        _settleStake();
+        vm.expectRevert(abi.encodeWithSelector(P.NotDeferredPayout.selector, ID));
+        policy.onDeferredPayoutFunded(ID);
+    }
+    function test_FundingPreservesRecordAndEmitsOnlyVaultEvents() public {
+        _defer();
+        bytes memory recordBeforeFunding = abi.encode(_record());
+        usdc.transfer(address(vault), NET);
+        vm.recordLogs();
+        policy.onDeferredPayoutFunded(ID);
+        assertEq(abi.encode(_record()), recordBeforeFunding);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 index; index < logs.length; ++index) assertTrue(logs[index].emitter != address(policy));
+    }
     function test_FundWrongStatusReverts() public {
         _unexpected(P.DisputeProtectionIntentStatus.NONE);
+        policy.onDeferredPayoutFunded(ID);
+    }
+    function test_FundReleasedDeferredReverts() public {
+        _fund();
+        _mature();
+        policy.releaseMaturedDisputeProtectionIntent(ID);
+        _unexpected(P.DisputeProtectionIntentStatus.RELEASED);
+        policy.onDeferredPayoutFunded(ID);
+    }
+    function test_FundDisputedDeferredReverts() public {
+        _fund();
+        policy.submitDispute(_attestation());
+        _unexpected(P.DisputeProtectionIntentStatus.DISPUTED);
         policy.onDeferredPayoutFunded(ID);
     }
     function test_DisputeOnStakePaysGross() public {
@@ -410,7 +461,6 @@ contract DisputeProtectionPolicyV2Test is Test {
         policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(usdc), METHOD, GROSS, NET, max + 1));
         assertEq(policy.MAX_RISK_WINDOW(), max);
         assertTrue(policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(usdc), METHOD, GROSS, NET, max)));
-        assertEq(_record().riskWindow, max);
         assertEq(_record().releaseEligibleAt, block.timestamp + max);
     }
 

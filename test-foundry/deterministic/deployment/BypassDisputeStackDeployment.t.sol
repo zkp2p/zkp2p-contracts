@@ -331,7 +331,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         uint64 window = 37 hours;
         _settleO4(id, _signedProof(id, PAYMENT_ID, successor.DOMAIN_SEPARATOR(), true, window));
         assertEq(freshPolicy.getDisputeProtectionIntent(id).releaseEligibleAt, block.timestamp + window);
-        assertEq(freshPolicy.getDisputeProtectionIntent(id).riskWindow, window);
+        assertEq(uint256(freshPolicy.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.SETTLED));
         assertEq(token.balanceOf(other), 0);
         assertEq(token.balanceOf(address(freshVault)), INTENT_AMOUNT);
         (address owner, uint256 amount,) = freshVault.locks(id);
@@ -353,8 +353,8 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         assertEq(token.balanceOf(other), INTENT_AMOUNT);
         assertEq(freshVault.lockedStake(taker), INTENT_AMOUNT);
         P.DisputeProtectionIntent memory record = freshPolicy.getDisputeProtectionIntent(id);
+        assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.SETTLED));
         assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.STAKE));
-        assertEq(record.riskWindow, window);
         assertEq(record.releaseEligibleAt, block.timestamp + window);
     }
 

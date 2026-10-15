@@ -76,7 +76,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
         bool deferred = policy.onIntentSettled(P.SettleParams(ID, TAKER, RECIPIENT, DEPOSITOR, address(token), METHOD, 100e6, 99e6, window));
         P.DisputeProtectionIntent memory record = policy.getDisputeProtectionIntent(ID);
         assertEq(deferred, !staked);
-        assertEq(record.riskWindow, window);
+        assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.SETTLED));
         assertEq(record.releaseEligibleAt, block.timestamp + window);
         assertEq(uint256(record.collateralSource), uint256(staked ? P.CollateralSource.STAKE : P.CollateralSource.DEFERRED_PAYOUT));
     }

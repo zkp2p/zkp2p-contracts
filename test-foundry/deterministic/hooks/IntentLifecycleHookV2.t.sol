@@ -262,7 +262,7 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
         _assertDeferred();
         P.DisputeProtectionIntent memory record = policy.getDisputeProtectionIntent(ID);
-        assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.AWAITING_FUNDING));
+        assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.SETTLED));
         assertEq(record.stakeOwner, other);
         assertEq(record.lockedAmount, NET);
     }
@@ -456,7 +456,6 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
             bytes32 id = bytes32(i + 1);
             assertEq(stub.settle(hook, _context(id, windows[i])), address(vault));
             P.DisputeProtectionIntent memory record = policy.getDisputeProtectionIntent(id);
-            assertEq(record.riskWindow, windows[i]);
             assertEq(record.releaseEligibleAt, block.timestamp + windows[i]);
         }
     }

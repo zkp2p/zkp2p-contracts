@@ -441,8 +441,13 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
     function test_OverpaymentIsCappedBeforeCascade() public {
         _stake(vault, taker, INTENT_AMOUNT);
         bytes32 id = _signalDefault();
+        vm.expectEmit(true, true, true, true, address(protection));
+        emit DisputeProtectionIntentSettled(
+            id, taker, depositor, other, METHOD, RISK_WINDOW, P.CollateralSource.STAKE,
+            taker, INTENT_AMOUNT, INTENT_AMOUNT, uint64(block.timestamp + RISK_WINDOW)
+        );
         _settle(id, 2 * INTENT_AMOUNT, RISK_WINDOW);
-        assertEq(protection.getDisputeProtectionIntent(id).releaseAmount, INTENT_AMOUNT);
+        assertEq(protection.getDisputeProtectionIntent(id).lockedAmount, INTENT_AMOUNT);
         _assertLock(id, taker, INTENT_AMOUNT);
         assertEq(token.balanceOf(other), NET);
         _assertFees();

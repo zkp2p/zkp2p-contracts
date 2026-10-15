@@ -63,7 +63,7 @@ contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
             if (window == 0 || whitelisted) {
                 assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.NONE));
             } else {
-                assertEq(record.riskWindow, window);
+                assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.SETTLED));
                 assertEq(record.releaseEligibleAt, block.timestamp + window);
             }
             if (index == 0 || whitelisted) {

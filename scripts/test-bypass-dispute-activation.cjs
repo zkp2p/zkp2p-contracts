@@ -1005,11 +1005,9 @@ test("lane 46 classifies bypass policy activity across O4 registration", () => {
     "DisputeProtectionIntentSettled",
     "DisputeProtectionIntentReleased",
     "DisputeResolved",
-    "DeferredPayoutFunded",
     "DeferredPayoutClaimed",
   ]);
   for (const name of [
-    "DeferredPayoutFunded",
     "DeferredPayoutClaimed",
     "DisputeProtectionIntentSettled",
   ]) {
@@ -1031,7 +1029,6 @@ test("lane 46 classifies bypass policy activity across O4 registration", () => {
         "DisputeProtectionIntentSettled",
         "DisputeProtectionIntentReleased",
         "DisputeResolved",
-        "DeferredPayoutFunded",
         "DeferredPayoutClaimed",
       ]
         .map(event)
@@ -1039,7 +1036,7 @@ test("lane 46 classifies bypass policy activity across O4 registration", () => {
       false
     )
   );
-  for (const removed of ["DisputeProtectionIntentOpened", "DisputeProtectionIntentCancelled", "DisputeProtectionEnabledUpdated"]) {
+  for (const removed of ["DisputeProtectionIntentOpened", "DisputeProtectionIntentCancelled", "DisputeProtectionEnabledUpdated", "DeferredPayoutFunded"]) {
     for (const beforeCutover of [true, false]) {
       assert.throws(() => lane.classifyBypassPolicyActivity([event(removed)], beforeCutover), /unclassified event/);
     }

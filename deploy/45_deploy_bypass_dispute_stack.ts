@@ -75,7 +75,6 @@ export const BYPASS_POLICY_LIFECYCLE_EVENTS = [
   "DisputeProtectionIntentSettled",
   "DisputeProtectionIntentReleased",
   "DisputeResolved",
-  "DeferredPayoutFunded",
   "DeferredPayoutClaimed",
 ] as const;
 

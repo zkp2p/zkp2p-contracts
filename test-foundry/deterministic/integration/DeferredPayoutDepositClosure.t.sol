@@ -87,8 +87,6 @@ contract DeferredPayoutDepositClosureTest is DisputeProtectionStackV2Fixture {
         assertEq(record.taker, taker);
         assertEq(record.recipient, other);
         assertEq(record.paymentMethod, METHOD);
-        assertEq(record.riskWindow, RISK_WINDOW);
-        assertEq(record.releaseAmount, INTENT_AMOUNT);
         assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.SETTLED));
         assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.DEFERRED_PAYOUT));
         assertEq(record.stakeOwner, other);

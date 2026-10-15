@@ -111,21 +111,18 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
         intent.recipient = _params.recipient;
         intent.depositor = _params.depositor;
         intent.paymentMethod = _params.paymentMethod;
-        intent.riskWindow = _params.riskWindow;
-        intent.releaseAmount = _params.releaseAmount;
         intent.releaseEligibleAt = _calculateReleaseEligibleAt(_params.riskWindow);
+        intent.status = DisputeProtectionIntentStatus.SETTLED;
         address stakeOwner = stakeVault.stakeOwnerOf(_params.taker);
         if (stakeVault.freeStake(stakeOwner) >= _params.releaseAmount) {
             intent.collateralSource = CollateralSource.STAKE;
             intent.stakeOwner = stakeOwner;
             intent.lockedAmount = _params.releaseAmount;
-            intent.status = DisputeProtectionIntentStatus.SETTLED;
             stakeVault.lockStake(stakeOwner, _params.intentHash, _params.releaseAmount, intent.releaseEligibleAt);
         } else {
             intent.collateralSource = CollateralSource.DEFERRED_PAYOUT;
             intent.stakeOwner = _params.recipient;
             intent.lockedAmount = _params.netAmount;
-            intent.status = DisputeProtectionIntentStatus.AWAITING_FUNDING;
             deferred = true;
         }
         emit DisputeProtectionIntentSettled(
@@ -138,12 +135,11 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
     /// @inheritdoc IDisputeProtectionPolicyV2
     function onDeferredPayoutFunded(bytes32 _intentHash) external override onlyLifecycleHook nonReentrant {
         DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_intentHash];
-        if (intent.status != DisputeProtectionIntentStatus.AWAITING_FUNDING) {
+        if (intent.status != DisputeProtectionIntentStatus.SETTLED) {
             revert UnexpectedStatus(_intentHash, intent.status);
         }
+        if (intent.collateralSource != CollateralSource.DEFERRED_PAYOUT) revert NotDeferredPayout(_intentHash);
         stakeVault.fundLock(intent.recipient, _intentHash, intent.lockedAmount, intent.releaseEligibleAt);
-        intent.status = DisputeProtectionIntentStatus.SETTLED;
-        emit DeferredPayoutFunded(_intentHash, intent.recipient, intent.lockedAmount, intent.releaseEligibleAt);
     }
 
     /// @notice Pushes a matured deferred payout's available, unclaimed stake only to its recipient.
