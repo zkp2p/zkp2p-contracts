@@ -289,8 +289,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     /**
      * @notice Allows depositor to release funds to the payer in case of a failed fulfill intent or because of some other arrangement
      * between the two parties. Upon submission we check to make sure the msg.sender is the depositor, the intent is removed, and 
-     * escrow state is updated. Manual release routes through the shared post-funds lifecycle-settlement gate, then
-     * transfers the net payout to the recipient or the policy-selected deferral vault.
+     * escrow state is updated. Manual release notifies the snapshotted settlement policy with isManualRelease = true
+     * and an empty extension, then transfers the net payout to the recipient or the policy-selected deferral vault.
      *
      * @param _intentHash        Hash of intent to resolve by releasing the funds
      */

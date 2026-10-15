@@ -99,6 +99,22 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         _assertFees();
     }
 
+    function test_RelayerOptInAfterSignalPaysNowAtFulfil() public {
+        relayerRegistry.addRelayer(taker);
+        assertEq(vault.freeStake(taker), 0);
+        vm.prank(depositor);
+        protection.setDepositOptOutForRelayerBypass(address(escrow), depositId, true);
+        bytes32 id = _signalDefault();
+        vm.prank(depositor);
+        protection.setDepositOptOutForRelayerBypass(address(escrow), depositId, false);
+        vm.mockCallRevert(address(vault), bytes(""), bytes("vault called"));
+        _settleWhitelistedWithoutRecord(id);
+        assertEq(token.balanceOf(other), NET);
+        assertEq(token.balanceOf(address(vault)), 0);
+        _assertLock(id, address(0), 0);
+        _assertFees();
+    }
+
     function test_OptedOutRelayerTakerUsesStakeOwnerCollateral() public {
         relayerRegistry.addRelayer(taker);
         vm.prank(depositor);
@@ -126,6 +142,19 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         protection.setDepositOptOutForRelayerBypass(address(escrow), depositId, true);
         assertFalse(whitelist.enabled(address(escrow), depositId, METHOD));
         bytes32 id = _signalDefault();
+        assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
+        _assertDeferredSettlement(id);
+        assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.SETTLED));
+        assertEq(token.balanceOf(address(vault)), NET);
+        assertEq(vault.totalAccounted(), NET);
+    }
+
+    function test_RelayerOptOutAfterSignalAppliesAtFulfil() public {
+        relayerRegistry.addRelayer(taker);
+        assertFalse(whitelist.enabled(address(escrow), depositId, METHOD));
+        bytes32 id = _signalDefault();
+        vm.prank(depositor);
+        protection.setDepositOptOutForRelayerBypass(address(escrow), depositId, true);
         assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
         _assertDeferredSettlement(id);
         assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.SETTLED));

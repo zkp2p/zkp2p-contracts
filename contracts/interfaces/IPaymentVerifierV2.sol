@@ -26,8 +26,9 @@ interface IPaymentVerifierV2 {
 
     /// @dev Must stay fully static and preserve the V1 three-field prefix: OrchestratorV3 calls
     /// through IPaymentVerifier and reads only the first three words. Dynamic data must be a
-    /// separate trailing return value, never a field inside this struct. The balance flag is extension word 0,
-    /// not part of this result, so the V1 prefix remains unchanged.
+    /// separate trailing return value, never a field inside this struct. The dispute window (extension word 0)
+    /// and conditions hash (extension word 1) are returned in the trailing extension bytes, not this struct,
+    /// so the V1 prefix remains unchanged.
     struct PaymentVerificationResultV2 {
         bool success;
         bytes32 intentHash;
