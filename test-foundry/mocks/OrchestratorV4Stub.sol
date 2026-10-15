@@ -2,17 +2,9 @@
 pragma solidity ^0.8.18;
 
 import {IIntentLifecycleHookV2} from "contracts/interfaces/IIntentLifecycleHookV2.sol";
-import {IRelayerRegistry} from "contracts/interfaces/IRelayerRegistry.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 
 contract OrchestratorV4Stub {
-    IRelayerRegistry public relayerRegistry;
-
-    /// @notice Configures the relayer registry used by the lifecycle hook.
-    function setRelayerRegistry(IRelayerRegistry _relayerRegistry) external {
-        relayerRegistry = _relayerRegistry;
-    }
-
     mapping(bytes32 => IOrchestratorV4.Intent) internal intents;
 
     /// @notice Stores canonical intent data for a test.

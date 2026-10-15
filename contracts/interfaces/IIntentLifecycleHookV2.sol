@@ -29,7 +29,7 @@ interface IIntentLifecycleHookV2 {
     /// @notice Validates signed conditions and selects immediate or deferred settlement.
     /// @dev Signed extension words: 0 = balanceFunded (only 0 or 1), 1 = conditionsHash, 2+ = reserved.
     /// Missing complete words read as zero. Manual release ignores the extension and never uses bypass.
-    /// Balance-funded payments, registered relayer takers, or whitelisted takers bypass dispute collateral.
+    /// Balance-funded payments or whitelisted takers bypass dispute collateral; relayer registration alone does not.
     /// Whitelisting requires the deposit/payment-method whitelist to be enabled and the taker to be allowed
     /// at settlement; disabling it or removing the taker after signal restores the cascade absent another bypass.
     /// Data interpretation lives in each intent's snapshotted hook because OrchestratorV4 is not upgradeable.

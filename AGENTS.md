@@ -500,12 +500,14 @@ orphan cleanup.
 `SettlementContext` is `{ intentHash, token, taker, recipient, escrow, depositId, paymentMethod,
 releaseAmount, netAmount, data, extensionData, isManualRelease }`. O4 reads intent fields before pruning:
 `taker = intent.owner`, `recipient = intent.to`, and `data = intent.data`. The hook passes these identities
-and amounts to the policy's `onIntentSettled(SettleParams)`, with `bypass` set for balance-funded payments,
-registered relayer takers, or whitelisted takers, checked in that order. A whitelisted taker means the
-deposit/payment-method whitelist is enabled and `isTakerAllowed` returns true for the taker, not the
-recipient. These checks read live state at settlement: disabling the whitelist or removing the taker
-after signal restores the collateral cascade unless another bypass applies. A replacement hook can
-change these rules. Manual release has its own path and never uses bypass.
+and amounts to the policy's `onIntentSettled(SettleParams)`, with `bypass` set for balance-funded payments
+or whitelisted takers, checked in that order. A whitelisted taker means the deposit/payment-method
+whitelist is enabled and `isTakerAllowed` returns true for the taker, not the recipient. Registered relayer
+takers follow the same rule: relayer registration alone does not bypass collateral. The hook does not
+query the relayer registry; O4 still uses it for its own admission gating. These checks read live state
+at settlement: disabling the whitelist or removing the taker after signal restores the collateral cascade
+unless the payment is balance-funded. A replacement hook can change these rules. Manual release has its
+own path and never uses bypass.
 
 DisputeProtectionPolicyV2 has no signal/cancel records and no per-deposit opt-outs. A zero risk window
 pays normally with no record. Otherwise settlement reads the depositor and rechecks the token, snapshots

@@ -47,7 +47,6 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         hook = new IntentLifecycleHookV2(orchestratorRegistry, whitelist, policy);
         policy.setLifecycleHookAuthorization(address(hook), true);
         stub = new OrchestratorV4Stub();
-        stub.setRelayerRegistry(relayerRegistry);
         orchestratorRegistry.addOrchestrator(address(stub));
         _store(ID, "");
     }
@@ -230,20 +229,51 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
     }
 
-    function test_RelayerTakerBypassesWithoutBalanceFunding() public {
+    function test_RelayerTakerWithWhitelistDisabledUsesStakeOwnerCollateral() public {
         relayerRegistry.addRelayer(taker);
+        assertFalse(whitelist.enabled(address(escrow), depositId, METHOD));
+        token.transfer(delegate, INTENT_AMOUNT);
+        vm.startPrank(delegate);
+        token.approve(address(vault), INTENT_AMOUNT);
+        vault.depositStake(INTENT_AMOUNT);
+        vault.setTakerAuthorization(taker, true);
+        vm.stopPrank();
+        vm.prank(taker);
+        vault.selectStakeOwner(delegate);
         stub.signal(hook, ID, "");
+        assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
+        assertEq(stub.settle(hook, _context(ID, false)), address(0));
+        P.DisputeProtectionIntent memory record = policy.getDisputeProtectionIntent(ID);
+        assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.SETTLED));
+        assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.STAKE));
+        assertEq(record.stakeOwner, delegate);
+        assertEq(record.lockedAmount, INTENT_AMOUNT);
+        assertEq(vault.lockedStake(delegate), INTENT_AMOUNT);
+        assertEq(vault.lockedStake(taker), 0);
+    }
+
+    function test_RelayerTakerWithWhitelistDisabledDefersUncoveredPayout() public {
+        relayerRegistry.addRelayer(taker);
+        assertFalse(whitelist.enabled(address(escrow), depositId, METHOD));
+        stub.signal(hook, ID, "");
+        assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
+        _assertDeferred();
+        P.DisputeProtectionIntent memory record = policy.getDisputeProtectionIntent(ID);
+        assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.AWAITING_FUNDING));
+        assertEq(record.stakeOwner, other);
+        assertEq(record.lockedAmount, NET);
+    }
+
+    function test_RelayerTakerAllowedByEnabledWhitelistBypasses() public {
+        relayerRegistry.addRelayer(taker);
+        _whitelistTaker();
+        stub.signal(hook, ID, "");
+        _expectSettlement(P.CollateralSource.BYPASS);
         assertEq(stub.settle(hook, _context(ID, false)), address(0));
         P.DisputeProtectionIntent memory record = policy.getDisputeProtectionIntent(ID);
         assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.RELEASED));
         assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.BYPASS));
         assertEq(record.lockedAmount, 0);
-    }
-
-    function test_RecipientRelayerDoesNotBypass() public {
-        relayerRegistry.addRelayer(other);
-        stub.signal(hook, ID, "");
-        assertEq(stub.settle(hook, _context(ID, false)), address(vault));
     }
 
     function _conditionsData() internal pure returns (bytes memory) {

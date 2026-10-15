@@ -23,8 +23,9 @@ import {IEscrowV2} from "../interfaces/IEscrowV2.sol";
 /// first word, right-padding shorter data; empty and all-zero data are unconditioned. There is no
 /// length or version decoding: the conditions version lives in the attestor-side hash preimage,
 /// and each intent's data is interpreted only by its snapshotted hook.
-/// Non-manual settlements bypass collateral for balance-funded payments, registered relayer takers,
-/// or takers allowed by an enabled deposit/payment-method whitelist, in that short-circuit order.
+/// Non-manual settlements bypass collateral for balance-funded payments or takers allowed by an
+/// enabled deposit/payment-method whitelist, in that short-circuit order. Relayer registration alone
+/// does not bypass collateral; registered relayer takers follow the same whitelist rule.
 /// Whitelist state is read live at settlement: disabling it or removing the taker after signal restores
 /// the collateral cascade unless another bypass applies. Whitelisting the recipient does not qualify.
 /// At signal, the whitelist is only an admission gate; every windowed intent still checks the stake
@@ -119,7 +120,6 @@ contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
                 ? abi.decode(_context.extensionData[32:64], (bytes32)) : bytes32(0);
             if (attested != expected) revert ConditionsNotAttested(_context.intentHash);
             bypass = flag == 1
-                || IOrchestratorV4(msg.sender).relayerRegistry().isWhitelistedRelayer(_context.taker)
                 || (whitelistPolicy.enabled(_context.escrow, _context.depositId, _context.paymentMethod)
                     && whitelistPolicy.isTakerAllowed(
                         _context.escrow, _context.depositId, _context.paymentMethod, _context.taker

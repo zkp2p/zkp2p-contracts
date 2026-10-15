@@ -5,7 +5,7 @@ import {IStakeVault} from "./IStakeVault.sol";
 
 interface IDisputeProtectionPolicyV2 {
     enum DisputeProtectionIntentStatus { NONE, AWAITING_FUNDING, SETTLED, RELEASED, DISPUTED }
-    /// @dev BYPASS covers balance-funded payments, registered relayer takers, or whitelisted takers.
+    /// @dev BYPASS covers balance-funded payments or takers allowed by an enabled deposit/payment-method whitelist.
     enum CollateralSource { NONE, BYPASS, STAKE, DEFERRED_PAYOUT, MANUAL_RELEASE }
 
     struct DisputeProtectionIntent {
@@ -57,8 +57,9 @@ interface IDisputeProtectionPolicyV2 {
         bytes32 paymentMethod;
         uint256 releaseAmount;
         uint256 netAmount;
-        /// @dev Balance-funded payment, registered relayer taker, or taker allowed by an enabled whitelist.
-        /// The hook checks live settlement state; manual release takes precedence over bypass.
+        /// @dev Balance-funded payment or taker allowed by an enabled deposit/payment-method whitelist.
+        /// Relayer registration alone does not qualify. The hook checks live settlement state;
+        /// manual release takes precedence over bypass.
         bool bypass;
         bool isManualRelease;
     }

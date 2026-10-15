@@ -86,10 +86,42 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         _assertFees();
     }
 
-    function test_RelayerTakerPaysNowWithoutBalanceFunding() public {
+    function test_RelayerTakerWithWhitelistDisabledUsesStakeOwnerCollateral() public {
         relayerRegistry.addRelayer(taker);
+        assertFalse(whitelist.enabled(address(escrow), depositId, METHOD));
+        _stake(vault, delegate, INTENT_AMOUNT);
+        vm.prank(delegate);
+        vault.setTakerAuthorization(taker, true);
+        vm.prank(taker);
+        vault.selectStakeOwner(delegate);
         bytes32 id = _signalDefault();
         assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
+        _settle(id, INTENT_AMOUNT, false);
+        assertEq(token.balanceOf(other), NET);
+        assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.STAKE));
+        _assertLock(id, delegate, INTENT_AMOUNT);
+        assertEq(vault.lockedStake(taker), 0);
+        assertEq(token.balanceOf(address(vault)), INTENT_AMOUNT);
+        _assertFees();
+    }
+
+    function test_RelayerTakerWithWhitelistDisabledDefersUncoveredPayout() public {
+        relayerRegistry.addRelayer(taker);
+        assertFalse(whitelist.enabled(address(escrow), depositId, METHOD));
+        bytes32 id = _signalDefault();
+        assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
+        _assertDeferredSettlement(id);
+        assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.SETTLED));
+        assertEq(token.balanceOf(address(vault)), NET);
+        assertEq(vault.totalAccounted(), NET);
+    }
+
+    function test_RelayerTakerAllowedByEnabledWhitelistBypasses() public {
+        relayerRegistry.addRelayer(taker);
+        _whitelistTaker();
+        bytes32 id = _signalDefault();
+        assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
+        _expectSettlement(id, P.CollateralSource.BYPASS);
         _settle(id, INTENT_AMOUNT, false);
         assertEq(token.balanceOf(other), NET);
         assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.BYPASS));
