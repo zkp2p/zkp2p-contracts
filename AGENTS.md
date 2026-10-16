@@ -160,14 +160,14 @@
     `0x81630fb1ab2A7Eab137888b9746b66889f78F091`. All three contracts are Basescan-verified. The lane is immutable
     and pinned in `deployments/immutableDeploymentLanes.ts`.
 - `deploy/45_deploy_bypass_dispute_stack.ts` is retargeted to `StakeVaultV2` (multiple authorized controllers),
-  `DisputeProtectionPolicyV2`, `UnifiedPaymentVerifierV4` and `OrchestratorV4`.
+  `WhitelistPolicyV4`, `DisputeProtectionPolicyV2`, `UnifiedPaymentVerifierV4` and `OrchestratorV4`.
   This cascade/O4 source has not executed on Base or Base staging. The existing tag and
   `ENABLE_{STAGING,BASE}_V3_DISPUTE_BYPASS_STACK_DEPLOYMENT=true` select resumable deploy-only steps.
   Lane 45 authorizes the policy with `vault.setController(policy, true)`, authorizes O4 on the policy,
-  sets O4's settlement policy, and passes the same whitelist to both. The policy reads O4's current
+  sets O4's settlement policy, and passes the fresh `WhitelistPolicyV4` to both. The policy reads O4's current
   relayer registry at settlement. It configures O4
   with O3's registries, fees and `allowMultipleIntents`. O4 stays unregistered; Base starts vault/policy
-  two-step ownership transfers and transfers UPV4/O4 ownership directly to the Safe.
+  two-step ownership transfers and transfers WhitelistPolicyV4/UPV4/O4 ownership directly to the Safe.
   Only the exact superseded staging UPV4 address `0x3fe38Afdfa85A9E14D9b0ae5A5B2E577A8a71DA7` with its
   pinned runtime hash may be replaced. Lane 45 deletes that record and deploys a different address.
   Pre-cutover binding checks use the pinned retired verifier independently of the mutable record, including
@@ -217,7 +217,7 @@
   Staging aliases/evidence still describe that executed bypass stack; Base retains MethodScoped aliases
   and UPV3 binding. Superseded identities live in `BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS`; fresh
   `BYPASS_RECORDED_DEPLOYMENTS` pins are empty until recording. The staging recording PR must save all
-  four fresh records and address/runtime pins, update the committed-record test after replacing UPV4's
+  five fresh records and address/runtime pins, update the committed-record test after replacing UPV4's
   JSON, restore staging aliases/evidence/`PREDECESSOR_DISPUTE_STACKS.base_staging` to main's August O3
   selection, regenerate outputs with the O4 stack exported by name and update these docs.
   Base requires separate approvals for lane 45, its recording PR with pins, and lane-46 preparation;
@@ -583,15 +583,20 @@ Manual release skips it. Off-chain v1 convention is
 Use a cryptographically random salt per intent and keep it off-chain with the conditions supplied
 to the gating service and attestor.
 
-Lanes 45/46 deploy StakeVaultV2, DisputeProtectionPolicyV2, UPV4 and O4 without a lifecycle hook.
+Lanes 45/46 deploy StakeVaultV2, WhitelistPolicyV4, DisputeProtectionPolicyV2, UPV4 and O4 without a lifecycle hook.
 Lane 45 authorizes the policy on the vault immediately, without an accept-controller step.
-They pass the same whitelist to O4 and the policy, set O4's policy, authorize O4 on the policy,
-and register O4 last. The policy reads the calling orchestrator's current relayer registry at
-settlement, so O4 registry updates immediately govern bypass for existing and new intents.
+They pass a fresh `WhitelistPolicyV4` to O4 and the policy, set O4's policy, authorize O4 on the policy,
+and register O4 last. `WhitelistPolicyV4` uses unchanged `WhitelistPolicy.sol` with the same
+AddressGroupRegistry, EscrowRegistry and OrchestratorRegistry as `WhitelistPolicyMethodScoped`.
+No deposit entries are seeded: existing deposits start with whitelist off on O4, while O3 and its
+August hook keep `WhitelistPolicyMethodScoped` and its settings. Merchant groups remain available
+when a depositor enables them on the fresh instance. The deployer retains ownership on staging/local;
+Base transfers its single-step Ownable ownership directly to the Safe during lane 45.
+The policy reads the calling orchestrator's current relayer registry at settlement, so O4 registry updates immediately govern bypass for existing and new intents.
 Deployment checks, activation snapshots and the on-chain guard retain O4's pinned registry check.
-Depositor opt-outs are allowed before activation. Bypass batch manifest version 10 records the
-selected policy's vault-controller authorization, O4 authorization and both whitelist dependencies,
-without a separate policy registry; older manifests are rejected. Historical O3 predecessor checks
+Depositor opt-outs are allowed before activation. Bypass batch manifest version 11 records the
+selected policy's vault-controller authorization, O4 authorization, fresh whitelist ownership/registries
+and the separate O3/O4 whitelist bindings, without a separate policy registry; older manifests are rejected. Historical O3 predecessor checks
 remain separate. The package drops the removed hook ABI. Its source ABI catalog does not export interface ABIs;
 generated TypeChain interface exports include `IIntentSettlementPolicy` and `IStakeVaultV2`.
 The source ABI catalog exports `StakeVaultV2` separately from the August `StakeVault`.
