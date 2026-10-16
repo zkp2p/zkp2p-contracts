@@ -794,7 +794,7 @@ async function liveContext(
   };
 }
 
-async function readFreshState(
+export async function readFreshState(
   hre: HardhatRuntimeEnvironment,
   context: StackContext
 ): Promise<{
@@ -803,7 +803,9 @@ async function readFreshState(
   completed: Record<string, boolean>;
 }> {
   const deployments = await Promise.all(
-    BYPASS_DEPLOYMENT_NAMES.map((name) => hre.deployments.getOrNull(name))
+    BYPASS_DEPLOYMENT_NAMES.map(
+      async (name) => (await hre.deployments.getOrNull(name)) ?? null
+    )
   );
   const verifierIndex = BYPASS_DEPLOYMENT_NAMES.indexOf(
     "UnifiedPaymentVerifierV4"
