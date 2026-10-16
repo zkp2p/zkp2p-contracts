@@ -14,6 +14,7 @@ export const LANE_46_TAG = "46_activate_bypass_dispute_stack";
 // Record order follows the resumable deployment steps, not the artifact table.
 export const BYPASS_DEPLOYMENT_NAMES = [
   "StakeVaultV2",
+  "WhitelistPolicyV4",
   "DisputeProtectionPolicyV2",
   "UnifiedPaymentVerifierV4",
   "OrchestratorV4",
@@ -21,6 +22,7 @@ export const BYPASS_DEPLOYMENT_NAMES = [
 export type BypassDeploymentName = (typeof BYPASS_DEPLOYMENT_NAMES)[number];
 export const BYPASS_ARTIFACT_NAMES: Record<BypassDeploymentName, string> = {
   StakeVaultV2: "StakeVaultV2",
+  WhitelistPolicyV4: "WhitelistPolicy",
   DisputeProtectionPolicyV2: "DisputeProtectionPolicyV2",
   UnifiedPaymentVerifierV4: "UnifiedPaymentVerifierV4",
   OrchestratorV4: "OrchestratorV4",
@@ -153,6 +155,7 @@ export type BypassLivePins = {
   paymentVerifierRegistry: ContractPin;
   disputeVerifier: ContractPin;
   disputeNullifierRegistry: ContractPin;
+  // O3 keeps this instance; lane 45 only reuses its constructor dependencies for O4.
   whitelistPolicy: ContractPin;
   predecessorVault: ContractPin;
   // O3 August stack trust pin only; the O4 cascade has no deposit opt-outs.
@@ -348,6 +351,7 @@ export function paymentMethodHash(name: string): string {
 function deploymentSteps(network: BypassNetwork): string[] {
   return [
     "deploy-vault",
+    "deploy-whitelist",
     "deploy-policy",
     "authorize-controller",
     "deploy-verifier",
@@ -369,6 +373,7 @@ export const LANE_45_STEP_KINDS: Record<BypassNetwork, readonly string[]> = {
     ...deploymentSteps("base"),
     "transfer-vault-owner",
     "transfer-policy-owner",
+    "transfer-whitelist-owner",
     "transfer-verifier-owner",
     "transfer-orchestrator-owner",
   ],

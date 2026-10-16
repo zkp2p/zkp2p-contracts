@@ -39,6 +39,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
     MultiAttestationVerifier internal witnesses;
     DisputeVerifier internal disputeVerifier;
     WhitelistPolicy internal whitelist;
+    WhitelistPolicy internal freshWhitelist;
     UnifiedPaymentVerifierV3 internal predecessor;
     UnifiedPaymentVerifierV4 internal successor;
     StakeVault internal predecessorVault;
@@ -104,9 +105,11 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
     }
 
     function _deployLane45() private {
+        freshWhitelist = new WhitelistPolicy(whitelist.groupRegistry(), escrowRegistry, orchestratorRegistry);
         freshVault = new StakeVaultV2(address(this), token, address(0));
-        freshPolicy =
-            new DisputeProtectionPolicyV2(address(this), freshVault, disputeVerifier, disputeNullifiers, whitelist);
+        freshPolicy = new DisputeProtectionPolicyV2(
+            address(this), freshVault, disputeVerifier, disputeNullifiers, freshWhitelist
+        );
         freshVault.setController(address(freshPolicy), true);
         successor = new UnifiedPaymentVerifierV4(orchestratorRegistry, nullifiers, witnesses);
         for (uint256 index; index < originalMethods.length; index++) {
@@ -120,7 +123,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
             address(orchestrator.relayerRegistry()),
             orchestrator.protocolFee(),
             orchestrator.protocolFeeRecipient(),
-            whitelist
+            freshWhitelist
         );
         freshPolicy.setOrchestratorAuthorization(address(orchestratorV4), true);
         orchestratorV4.setSettlementPolicy(freshPolicy);
@@ -277,9 +280,28 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         assertEq(orchestratorV4.protocolFeeRecipient(), orchestrator.protocolFeeRecipient());
         assertEq(orchestratorV4.allowMultipleIntents(), orchestrator.allowMultipleIntents());
         assertEq(address(orchestratorV4.settlementPolicy()), address(freshPolicy));
-        assertEq(address(orchestratorV4.whitelistPolicy()), address(whitelist));
-        assertEq(address(freshPolicy.whitelistPolicy()), address(whitelist));
+        assertEq(address(orchestratorV4.whitelistPolicy()), address(freshWhitelist));
+        assertEq(address(freshPolicy.whitelistPolicy()), address(freshWhitelist));
+        assertNotEq(address(freshWhitelist), address(whitelist));
+        assertEq(address(freshWhitelist.groupRegistry()), address(whitelist.groupRegistry()));
+        assertEq(address(predecessorHook.whitelistPolicy()), address(whitelist));
         assertFalse(orchestratorRegistry.isOrchestrator(address(orchestratorV4)));
+    }
+
+    function test_ExistingWhitelistDoesNotRestrictO4() public {
+        vm.prank(depositor);
+        whitelist.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), new address[](0));
+        _deployLane45();
+        assertTrue(whitelist.enabled(address(escrow), depositId, METHOD));
+        assertFalse(freshWhitelist.enabled(address(escrow), depositId, METHOD));
+        assertEq(address(freshWhitelist.groupRegistry()), address(whitelist.groupRegistry()));
+        assertEq(address(orchestratorV4.whitelistPolicy()), address(freshWhitelist));
+        assertEq(address(freshPolicy.whitelistPolicy()), address(freshWhitelist));
+        _activateLane46();
+        bytes32 id = _signalO4();
+        assertEq(orchestratorV4.getIntent(id).owner, taker);
+        assertTrue(whitelist.enabled(address(escrow), depositId, METHOD));
+        assertEq(address(predecessorHook.whitelistPolicy()), address(whitelist));
     }
 
     function test_O3PendingIntentFulfilsThroughUPV4AfterCutover() public {
@@ -375,7 +397,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         address[] memory takers = new address[](1);
         takers[0] = taker;
         vm.prank(depositor);
-        whitelist.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), takers);
+        freshWhitelist.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), takers);
         bytes32 id = _signalO4();
         vm.mockCallRevert(address(freshVault), bytes(""), bytes("vault called"));
         vm.recordLogs();
@@ -423,7 +445,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         );
         assertEq(freshVault.lockedStake(other), INTENT_AMOUNT);
         vm.prank(depositor);
-        whitelist.setEnabled(address(escrow), depositId, METHOD, true);
+        freshWhitelist.setEnabled(address(escrow), depositId, METHOD, true);
         IOrchestratorV4.SignalIntentParams memory params = _defaultV4Params();
         vm.expectRevert(
             abi.encodeWithSelector(

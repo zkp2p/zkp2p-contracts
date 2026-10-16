@@ -33,6 +33,7 @@ struct BypassTrustSurface {
     address disputeVerifier;
     address whitelistPolicy;
     address whitelistPolicyOwner;
+    address freshWhitelistPolicy;
     address groupRegistry;
     address stakeToken;
     address predecessorVault;
@@ -131,6 +132,11 @@ abstract contract DisputeBypassTrustSurfaceChecks {
     error OrchestratorV4WhitelistPolicyMismatch(address actual);
     error FreshPolicyWhitelistPolicyMismatch(address actual);
     error WhitelistPolicyOwnerMismatch(address actual);
+    error FreshWhitelistPolicyNotDistinct();
+    error FreshWhitelistPolicyOwnerMismatch(address actual);
+    error FreshWhitelistPolicyEscrowRegistryMismatch(address actual);
+    error FreshWhitelistPolicyGroupRegistryMismatch(address actual);
+    error FreshWhitelistPolicyOrchestratorRegistryMismatch(address actual);
     error WhitelistPolicyEscrowRegistryMismatch(address actual);
     error WhitelistPolicyGroupRegistryMismatch(address actual);
     error WhitelistPolicyOrchestratorRegistryMismatch(address actual);
@@ -197,6 +203,7 @@ abstract contract DisputeBypassTrustSurfaceChecks {
         if (totalCurrencies != _expected.currencies.length) {
             revert CurrencyConfigurationLengthMismatch(_expected.currencies.length, totalCurrencies);
         }
+        if (_expected.freshWhitelistPolicy == _expected.whitelistPolicy) revert FreshWhitelistPolicyNotDistinct();
         expected = _expected;
     }
 
@@ -275,7 +282,9 @@ abstract contract DisputeBypassTrustSurfaceChecks {
         actualAddress = targetOrchestrator.settlementPolicy();
         if (actualAddress != expected.freshPolicy) revert OrchestratorV4SettlementPolicyMismatch(actualAddress);
         actualAddress = targetOrchestrator.whitelistPolicy();
-        if (actualAddress != expected.whitelistPolicy) revert OrchestratorV4WhitelistPolicyMismatch(actualAddress);
+        if (actualAddress != expected.freshWhitelistPolicy) {
+            revert OrchestratorV4WhitelistPolicyMismatch(actualAddress);
+        }
     }
 
     function _assertOrchestratorV4Registration(bool wanted) internal view {
@@ -285,6 +294,17 @@ abstract contract DisputeBypassTrustSurfaceChecks {
     }
 
     function _assertWhitelistSurface() private view {
+        IActivationWhitelistPolicy freshWhitelist = IActivationWhitelistPolicy(expected.freshWhitelistPolicy);
+        address freshAddress = freshWhitelist.owner();
+        if (freshAddress != expected.safe) revert FreshWhitelistPolicyOwnerMismatch(freshAddress);
+        freshAddress = freshWhitelist.escrowRegistry();
+        if (freshAddress != expected.escrowRegistry) revert FreshWhitelistPolicyEscrowRegistryMismatch(freshAddress);
+        freshAddress = freshWhitelist.groupRegistry();
+        if (freshAddress != expected.groupRegistry) revert FreshWhitelistPolicyGroupRegistryMismatch(freshAddress);
+        freshAddress = freshWhitelist.orchestratorRegistry();
+        if (freshAddress != expected.orchestratorRegistry) {
+            revert FreshWhitelistPolicyOrchestratorRegistryMismatch(freshAddress);
+        }
         IActivationWhitelistPolicy targetWhitelist = IActivationWhitelistPolicy(expected.whitelistPolicy);
         address actualAddress = targetWhitelist.owner();
         if (actualAddress != expected.whitelistPolicyOwner) revert WhitelistPolicyOwnerMismatch(actualAddress);
@@ -362,7 +382,7 @@ abstract contract DisputeBypassTrustSurfaceChecks {
         actualAddress = fresh.disputeNullifierRegistry();
         if (actualAddress != expected.disputeRegistry) revert FreshPolicyDisputeRegistryMismatch(actualAddress);
         actualAddress = fresh.whitelistPolicy();
-        if (actualAddress != expected.whitelistPolicy) revert FreshPolicyWhitelistPolicyMismatch(actualAddress);
+        if (actualAddress != expected.freshWhitelistPolicy) revert FreshPolicyWhitelistPolicyMismatch(actualAddress);
         actualAddress = fresh.stakeVault();
         if (actualAddress != expected.freshVault) revert FreshPolicyStakeVaultMismatch(actualAddress);
 
