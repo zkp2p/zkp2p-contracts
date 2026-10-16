@@ -61,10 +61,13 @@ const networkConfigs = [
 const sourceAbiArtifacts = {
   IntentGuardian: "artifacts/contracts/IntentGuardian.sol/IntentGuardian.json",
   OrchestratorV3: "artifacts/contracts/OrchestratorV3.sol/OrchestratorV3.json",
+  OrchestratorV4: "artifacts/contracts/OrchestratorV4.sol/OrchestratorV4.json",
   NullifierRegistryV2:
     "artifacts/contracts/registries/NullifierRegistryV2.sol/NullifierRegistryV2.json",
   UnifiedPaymentVerifierV3:
     "artifacts/contracts/unifiedVerifier/UnifiedPaymentVerifierV3.sol/UnifiedPaymentVerifierV3.json",
+  UnifiedPaymentVerifierV4:
+    "artifacts/contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol/UnifiedPaymentVerifierV4.json",
   AddressGroupRegistry:
     "artifacts/contracts/registries/AddressGroupRegistry.sol/AddressGroupRegistry.json",
   WhitelistPolicy:
@@ -75,11 +78,14 @@ const sourceAbiArtifacts = {
     "artifacts/contracts/registries/NullifierRegistry.sol/NullifierRegistry.json",
   DisputeProtectionPolicy:
     "artifacts/contracts/hooks/DisputeProtectionPolicy.sol/DisputeProtectionPolicy.json",
+  DisputeProtectionPolicyV2:
+    "artifacts/contracts/hooks/DisputeProtectionPolicyV2.sol/DisputeProtectionPolicyV2.json",
   DisputeVerifier:
     "artifacts/contracts/unifiedVerifier/DisputeVerifier.sol/DisputeVerifier.json",
   IntentLifecycleHookV1:
     "artifacts/contracts/hooks/IntentLifecycleHookV1.sol/IntentLifecycleHookV1.json",
   StakeVault: "artifacts/contracts/StakeVault.sol/StakeVault.json",
+  StakeVaultV2: "artifacts/contracts/StakeVaultV2.sol/StakeVaultV2.json",
 };
 const requiredDisputeContracts = [
   "DisputeNullifierRegistry",
@@ -542,13 +548,26 @@ for (const [contractName, artifactPath] of Object.entries(sourceAbiArtifacts)) {
   }
 }
 
+requireFile("types/contracts/interfaces/IIntentSettlementPolicy.d.ts");
+const settlementInterfaceExports = fs.readFileSync(requireFile("types/contracts/interfaces/index.d.ts"), "utf8");
+if (!settlementInterfaceExports.includes('export type { IIntentSettlementPolicy }')) {
+  fail("generated interface types do not export IIntentSettlementPolicy");
+}
+
+if (sourceEsmWrapper.includes("IntentLifecycleHookV2") || sourceCjsWrapper.includes("IntentLifecycleHookV2")) {
+  fail("removed IntentLifecycleHookV2 ABI remains exported");
+}
+
 for (const removedExport of [
   "utils/riskMath.js",
   "types/contracts/RiskManager.js",
   "abis/contracts/RiskManager.json",
+  "abis/contracts/IntentLifecycleHookV2.json",
+  "types/contracts/hooks/IntentLifecycleHookV2.d.ts",
+  "types/contracts/interfaces/IIntentLifecycleHookV2.d.ts",
 ]) {
   if (fs.existsSync(path.join(packageRoot, removedExport))) {
-    fail(`stale noncanonical affine-risk export remains: ${removedExport}`);
+    fail(`stale removed export remains: ${removedExport}`);
   }
 }
 
