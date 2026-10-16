@@ -176,8 +176,9 @@ Current numbered lanes include:
   feeds, then hands ownership to `MULTI_SIG.base`. It was executed on Base on
   2026-10-01 from `88be796` and is still mounted; tagged reruns only verify.
 
-- `45`: cascade stack and O4 deploy-only preparation, retargeted in source and not executed on either
-  network. Deploys multi-controller `StakeVaultV2`, fresh `WhitelistPolicyV4`, `DisputeProtectionPolicyV2`,
+- `45`: cascade stack and O4 deploy-only preparation, executed on Base staging on 2026-10-16
+  from `c635d4c`, with all five deployment records and runtime hashes recorded; unexecuted on Base.
+  Deploys multi-controller `StakeVaultV2`, fresh `WhitelistPolicyV4`, `DisputeProtectionPolicyV2`,
   UPV4 and O4; authorizes the policy with `vault.setController(policy, true)`, passes the fresh `WhitelistPolicyV4` to policy/O4 while the policy reads O4's current relayer registry at settlement, authorizes O4 on the policy, sets O4's settlement policy, matches O3's other configuration and hands ownership to the Safe on Base. O4 remains
   unregistered. Only the pinned superseded staging UPV4 address/runtime may be deleted and redeployed at
   a fresh address; pre-cutover binding checks use that pin independently of the mutable record.
@@ -201,12 +202,13 @@ Current numbered lanes include:
   transactions, nonces 16340–16349; block 52531092 reduced to `active`. Their temporary executor was
   deleted and the lanes then restored to `314298e`, before this cascade retargeting. The August writer,
   UPV4 and all 14 routes/currencies/order were unchanged. Base has executed neither lane.
-  Recording must save the five fresh records and address/runtime pins, update the committed-record test
-  when staging UPV4's JSON changes, restore staging aliases/evidence/predecessor identities to main's
-  August O3 selection, regenerate outputs with the O4 stack by name and update docs. Base records pins
-  after lane 45 before lane-46 preparation and flips `BYPASS_PAYMENT_BINDING_RECORDED.base` after activation.
-  Canonical aliases describe O3; O4 uses `StakeVaultV2` and its other records by name. Current staging
-  aliases/evidence remain bypass until recording; local aliases are MethodScopedStaked. Each live step,
+  The 2026-10-16 recording saves the five fresh records and address/runtime pins, updates committed-record
+  tests and exports the O4 stack by name. Staging aliases/evidence/predecessor identities return to the
+  August O3 selection. O3's live hook still points to the 2026-10-13 bypass hook until lane 46 restores it;
+  live payment routes and the sole NRV2 writer still use the superseded UPV4. Lane 46 remains pending,
+  with O4 unregistered. Base records pins after lane 45 before lane-46 preparation and flips
+  `BYPASS_PAYMENT_BINDING_RECORDED.base` after activation. Canonical aliases describe O3; O4 uses
+  `StakeVaultV2` and its other records by name. Local aliases remain MethodScopedStaked. Each live step,
   recording PR and later RC publication needs separate approval. Restart localhost before a second full deploy.
 
 There is no `26` script. Numbered files are identities, not proof that every

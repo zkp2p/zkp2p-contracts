@@ -34,7 +34,35 @@ export const BYPASS_RECORDED_DEPLOYMENTS: Partial<
     BypassNetwork,
     Record<BypassDeploymentName, { address: string; runtimeCodeHash: string }>
   >
-> = {};
+> = {
+  base_staging: {
+    StakeVaultV2: {
+      address: "0xC9E36A036274530EBd28F97f4eDaC212ADdEf01E",
+      runtimeCodeHash:
+        "0xe8efde7e7809ed1b73058115b4b4dd90ad8f451e888d0aafec7dbc1925e98aff",
+    },
+    WhitelistPolicyV4: {
+      address: "0xd8e22BDfDBD6969d1641E7495294A94aF4893952",
+      runtimeCodeHash:
+        "0x1ece96bb7be9cdd2433a2aad66c9b2d710e3e210a65876e0f8c1e43662ee5653",
+    },
+    DisputeProtectionPolicyV2: {
+      address: "0x9dfB75e0ef06Bf757176c5bE3C9537c6ccdB5215",
+      runtimeCodeHash:
+        "0x4c474034d57bc8b47793cd1dd8cf827572e87ae249527fc17df77a18d89dddf0",
+    },
+    UnifiedPaymentVerifierV4: {
+      address: "0xbB7d595FB1c94AEE11c19162BA4E0c167F4Ab68f",
+      runtimeCodeHash:
+        "0x1567599863bf37213d01941505d25ae1e61422d16bfc2a09a4b698e9a1951465",
+    },
+    OrchestratorV4: {
+      address: "0x338dfB48fAcA1F2dddD0da83Ecb31819b0Cf4612",
+      runtimeCodeHash:
+        "0xacece62784689956be7b22118b5a59c04d420ed5da3c2671e9c211e616785d75",
+    },
+  },
+};
 
 export const BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS = {
   StakeVaultBypass: {

@@ -934,8 +934,7 @@ test("superseded staging pins preserve the executed stack identities", () => {
 });
 
 test(
-  "recorded pins are empty and superseded staging pins match " +
-    "the committed Bypass records",
+  "recorded staging O4 pins match committed records and August O3 aliases",
   () => {
     const {
       BYPASS_DEPLOYMENT_NAMES,
@@ -950,7 +949,46 @@ test(
       require("../deployments/active-dispute-stack.json").networks;
     const pins =
       require("../deployments/bypassDisputeStack.ts").BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS;
-    assert.deepEqual(BYPASS_RECORDED_DEPLOYMENTS, {});
+    assert.deepEqual(BYPASS_RECORDED_DEPLOYMENTS, {
+      base_staging: {
+        StakeVaultV2: {
+          address: "0xC9E36A036274530EBd28F97f4eDaC212ADdEf01E",
+          runtimeCodeHash:
+            "0xe8efde7e7809ed1b73058115b4b4dd90ad8f451e888d0aafec7dbc1925e98aff",
+        },
+        WhitelistPolicyV4: {
+          address: "0xd8e22BDfDBD6969d1641E7495294A94aF4893952",
+          runtimeCodeHash:
+            "0x1ece96bb7be9cdd2433a2aad66c9b2d710e3e210a65876e0f8c1e43662ee5653",
+        },
+        DisputeProtectionPolicyV2: {
+          address: "0x9dfB75e0ef06Bf757176c5bE3C9537c6ccdB5215",
+          runtimeCodeHash:
+            "0x4c474034d57bc8b47793cd1dd8cf827572e87ae249527fc17df77a18d89dddf0",
+        },
+        UnifiedPaymentVerifierV4: {
+          address: "0xbB7d595FB1c94AEE11c19162BA4E0c167F4Ab68f",
+          runtimeCodeHash:
+            "0x1567599863bf37213d01941505d25ae1e61422d16bfc2a09a4b698e9a1951465",
+        },
+        OrchestratorV4: {
+          address: "0x338dfB48fAcA1F2dddD0da83Ecb31819b0Cf4612",
+          runtimeCodeHash:
+            "0xacece62784689956be7b22118b5a59c04d420ed5da3c2671e9c211e616785d75",
+        },
+      },
+    });
+    for (const name of BYPASS_DEPLOYMENT_NAMES) {
+      const record = require(`../deployments/base_staging/${name}.json`);
+      assert.equal(
+        BYPASS_RECORDED_DEPLOYMENTS.base_staging[name].address,
+        record.address
+      );
+    }
+    assert.notEqual(
+      BYPASS_RECORDED_DEPLOYMENTS.base_staging.UnifiedPaymentVerifierV4.address,
+      pins.UnifiedPaymentVerifierV4.address
+    );
 
     const { keccak256 } = require("ethers").utils;
     /** @type {Record<string, { address: string; deployedBytecode: string; solcInputHash: string }>} */
@@ -958,12 +996,15 @@ test(
       StakeVaultBypass: require("../deployments/base_staging/StakeVaultBypass.json"),
       DisputeProtectionPolicyBypass: require("../deployments/base_staging/DisputeProtectionPolicyBypass.json"),
       IntentLifecycleHookV1Bypass: require("../deployments/base_staging/IntentLifecycleHookV1Bypass.json"),
-      UnifiedPaymentVerifierV4: require("../deployments/base_staging/UnifiedPaymentVerifierV4.json"),
+      StakeVaultMethodScoped: require("../deployments/base_staging/StakeVaultMethodScoped.json"),
+      DisputeProtectionPolicy: require("../deployments/base_staging/DisputeProtectionPolicy.json"),
+      IntentLifecycleHookV1: require("../deployments/base_staging/IntentLifecycleHookV1.json"),
       DisputeProtectionPolicyMethodScopedStaked: require("../deployments/base_staging/DisputeProtectionPolicyMethodScopedStaked.json"),
       IntentLifecycleHookV1MethodScopedStaked: require("../deployments/base_staging/IntentLifecycleHookV1MethodScopedStaked.json"),
     };
 
     for (const [name, pin] of Object.entries(pins)) {
+      if (name === "UnifiedPaymentVerifierV4") continue;
       assert.equal(
         pin.address.toLowerCase(),
         stagingRecords[name].address.toLowerCase(),
@@ -971,24 +1012,30 @@ test(
       );
     }
 
-    const bypassNames = /** @type {const} */ ({
-      StakeVault: "StakeVaultBypass",
-      DisputeProtectionPolicy: "DisputeProtectionPolicyBypass",
-      IntentLifecycleHookV1: "IntentLifecycleHookV1Bypass",
+    const canonicalNamesByRecord = /** @type {const} */ ({
+      StakeVault: "StakeVaultMethodScoped",
+      DisputeProtectionPolicy: "DisputeProtectionPolicyMethodScopedStaked",
+      IntentLifecycleHookV1: "IntentLifecycleHookV1MethodScopedStaked",
     });
-    const canonicalNames = /** @type {Array<keyof typeof bypassNames>} */ (
-      Object.keys(bypassNames)
+    const canonicalNames = /** @type {Array<keyof typeof canonicalNamesByRecord>} */ (
+      Object.keys(canonicalNamesByRecord)
     );
+    const augustPins = {
+      StakeVault: BYPASS_EXPECTED_LIVE.base_staging.predecessorVault,
+      DisputeProtectionPolicy: BYPASS_EXPECTED_LIVE.base_staging.predecessorPolicy,
+      IntentLifecycleHookV1: BYPASS_EXPECTED_LIVE.base_staging.predecessorHook,
+    };
     for (const canonical of canonicalNames) {
-      const name = bypassNames[canonical];
-      /** @type {{ address: string, runtimeCodeHash: string }} */
-      const pin = pins[name];
+      const name = canonicalNamesByRecord[canonical];
       const record = stagingRecords[name];
       assert.equal(
         evidence.addresses[canonical].toLowerCase(),
-        pin.address.toLowerCase()
+        record.address.toLowerCase()
       );
-      assert.equal(evidence.runtimeCodeHashes[canonical], pin.runtimeCodeHash);
+      assert.equal(
+        evidence.runtimeCodeHashes[canonical],
+        augustPins[canonical].runtimeCodeHash
+      );
       assert.deepEqual(evidence.deploymentEvidence[canonical], {
         deploymentName: name,
         solcInputHash: record.solcInputHash,
@@ -1007,11 +1054,11 @@ test(
       Array<keyof typeof predecessorEvidence>
     } */ (Object.keys(predecessorEvidence));
     for (const canonical of predecessorNames) {
-      const name = /** @type {const} */ (`${canonical}MethodScopedStaked`);
+      const name = canonical;
       const contract = predecessor.contracts[canonical];
       const recognized = predecessorEvidence[canonical];
       assert.ok(contract);
-      assert.equal(contract.deploymentName, name);
+      assert.equal(contract.deploymentName || canonical, name);
       assert.equal(
         contract.address.toLowerCase(),
         recognized.address.toLowerCase()
@@ -1059,6 +1106,7 @@ test("recorded bypass records use address and runtime pins across build caches",
       },
     ])
   );
+  const original = BYPASS_RECORDED_DEPLOYMENTS.base_staging;
   BYPASS_RECORDED_DEPLOYMENTS.base_staging =
     /** @type {NonNullable<typeof BYPASS_RECORDED_DEPLOYMENTS.base_staging>} */ (
       pins
@@ -1125,7 +1173,8 @@ test("recorded bypass records use address and runtime pins across build caches",
       }
     }
   } finally {
-    delete BYPASS_RECORDED_DEPLOYMENTS.base_staging;
+    if (original === undefined) delete BYPASS_RECORDED_DEPLOYMENTS.base_staging;
+    else BYPASS_RECORDED_DEPLOYMENTS.base_staging = original;
   }
 });
 
@@ -1320,7 +1369,10 @@ test("lane 45 rejects cascade lifecycle activity and removed stake-mode events",
 /** @param {{after: (callback: () => void) => void}} t */
 function verifierReplacementFixture(t) {
   const pins = BYPASS_EXPECTED_LIVE.base_staging;
-  const old = require("../deployments/base_staging/UnifiedPaymentVerifierV4.json");
+  const old = {
+    ...require("../deployments/base_staging/UnifiedPaymentVerifierV4.json"),
+    address: pins.retiredVerifier.address,
+  };
   /** @type {Map<string, any>} */
   const records = new Map([["UnifiedPaymentVerifierV4", old]]);
   const fresh = {
@@ -1577,6 +1629,10 @@ function supersededBindingFixture(t) {
       require(`../deployments/base_staging/${name}.json`),
     ])
   );
+  records.UnifiedPaymentVerifierV4 = {
+    ...records.UnifiedPaymentVerifierV4,
+    address: pins.retiredVerifier.address,
+  };
   /** @type {Array<[Record<string, any>, string, string]>} */
   const hashes = [
     [expected, "nullifierRegistryV2CodeHash", "NullifierRegistryV2"],
