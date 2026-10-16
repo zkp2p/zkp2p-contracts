@@ -24,6 +24,29 @@ contract EscrowV2LifecycleTest is EscrowV2LegacyFixture {
         }
     }
 
+    function test_OneHourDefaultPreservesExistingAndExtendedDeadlines() public {
+        escrow.setIntentExpirationPeriod(6 hours);
+        bytes32 existing = _lock(address(orchestratorMock), 20e6);
+        bytes32 extended = _lock(address(orchestratorMock), 20e6);
+        vm.prank(intentGuardian);
+        escrow.extendIntentExpiry(0, extended, 24 hours);
+
+        escrow.setIntentExpirationPeriod(1 hours);
+        bytes32 fresh = _lock(address(orchestratorMock), 20e6);
+        assertEq(escrow.getDepositIntent(0, existing).expiryTime, block.timestamp + 6 hours);
+        assertEq(escrow.getDepositIntent(0, extended).expiryTime, block.timestamp + 30 hours);
+        assertEq(escrow.getDepositIntent(0, fresh).expiryTime, block.timestamp + 1 hours);
+
+        vm.warp(block.timestamp + 1 hours);
+        escrow.pruneExpiredIntents(0);
+        assertEq(escrow.getDepositIntent(0, fresh).intentHash, fresh);
+        vm.warp(block.timestamp + 1);
+        escrow.pruneExpiredIntents(0);
+        assertEq(escrow.getDepositIntent(0, fresh).intentHash, bytes32(0));
+        assertEq(escrow.getDepositIntent(0, existing).intentHash, existing);
+        assertEq(escrow.getDepositIntent(0, extended).intentHash, extended);
+    }
+
     function test_PruneExpiredIntentsUnlocksLiquidityAndEmits() public {
         bytes32 intentHash = _lock(address(orchestratorMock), 20e6);
         vm.warp(block.timestamp + 3601);
