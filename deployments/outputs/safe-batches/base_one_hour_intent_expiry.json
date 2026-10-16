@@ -1,0 +1,28 @@
+{
+  "version": "1.0",
+  "chainId": "8453",
+  "createdAt": 1792127430581,
+  "meta": {
+    "name": "One-hour intent expiry",
+    "description": "Set the initial intent lifetime to 3600 seconds on both Base escrows. Existing per-intent expiry timestamps and extensions are unchanged. Execute after consumer rollout.",
+    "txBuilderVersion": "1.16.5",
+    "createdFromSafeAddress": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+    "createdFromOwnerAddress": ""
+  },
+  "transactions": [
+    {
+      "to": "0x2f121CDDCA6d652f35e8B3E560f9760898888888",
+      "value": "0",
+      "data": "0x429873490000000000000000000000000000000000000000000000000000000000000e10",
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0x777777779d229cdF3110e9de47943791c26300Ef",
+      "value": "0",
+      "data": "0x429873490000000000000000000000000000000000000000000000000000000000000e10",
+      "contractMethod": null,
+      "contractInputsValues": null
+    }
+  ]
+}
