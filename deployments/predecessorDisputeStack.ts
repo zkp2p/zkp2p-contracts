@@ -27,7 +27,7 @@ type HistoricalDisputeStack = {
   contracts: Record<string, HistoricalContractEvidence>;
 };
 
-// Predecessor of the selected stack: Base OptIn; staging lane-39 MethodScoped.
+// Predecessor of the selected August stack: Base OptIn; staging lane 32.
 export const PREDECESSOR_DISPUTE_STACKS: Record<
   string,
   HistoricalDisputeStack
@@ -81,34 +81,31 @@ export const PREDECESSOR_DISPUTE_STACKS: Record<
   },
   base_staging: {
     activeLifecycleHook: {
-      address: "0x5A7f6cb7397134da1fDEFA7E2D434b4Cf18E56D9",
+      address: "0x19D9F0Fcb08C60D8bd0CD061C34eae27eF8b6e65",
       runtimeCodeHash:
-        "0xb9ce42108c706f9241aeb41ffdc0da6b7584e8482183055452098b2f16c7abfd",
+        "0xba70239e37624f5808e2f79e100e83a17daeb1558f310543187f5d8a121ec367",
     },
     contracts: {
       StakeVault: {
-        deploymentName: "StakeVaultMethodScoped",
-        address: "0x92d7B59E99e1CD2066540Cd2413b8714948b731f",
+        address: "0xEc9f801e2a9Cc22bdc217aD3BB1E3058d0668f43",
         deploymentBytecodeHash:
           "0x3ceac244f2d721614975457b041e95f661feba8ef6bbfc73c23b55aaac27d3e6",
         runtimeCodeHash:
           "0xfd8d2a910b9ac2c55675ae06d0504f9aac43b02b7022755cf229b571156c681d",
       },
       DisputeProtectionPolicy: {
-        deploymentName: "DisputeProtectionPolicyMethodScopedStaked",
-        address: "0x484fA07F085eb66bb7C2b649Ea9d5894b2B6681c",
+        address: "0x21517b7743E727ae47A66FafF93550B689c15020",
         deploymentBytecodeHash:
-          "0x062855429a45681017e1082910a9ebb35e3fc3d57c2a0416f4003c2c1e327706",
+          "0x6146f8eb152848ddfd40d67a152a44230ed783b6c1e768d023b88fc2a09cb38f",
         runtimeCodeHash:
-          "0x70c43bfae8253a6a166f9697ddc27b2d77b4d9841e01fefc2db84037d9a98622",
+          "0x4e6617a94819ad15693289b173a9a66a78cfe1dd706f6b4fdc5a5f6ad6a32971",
       },
       IntentLifecycleHookV1: {
-        deploymentName: "IntentLifecycleHookV1MethodScopedStaked",
-        address: "0x5A7f6cb7397134da1fDEFA7E2D434b4Cf18E56D9",
+        address: "0x19D9F0Fcb08C60D8bd0CD061C34eae27eF8b6e65",
         deploymentBytecodeHash:
-          "0x22f175667caa0501ef498c0124a09393344ff254cdd9fea65fa0642ed9a4314c",
+          "0xad298e1829958f431833bf1c0e53311f27e95dd29806c4d55aa75163e6dbcc21",
         runtimeCodeHash:
-          "0xb9ce42108c706f9241aeb41ffdc0da6b7584e8482183055452098b2f16c7abfd",
+          "0xba70239e37624f5808e2f79e100e83a17daeb1558f310543187f5d8a121ec367",
       },
       DisputeVerifier: {
         address: "0x973578148c5Fd49b9f68B50B26066555325AC708",
