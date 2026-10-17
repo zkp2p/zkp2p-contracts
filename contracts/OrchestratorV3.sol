@@ -23,6 +23,8 @@ import { IPaymentVerifier } from "./interfaces/IPaymentVerifier.sol";
 import { IPaymentVerifierRegistry } from "./interfaces/IPaymentVerifierRegistry.sol";
 import { IRelayerRegistry } from "./interfaces/IRelayerRegistry.sol";
 import { ReferralFeeLib } from "./lib/ReferralFeeLib.sol";
+import { IStakeReferralLifecycleHook } from "./interfaces/IStakeReferralLifecycleHook.sol";
+import { IDisputeProtectionPolicy } from "./interfaces/IDisputeProtectionPolicy.sol";
 
 /**
  * @title OrchestratorV3
@@ -62,6 +64,15 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     // Governance-selected lifecycle hook; snapshotted per intent at signal.
     IIntentLifecycleHook public lifecycleHook;
     mapping(bytes32 => IIntentLifecycleHook) internal intentLifecycleHooks;
+
+    struct StakeReferralConfig {
+        IStakeReferralLifecycleHook hook;
+        IDisputeProtectionPolicy policy;
+        address feeSource;
+        uint256 l1ReferralFee;
+    }
+    StakeReferralConfig public stakeReferralConfig;
+    mapping(bytes32 => StakeReferral) internal intentStakeReferrals;
 
     // Contract references
     IEscrowRegistry public escrowRegistry;                              // Registry of escrow contracts
@@ -180,6 +191,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
 
         if (address(snapshottedLifecycleHook) != address(0)) {
             snapshottedLifecycleHook.onIntentSignaled(intentHash);
+            _snapshotStakeReferral(intentHash, snapshottedLifecycleHook);
         }
         emit IntentLifecycleHookSnapshotted(intentHash, address(snapshottedLifecycleHook));
 
@@ -244,6 +256,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         // Snapshot manager fee terms before pruning (pruning deletes the mappings).
         address managerFeeRecipient = intentManagerFeeRecipient[_params.intentHash];
         uint256 managerFee = intentManagerFee[_params.intentHash];
+        StakeReferral memory stakeReferral = intentStakeReferrals[_params.intentHash];
         
         address verifier = paymentVerifierRegistry.getVerifier(intent.paymentMethod);
         if (verifier == address(0)) revert PaymentMethodDoesNotExist(intent.paymentMethod);
@@ -272,6 +285,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
             _params.postIntentHookData,
             managerFeeRecipient,
             managerFee,
+            stakeReferral,
             false
         );
     }
@@ -296,6 +310,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         // Snapshot manager fee terms before pruning (pruning deletes the mappings).
         address managerFeeRecipient = intentManagerFeeRecipient[_intentHash];
         uint256 managerFee = intentManagerFee[_intentHash];
+        StakeReferral memory stakeReferral = intentStakeReferrals[_intentHash];
         
         // Effects
         _pruneIntent(_intentHash);
@@ -311,6 +326,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
             "",
             managerFeeRecipient,
             managerFee,
+            stakeReferral,
             true
         );
     }
@@ -370,6 +386,27 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     }
 
     /* ============ Governance Functions ============ */
+
+    /**
+     * @notice Sets the existing L1 referral rate for buyers backed by an external stake owner.
+     * @dev The fee comes from the specified Peer referral entry, never from additional buyer charges or other
+     * referrals. Configuration applies only to the exact hook and future signals. Governance must keep this rate
+     * aligned with the referral program's L1 rate. The dispute policy is derived from the hook, not supplied separately.
+     * @param _hook Canonical lifecycle hook that locks collateral through its dispute policy.
+     * @param _feeSource Peer service-fee recipient whose allocation funds the stake referral.
+     * @param _l1ReferralFee L1 rate in 1e18 precise units (40 bps = 4e15); zero disables future stake referrals.
+     */
+    function setStakeReferralConfig(IStakeReferralLifecycleHook _hook, address _feeSource, uint256 _l1ReferralFee)
+        external
+        onlyOwner
+    {
+        if (address(_hook).code.length == 0) revert InvalidLifecycleHook(address(_hook));
+        if (_feeSource == address(0)) revert ZeroAddress();
+        if (_l1ReferralFee > ReferralFeeLib.MAX_REFERRER_FEE) revert InvalidStakeReferralFee(_l1ReferralFee);
+        IDisputeProtectionPolicy policy = _hook.disputeProtectionPolicy();
+        stakeReferralConfig = StakeReferralConfig(_hook, policy, _feeSource, _l1ReferralFee);
+        emit StakeReferralConfigured(address(_hook), _feeSource, _l1ReferralFee);
+    }
 
     /**
      * @notice GOVERNANCE ONLY: Updates the global lifecycle hook used by future intents.
@@ -495,7 +532,46 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         return intentLifecycleHooks[_intentHash];
     }
 
+    /**
+     * @inheritdoc IOrchestratorV3
+     */
+    function getIntentStakeReferral(bytes32 _intentHash) external view returns (StakeReferral memory) {
+        return intentStakeReferrals[_intentHash];
+    }
+
     /* ============ Internal Functions ============ */
+
+    function _snapshotStakeReferral(bytes32 _intentHash, IIntentLifecycleHook _hook) internal {
+        StakeReferralConfig memory config = stakeReferralConfig;
+        if (address(config.hook) != address(_hook) || config.l1ReferralFee == 0) return;
+        IDisputeProtectionPolicy.DisputeProtectionIntent memory protection =
+            config.policy.getDisputeProtectionIntent(_intentHash);
+        if (
+            protection.status == IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE
+                || protection.stakeOwner == protection.taker
+        ) return;
+
+        IReferralFee.ReferralFee[] storage fees = intents[_intentHash].referralFees;
+        uint256 availableFee;
+        bool recipientExists;
+        for (uint256 feeIndex = 0; feeIndex < fees.length; ++feeIndex) {
+            if (fees[feeIndex].recipient == config.feeSource) availableFee = fees[feeIndex].fee;
+            if (fees[feeIndex].recipient == protection.stakeOwner) recipientExists = true;
+        }
+        if (availableFee < config.l1ReferralFee) {
+            revert InsufficientStakeReferralBudget(config.feeSource, availableFee, config.l1ReferralFee);
+        }
+        if (
+            !recipientExists && availableFee > config.l1ReferralFee
+                && fees.length == ReferralFeeLib.MAX_REFERRAL_FEE_RECIPIENTS
+        ) {
+            revert IReferralFee.ReferralFeeCountExceedsMaximum(
+                fees.length + 1, ReferralFeeLib.MAX_REFERRAL_FEE_RECIPIENTS
+            );
+        }
+        intentStakeReferrals[_intentHash] = StakeReferral(protection.stakeOwner, config.feeSource, config.l1ReferralFee);
+        emit IntentStakeReferralSnapshotted(_intentHash, protection.stakeOwner, config.feeSource, config.l1ReferralFee);
+    }
 
     /**
      * @notice Prunes a cancelled (cancel / escrow prune / orphan cleanup) intent, then executes the fail-closed
@@ -636,6 +712,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         delete intents[_intentHash];
         delete intentManagerFeeRecipient[_intentHash];
         delete intentManagerFee[_intentHash];
+        delete intentStakeReferrals[_intentHash];
 
         emit IntentPruned(_intentHash);
     }
@@ -649,7 +726,8 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         Intent memory _intent,
         uint256 _releaseAmount,
         address _managerFeeRecipient,
-        uint256 _managerFee
+        uint256 _managerFee,
+        StakeReferral memory _stakeReferral
     ) internal returns (uint256 netFees) {
         uint256 protocolFeeAmount;
         uint256 referralFeeAmount;
@@ -661,13 +739,28 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
             _token.safeTransfer(protocolFeeRecipient, protocolFeeAmount);
         }
 
+        uint256 stakeReferralAmount = (_releaseAmount * _stakeReferral.fee) / PRECISE_UNIT;
+        bool stakeReferralPaid;
+
         // Calculate referral fees (taken from taker) - based on release amount
         for (uint256 i = 0; i < _intent.referralFees.length; ++i) {
             IReferralFee.ReferralFee memory referralFee = _intent.referralFees[i];
             uint256 feeAmount = (_releaseAmount * referralFee.fee) / PRECISE_UNIT;
             referralFeeAmount += feeAmount;
+            // Split the already-rounded donor amount so the buyer's exact net payout is unchanged.
+            if (referralFee.recipient == _stakeReferral.feeSource) feeAmount -= stakeReferralAmount;
+            if (referralFee.recipient == _stakeReferral.recipient) {
+                feeAmount += stakeReferralAmount;
+                stakeReferralPaid = true;
+            }
+            // A fully allocated donor has no payout. Preserve the ordinary fee path's zero-rounding behavior.
+            if (feeAmount == 0 && referralFee.recipient == _stakeReferral.feeSource) continue;
             _token.safeTransfer(referralFee.recipient, feeAmount);
             emit IntentReferralFeeDistributed(_intentHash, referralFee.recipient, feeAmount);
+        }
+        if (!stakeReferralPaid && stakeReferralAmount > 0) {
+            _token.safeTransfer(_stakeReferral.recipient, stakeReferralAmount);
+            emit IntentReferralFeeDistributed(_intentHash, _stakeReferral.recipient, stakeReferralAmount);
         }
 
         // Calculate manager fee (taken from taker) - based on release amount
@@ -694,12 +787,15 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         bytes memory _postIntentHookData,
         address _managerFeeRecipient,
         uint256 _managerFee,
+        StakeReferral memory _stakeReferral,
         bool _isManualRelease
     ) internal {
         IIntentLifecycleHook snapshottedLifecycleHook = intentLifecycleHooks[_intentHash];
         delete intentLifecycleHooks[_intentHash];
 
-        uint256 netFees = _calculateAndTransferFees(_token, _intentHash, _intent, _releaseAmount, _managerFeeRecipient, _managerFee);
+        uint256 netFees = _calculateAndTransferFees(
+            _token, _intentHash, _intent, _releaseAmount, _managerFeeRecipient, _managerFee, _stakeReferral
+        );
         uint256 netAmount = _releaseAmount - netFees;
 
         if (address(snapshottedLifecycleHook) != address(0)) {
