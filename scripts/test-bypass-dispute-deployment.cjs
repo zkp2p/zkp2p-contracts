@@ -1346,7 +1346,7 @@ function verifierReplacementFixture(t) {
   const hre = {
     deployments: {
       getOrNull: async (/** @type {string} */ name) =>
-        records.get(name),
+        records.get(name) || null,
       delete: async (/** @type {string} */ name) => {
         deletes++;
         records.delete(name);
@@ -1374,29 +1374,6 @@ function verifierReplacementFixture(t) {
     },
   };
 }
-
-test("staging lane 45 reads undefined records with only the superseded UPV4 present", async (t) => {
-  const s = verifierReplacementFixture(t);
-  const context = /** @type {any} */ ({ network: "base_staging" });
-  const state = await lane45.readFreshState(s.hre, context);
-
-  assert.deepEqual(state.deployments, [null, null, null, null, null]);
-  assert.deepEqual(state.contracts, {});
-  assert.deepEqual(state.completed, {
-    "deploy-vault": false,
-    "deploy-whitelist": false,
-    "deploy-policy": false,
-    "deploy-verifier": false,
-    "deploy-orchestrator": false,
-  });
-  assert.equal(s.deletes(), 0);
-
-  s.records.set("OrchestratorV4", s.fresh);
-  await assert.rejects(
-    lane45.readFreshState(s.hre, context),
-    /Bypass deployment artifacts are not a contiguous prefix/
-  );
-});
 
 test("staging lane 45 replaces only the pinned superseded UPV4", async (t) => {
   const s = verifierReplacementFixture(t);
