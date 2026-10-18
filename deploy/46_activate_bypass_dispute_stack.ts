@@ -112,7 +112,6 @@ const RECORD_NAMES = {
   escrowRegistry: "EscrowRegistry",
   relayerRegistry: "RelayerRegistry",
   whitelistPolicy: "WhitelistPolicyMethodScoped",
-  freshWhitelistPolicy: "WhitelistPolicyV4",
   groupRegistry: "AddressGroupRegistry",
 } as const;
 type RecordKey = keyof typeof RECORD_NAMES;
@@ -554,7 +553,6 @@ export async function readBypassActivationSnapshot(
     a.orchestratorRegistry
   );
   const whitelist = await at("WhitelistPolicy", a.whitelistPolicy);
-  const freshWhitelist = await at("WhitelistPolicy", a.freshWhitelistPolicy);
   const attestation = await at(
     context.simpleAttestation
       ? "SimpleAttestationVerifier"
@@ -690,12 +688,6 @@ export async function readBypassActivationSnapshot(
     },
     orchestratorRegistry: {
       owner: await address(orchestratorRegistry, "owner"),
-    },
-    freshWhitelistPolicy: {
-      owner: await address(freshWhitelist, "owner"),
-      escrowRegistry: await address(freshWhitelist, "escrowRegistry"),
-      groupRegistry: await address(freshWhitelist, "groupRegistry"),
-      orchestratorRegistry: await address(freshWhitelist, "orchestratorRegistry"),
     },
     whitelistPolicy: {
       owner: await address(whitelist, "owner"),
@@ -1106,7 +1098,7 @@ export async function prepareBaseCutoverBatch(
     expected.addresses.safe
   );
   const unsigned: Omit<BypassActivationBatchManifest, "manifestSha256"> = {
-    version: 11,
+    version: 10,
     kind: "dispute-bypass-cutover",
     chainId: 8453,
     safe: expected.addresses.safe,

@@ -47,7 +47,6 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
     DisputeProtectionPolicyV2 internal freshPolicy;
     AddressGroupRegistry internal groupRegistry;
     WhitelistPolicy internal whitelistPolicy;
-    WhitelistPolicy internal freshWhitelistPolicy;
     IntentLifecycleHookV1 internal predecessorHook;
     OrchestratorV4 internal orchestratorV4;
 
@@ -68,10 +67,8 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
             new DisputeProtectionPolicy(address(this), predecessorVault, disputeVerifier, disputeRegistry);
         groupRegistry = new AddressGroupRegistry();
         whitelistPolicy = new WhitelistPolicy(groupRegistry, escrowRegistry, orchestratorRegistry);
-        freshWhitelistPolicy = new WhitelistPolicy(groupRegistry, escrowRegistry, orchestratorRegistry);
-        freshPolicy = new DisputeProtectionPolicyV2(
-            address(this), freshVault, disputeVerifier, disputeRegistry, freshWhitelistPolicy
-        );
+        freshPolicy =
+            new DisputeProtectionPolicyV2(address(this), freshVault, disputeVerifier, disputeRegistry, whitelistPolicy);
         predecessorHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, predecessorPolicy);
         predecessorVault.initializeController(address(predecessorPolicy));
         freshVault.setController(address(freshPolicy), true);
@@ -88,7 +85,7 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
             address(relayerRegistry),
             orchestrator.protocolFee(),
             orchestrator.protocolFeeRecipient(),
-            freshWhitelistPolicy
+            whitelistPolicy
         );
         freshPolicy.setOrchestratorAuthorization(address(orchestratorV4), true);
         orchestratorV4.setSettlementPolicy(freshPolicy);
@@ -121,7 +118,6 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         disputeRegistry.transferOwnership(safe);
         orchestrator.transferOwnership(safe);
         whitelistPolicy.transferOwnership(safe);
-        freshWhitelistPolicy.transferOwnership(safe);
         attestationVerifier.transferOwnership(safe);
         _transfer(predecessorVault, true);
         _transfer(predecessorPolicy, true);
@@ -167,7 +163,7 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
             address(relayerRegistry),
             orchestrator.protocolFee(),
             orchestrator.protocolFeeRecipient(),
-            freshWhitelistPolicy
+            whitelistPolicy
         );
         freshPolicy.setOrchestratorAuthorization(address(orchestratorV4), true);
         orchestratorV4.setSettlementPolicy(freshPolicy);
@@ -517,30 +513,6 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         postcondition.assertPostconditions();
     }
 
-    function test_GuardRejectsReusedWhitelist() public {
-        BypassTrustSurface memory surface = _surface();
-        surface.freshWhitelistPolicy = address(whitelistPolicy);
-        _expectConstructorReverts(
-            surface, abi.encodeWithSelector(DisputeBypassTrustSurfaceChecks.FreshWhitelistPolicyNotDistinct.selector)
-        );
-    }
-
-    function test_GuardRejectsFreshWhitelistDrift() public {
-        DisputeBypassCutoverGuard guard = _guard(_surface(), true, true);
-        string[4] memory getters = ["owner()", "escrowRegistry()", "groupRegistry()", "orchestratorRegistry()"];
-        bytes4[4] memory errors = [
-            DisputeBypassTrustSurfaceChecks.FreshWhitelistPolicyOwnerMismatch.selector,
-            DisputeBypassTrustSurfaceChecks.FreshWhitelistPolicyEscrowRegistryMismatch.selector,
-            DisputeBypassTrustSurfaceChecks.FreshWhitelistPolicyGroupRegistryMismatch.selector,
-            DisputeBypassTrustSurfaceChecks.FreshWhitelistPolicyOrchestratorRegistryMismatch.selector
-        ];
-        for (uint256 index; index < getters.length; index++) {
-            vm.mockCall(address(freshWhitelistPolicy), abi.encodeWithSignature(getters[index]), abi.encode(other));
-            _expectReady(guard, abi.encodeWithSelector(errors[index], other));
-            vm.clearMockedCalls();
-        }
-    }
-
     function test_GuardRejectsWhitelistOwnerDrift() public {
         DisputeBypassCutoverGuard guard = _guard(_surface(), true, true);
         vm.prank(safe);
@@ -635,7 +607,6 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         surface.protocolFeeRecipient = protocolFeeRecipient;
         surface.allowMultipleIntents = orchestrator.allowMultipleIntents();
         surface.whitelistPolicy = address(whitelistPolicy);
-        surface.freshWhitelistPolicy = address(freshWhitelistPolicy);
         surface.groupRegistry = address(groupRegistry);
         surface.attestationVerifier = address(attestationVerifier);
         surface.witnesses = new address[](1);

@@ -490,27 +490,18 @@ Manual release skips it. Off-chain v1 convention is
 Use a cryptographically random salt per intent and keep it off-chain with the conditions supplied
 to the gating service and attestor.
 
-Lanes 45/46 deploy StakeVaultV2, WhitelistPolicyV4, DisputeProtectionPolicyV2, UPV4 and O4 without a lifecycle hook.
+Lanes 45/46 deploy StakeVaultV2, DisputeProtectionPolicyV2, UPV4 and O4 without a lifecycle hook.
 Lane 45 authorizes the policy on the vault immediately, without an accept-controller step.
-They pass a fresh `WhitelistPolicyV4` to O4 and the policy, set O4's policy, authorize O4 on the policy,
-and register O4 last. `WhitelistPolicyV4` uses unchanged `WhitelistPolicy.sol` with the same
-AddressGroupRegistry, EscrowRegistry and OrchestratorRegistry as `WhitelistPolicyMethodScoped`.
-No deposit entries are seeded: existing deposits start with whitelist off on O4, while O3 and its
-August hook keep `WhitelistPolicyMethodScoped` and its settings. Merchant groups remain available
-when a depositor enables them on the fresh instance. The deployer retains ownership on staging/local;
-Base transfers its single-step Ownable ownership directly to the Safe during lane 45.
-The policy reads the calling orchestrator's current relayer registry at settlement, so O4 registry updates immediately govern bypass for existing and new intents.
+They pass the same whitelist to O4 and the policy, set O4's policy, authorize O4 on the policy,
+and register O4 last. The policy reads the calling orchestrator's current relayer registry at
+settlement, so O4 registry updates immediately govern bypass for existing and new intents.
 Deployment checks, activation snapshots and the on-chain guard retain O4's pinned registry check.
-Depositor opt-outs are allowed before activation. Bypass batch manifest version 11 records the
-selected policy's vault-controller authorization, O4 authorization, fresh whitelist ownership/registries
-and the separate O3/O4 whitelist bindings, without a separate policy registry; older manifests are rejected. Historical O3 predecessor checks
+Depositor opt-outs are allowed before activation. Bypass batch manifest version 10 records the
+selected policy's vault-controller authorization, O4 authorization and both whitelist dependencies,
+without a separate policy registry; older manifests are rejected. Historical O3 predecessor checks
 remain separate. The package drops the removed hook ABI. Its source ABI catalog does not export interface ABIs;
 generated TypeChain interface exports include `IIntentSettlementPolicy` and `IStakeVaultV2`.
 The source ABI catalog exports `StakeVaultV2` separately from the August `StakeVault`.
 
 The cross-repo attestor smoke is gated by `ATTESTOR_POLICY_SMOKE_ROOT`; its signed payload
 contains word 0 (zero for pay now, the attested window for protected settlements).
-
-`WhitelistPolicyV4` is exported as its own network address key and uses the existing `WhitelistPolicy`
-ABI. It never replaces the canonical `WhitelistPolicy` alias used by O3. Until a network's lane-45
-recording exports the new deployment, this key is zero (including Base until its separately approved run).

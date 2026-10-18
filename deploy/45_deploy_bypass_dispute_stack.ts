@@ -678,44 +678,6 @@ export async function assertLiveSharedState(
   );
 }
 
-export async function readWhitelistDependencies(
-  hre: HardhatRuntimeEnvironment
-): Promise<{
-  predecessorWhitelistPolicy: string;
-  groupRegistry: string;
-  escrowRegistry: string;
-  orchestratorRegistry: string;
-}> {
-  const record = await hre.deployments.get("WhitelistPolicyMethodScoped");
-  const fields = ["groupRegistry", "escrowRegistry", "orchestratorRegistry"] as const;
-  requireState(
-    record.args?.length === fields.length &&
-      record.args.every((arg) => typeof arg === "string" && utils.isAddress(arg)),
-    "WhitelistPolicyMethodScoped constructor args are invalid"
-  );
-  const whitelist = await hre.ethers.getContractAt(
-    "WhitelistPolicy", record.address
-  );
-  const network = hre.deployments.getNetworkName();
-  const expected = isBypassLiveNetwork(network) ? EXPECTED_LIVE[network] : null;
-  const dependencies = {
-    groupRegistry: record.args![0] as string,
-    escrowRegistry: record.args![1] as string,
-    orchestratorRegistry: record.args![2] as string,
-  };
-  for (const field of fields) {
-    requireState(
-      sameAddress(await whitelist[field](), dependencies[field]) &&
-        (!expected || sameAddress(
-          dependencies[field],
-          field === "groupRegistry" ? expected.addressGroupRegistry : expected[field]
-        )),
-      `WhitelistPolicyMethodScoped ${field} constructor dependency drifted`
-    );
-  }
-  return { predecessorWhitelistPolicy: record.address, ...dependencies };
-}
-
 type StackContext = {
   network: string;
   deployer: string;
@@ -724,8 +686,7 @@ type StackContext = {
   disputeVerifier: string;
   disputeNullifierRegistry: string;
   orchestratorRegistry: string;
-  predecessorWhitelistPolicy: string;
-  groupRegistry: string;
+  whitelistPolicy: string;
   nullifierRegistryV2: string;
   attestationVerifier: string;
   paymentMethods: string[];
@@ -743,7 +704,6 @@ type Lane45State = {
   completed: boolean[];
   deployments: Array<Deployment | null>;
   contracts: {
-    whitelist?: Contract;
     vault?: Contract;
     policy?: Contract;
     verifier?: Contract;
@@ -751,10 +711,7 @@ type Lane45State = {
   };
 };
 
-function orchestratorArgs(
-  context: StackContext,
-  whitelistPolicy: string
-): unknown[] {
+function orchestratorArgs(context: StackContext): unknown[] {
   return [
     context.deployer,
     context.chainId,
@@ -763,7 +720,7 @@ function orchestratorArgs(
     context.relayerRegistry,
     context.protocolFee,
     context.protocolFeeRecipient,
-    whitelistPolicy,
+    context.whitelistPolicy,
   ];
 }
 
@@ -780,12 +737,14 @@ async function liveContext(
     stakeToken: pins.stakeToken,
     disputeVerifier: pins.disputeVerifier.address,
     disputeNullifierRegistry: pins.disputeNullifierRegistry.address,
-    ...(await readWhitelistDependencies(hre)),
+    orchestratorRegistry: expected.orchestratorRegistry,
+    whitelistPolicy: pins.whitelistPolicy.address,
     nullifierRegistryV2: expected.nullifierRegistryV2,
     attestationVerifier: expected.attestationVerifier,
     paymentMethods: pins.paymentMethods.map(paymentMethodHash),
     transferOwnership: network === "base",
     chainId: pins.chainId,
+    escrowRegistry: expected.escrowRegistry,
     paymentVerifierRegistry: expected.paymentVerifierRegistry,
     relayerRegistry: expected.relayerRegistry,
     protocolFee: "0",
@@ -843,7 +802,6 @@ async function readFreshState(
   }
   const [
     vaultRecord,
-    whitelistRecord,
     policyRecord,
     verifierRecord,
     orchestratorRecord,
@@ -852,34 +810,10 @@ async function readFreshState(
   const contracts: Lane45State["contracts"] = {};
   const completed: Record<string, boolean> = {
     "deploy-vault": Boolean(vaultRecord),
-    "deploy-whitelist": Boolean(whitelistRecord),
     "deploy-policy": Boolean(policyRecord),
     "deploy-verifier": Boolean(verifierRecord),
     "deploy-orchestrator": Boolean(orchestratorRecord),
   };
-  if (whitelistRecord) {
-    requireState(
-      !sameAddress(whitelistRecord.address, context.predecessorWhitelistPolicy),
-      "WhitelistPolicyV4 reused WhitelistPolicyMethodScoped"
-    );
-    const whitelist = (contracts.whitelist = await hre.ethers.getContractAt(
-      "WhitelistPolicy", whitelistRecord.address
-    ));
-    for (const field of ["groupRegistry", "escrowRegistry", "orchestratorRegistry"] as const) {
-      requireState(
-        sameAddress(await whitelist[field](), context[field]),
-        `Fresh WhitelistPolicyV4 ${field} drifted`
-      );
-    }
-    const owner: string = await whitelist.owner();
-    requireState(
-      sameAddress(owner, context.deployer) ||
-        (context.transferOwnership && sameAddress(owner, context.governance)),
-      "Fresh WhitelistPolicyV4 owner drifted"
-    );
-    completed["transfer-whitelist-owner"] =
-      context.transferOwnership && sameAddress(owner, context.governance);
-  }
   if (vaultRecord) {
     const vault = (contracts.vault = await hre.ethers.getContractAt(
       "StakeVaultV2",
@@ -915,7 +849,7 @@ async function readFreshState(
     ));
     requireState(
       sameAddress(await policy.stakeVault(), vaultRecord!.address) &&
-        sameAddress(await policy.whitelistPolicy(), whitelistRecord!.address) &&
+        sameAddress(await policy.whitelistPolicy(), context.whitelistPolicy) &&
         sameAddress(await policy.disputeVerifier(), context.disputeVerifier) &&
         sameAddress(
           await policy.disputeNullifierRegistry(),
@@ -1001,10 +935,7 @@ async function readFreshState(
       "protocolFeeRecipient",
     ] as const) {
       requireState(
-        sameAddress(
-          await orchestrator[field](),
-          field === "whitelistPolicy" ? whitelistRecord!.address : context[field]
-        ),
+        sameAddress(await orchestrator[field](), context[field]),
         `Fresh OrchestratorV4 ${field} drifted`
       );
     }
@@ -1099,10 +1030,7 @@ async function deployLiveBypassStack(
     const state = await readLane45State(hre, network);
     const prefix = classifyLane45Prefix(network, state.completed);
     if (prefix.nextStep === null) {
-      await assertFreshPolicyUnused(
-        hre,
-        state.deployments[BYPASS_DEPLOYMENT_NAMES.indexOf("DisputeProtectionPolicyV2")]
-      );
+      await assertFreshPolicyUnused(hre, state.deployments[1]);
       console.log(`=== ${network} bypass dispute stack prepared ===`);
       return;
     }
@@ -1125,19 +1053,13 @@ export async function executeLane45Step(
       context.stakeToken,
       constants.AddressZero,
     ]);
-  } else if (step === "deploy-whitelist") {
-    await deployFresh(hre, "WhitelistPolicyV4", context.deployer, [
-      context.groupRegistry,
-      context.escrowRegistry,
-      context.orchestratorRegistry,
-    ]);
   } else if (step === "deploy-policy") {
     await deployFresh(hre, "DisputeProtectionPolicyV2", context.deployer, [
       context.deployer,
       state.contracts.vault!.address,
       context.disputeVerifier,
       context.disputeNullifierRegistry,
-      state.contracts.whitelist!.address,
+      context.whitelistPolicy,
     ]);
   } else if (step === "authorize-controller") {
     await authorizeBypassController(
@@ -1162,7 +1084,7 @@ export async function executeLane45Step(
       hre,
       "OrchestratorV4",
       context.deployer,
-      orchestratorArgs(context, state.contracts.whitelist!.address)
+      orchestratorArgs(context)
     );
   } else if (step === "authorize-orchestrator") {
     await (
@@ -1192,10 +1114,6 @@ export async function executeLane45Step(
   } else if (step === "transfer-policy-owner") {
     await (
       await state.contracts.policy!.transferOwnership(context.governance)
-    ).wait();
-  } else if (step === "transfer-whitelist-owner") {
-    await (
-      await state.contracts.whitelist!.transferOwnership(context.governance)
     ).wait();
   } else if (step === "transfer-verifier-owner") {
     await (
@@ -1290,7 +1208,10 @@ async function localContext(
     disputeNullifierRegistry: (
       await hre.deployments.get("DisputeNullifierRegistry")
     ).address,
-    ...(await readWhitelistDependencies(hre)),
+    orchestratorRegistry: (await hre.deployments.get("OrchestratorRegistry"))
+      .address,
+    whitelistPolicy: (await hre.deployments.get("WhitelistPolicyMethodScoped"))
+      .address,
     nullifierRegistryV2: (await hre.deployments.get("NullifierRegistryV2"))
       .address,
     attestationVerifier: (
@@ -1300,23 +1221,19 @@ async function localContext(
     paymentMethods: methods,
     transferOwnership: false,
     chainId: (await hre.ethers.provider.getNetwork()).chainId,
+    escrowRegistry: await orchestratorV3.escrowRegistry(),
     paymentVerifierRegistry: await orchestratorV3.paymentVerifierRegistry(),
     relayerRegistry: await orchestratorV3.relayerRegistry(),
     protocolFee: (await orchestratorV3.protocolFee()).toString(),
     protocolFeeRecipient: await orchestratorV3.protocolFeeRecipient(),
     allowMultipleIntents: await orchestratorV3.allowMultipleIntents(),
   };
-  requireState(
-    sameAddress(context.escrowRegistry, await orchestratorV3.escrowRegistry()),
-    "Local predecessor whitelist escrow registry differs from OrchestratorV3"
-  );
   return context;
 }
 
 function localSteps(context: StackContext): string[] {
   return [
     "deploy-vault",
-    "deploy-whitelist",
     "deploy-policy",
     "authorize-controller",
     "deploy-verifier",
@@ -1358,17 +1275,12 @@ async function deployLocalBypassStack(
     context.stakeToken,
     constants.AddressZero,
   ]);
-  const whitelistRecord = await deploy("WhitelistPolicyV4", [
-    context.groupRegistry,
-    context.escrowRegistry,
-    context.orchestratorRegistry,
-  ]);
   const policyRecord = await deploy("DisputeProtectionPolicyV2", [
     deployer,
     vaultRecord.address,
     context.disputeVerifier,
     context.disputeNullifierRegistry,
-    whitelistRecord.address,
+    context.whitelistPolicy,
   ]);
   let state = await readFreshState(hre, context);
   while (!state.completed["authorize-controller"]) {
@@ -1392,7 +1304,7 @@ async function deployLocalBypassStack(
       await waitForDeploymentDelay(hre);
     }
   }
-  await deploy("OrchestratorV4", orchestratorArgs(context, whitelistRecord.address));
+  await deploy("OrchestratorV4", orchestratorArgs(context));
   state = await readFreshState(hre, context);
   if (!state.completed["authorize-orchestrator"]) {
     await (

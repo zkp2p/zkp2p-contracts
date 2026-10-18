@@ -114,7 +114,6 @@ function expected(network = "base") {
     relayerRegistry: address(18),
     protocolFeeRecipient: address(19),
     whitelistPolicy: address(20),
-    freshWhitelistPolicy: address(28),
     groupRegistry: address(21),
     attestationVerifier: address(22),
     disputeVerifier: address(23),
@@ -174,7 +173,7 @@ function snapshot(wanted, k = 0) {
       disputeVerifier: a.disputeVerifier,
       disputeNullifierRegistry: a.disputeRegistry,
       authorizedOrchestrators: [a.orchestratorV4],
-      whitelistPolicy: a.freshWhitelistPolicy,
+      whitelistPolicy: a.whitelistPolicy,
     },
     verifier: {
       owner,
@@ -230,7 +229,7 @@ function snapshot(wanted, k = 0) {
       paused: false,
       chainId: wanted.chainId,
       settlementPolicy: a.freshPolicy,
-      whitelistPolicy: a.freshWhitelistPolicy,
+      whitelistPolicy: a.whitelistPolicy,
       escrowRegistry: a.escrowRegistry,
       paymentVerifierRegistry: a.paymentVerifierRegistry,
       relayerRegistry: a.relayerRegistry,
@@ -238,12 +237,6 @@ function snapshot(wanted, k = 0) {
       protocolFeeRecipient: a.protocolFeeRecipient,
       allowMultipleIntents: wanted.allowMultipleIntents,
       registered: row.o4Registered,
-    },
-    freshWhitelistPolicy: {
-      owner,
-      escrowRegistry: a.escrowRegistry,
-      groupRegistry: a.groupRegistry,
-      orchestratorRegistry: a.orchestratorRegistry,
     },
     whitelistPolicy: {
       owner: wanted.deployer,
@@ -666,8 +659,6 @@ test("bypass trust surface round-trips guard and postcondition constructor ABIs"
   state.whitelistPolicy.owner = wanted.addresses.safe;
   const surface = model.buildBypassTrustSurface(wanted, state);
   assert.equal(surface.whitelistPolicyOwner, state.whitelistPolicy.owner);
-  assert.equal(surface.freshWhitelistPolicy, wanted.addresses.freshWhitelistPolicy);
-  assert.notEqual(surface.freshWhitelistPolicy, surface.whitelistPolicy);
   assert.deepEqual(surface.paymentMethods, [hash(103), hash(101), hash(102)]);
   assert.deepEqual(surface.currencies, [
     hash(203),
@@ -766,7 +757,7 @@ function manifest() {
   });
   /** @type {Omit<Manifest, "manifestSha256">} */
   const unsigned = {
-    version: 11,
+    version: 10,
     kind: "dispute-bypass-cutover",
     chainId: 8453,
     safe: wanted.addresses.safe,
@@ -789,7 +780,7 @@ function manifest() {
   };
 }
 
-test("unsigned v11 bypass manifests validate and reject v10 and tampering", () => {
+test("unsigned v10 bypass manifests validate and reject v9 and tampering", () => {
   const valid = manifest();
   assert.deepEqual(
     deriveBypassConstructorArgs(valid, "guard"),
@@ -799,7 +790,7 @@ test("unsigned v11 bypass manifests validate and reject v10 and tampering", () =
     deriveBypassConstructorArgs(valid, "postcondition"),
     valid.postcondition.constructorArgs
   );
-  const oldVersion = { ...valid, version: 10 };
+  const oldVersion = { ...valid, version: 9 };
   const { manifestSha256: oldDigest, ...oldUnsigned } = oldVersion;
   oldVersion.manifestSha256 = manifests.computeBypassManifestSha256(
     /** @type {any} */ (oldUnsigned)
@@ -814,7 +805,7 @@ test("unsigned v11 bypass manifests validate and reject v10 and tampering", () =
   /** @type {Array<(value: Manifest) => void>} */
   const mutations = [
     (m) => {
-      Object.assign(m, { version: 10 });
+      Object.assign(m, { version: 9 });
     },
     (m) => {
       Object.assign(m, { chainId: 31337 });
@@ -1304,24 +1295,6 @@ test("bypass batches never call OrchestratorV3", () => {
   assert.deepEqual(initial.nrv2Writers, [staging.addresses.retiredVerifier]);
   assert.equal(initial.registry.length, staging.paymentMethods.length);
   assert.equal(initial.o3Hook, staging.addresses.initialO3Hook);
-});
-
-test("fresh whitelist bindings, ownership and registries fail closed independently of O3", () => {
-  const wanted = expected();
-  for (const field of ["owner", "escrowRegistry", "groupRegistry", "orchestratorRegistry"]) {
-    const state = snapshot(wanted);
-    Object.assign(state.freshWhitelistPolicy, { [field]: address(99) });
-    assertViolation(state, wanted, `freshWhitelistPolicy.${field}`);
-    assert.throws(() => model.assertBypassGuardExpectationsUnchanged(snapshot(wanted), state), /freshWhitelistPolicy/);
-  }
-  for (const target of /** @type {const} */ (["freshPolicy", "orchestratorV4"])) {
-    const state = snapshot(wanted);
-    Object.assign(state[target], { whitelistPolicy: wanted.addresses.whitelistPolicy });
-    assertViolation(state, wanted, `${target}.whitelistPolicy`);
-  }
-  const reused = expected();
-  reused.addresses.freshWhitelistPolicy = reused.addresses.whitelistPolicy;
-  assertViolation(snapshot(reused), reused, "freshWhitelistPolicy.distinct");
 });
 
 test("O4 and registry trust drift fails closed", () => {

@@ -89,12 +89,6 @@ export type BypassActivationSnapshot = {
     groupRegistry: string;
     orchestratorRegistry: string;
   };
-  freshWhitelistPolicy: {
-    owner: string;
-    escrowRegistry: string;
-    groupRegistry: string;
-    orchestratorRegistry: string;
-  };
   attestationVerifier: {
     owner: string;
     requiredSignatures: string;
@@ -130,7 +124,6 @@ export type BypassExpectedActivationState = {
     | "escrowRegistry"
     | "relayerRegistry"
     | "protocolFeeRecipient"
-    | "freshWhitelistPolicy"
     | "whitelistPolicy"
     | "groupRegistry"
     | "attestationVerifier"
@@ -174,7 +167,6 @@ export type BypassTrustSurfaceInput = {
   disputeVerifier: string;
   whitelistPolicy: string;
   whitelistPolicyOwner: string;
-  freshWhitelistPolicy: string;
   groupRegistry: string;
   stakeToken: string;
   predecessorVault: string;
@@ -298,7 +290,7 @@ function commonInvariants(
     "freshPolicy.disputeVerifier": a.disputeVerifier,
     "freshPolicy.disputeNullifierRegistry": a.disputeRegistry,
     "freshPolicy.authorizedOrchestrators": [a.orchestratorV4],
-    "freshPolicy.whitelistPolicy": a.freshWhitelistPolicy,
+    "freshPolicy.whitelistPolicy": a.whitelistPolicy,
     "verifier.owner": e.governance,
     "verifier.orchestratorRegistry": a.orchestratorRegistry,
     "verifier.nullifierRegistry": a.nullifierRegistryV2,
@@ -341,12 +333,8 @@ function commonInvariants(
     "orchestratorV4.allowMultipleIntents": e.allowMultipleIntents,
     "orchestratorV4.chainId": e.chainId,
     "orchestratorV4.settlementPolicy": a.freshPolicy,
-    "orchestratorV4.whitelistPolicy": a.freshWhitelistPolicy,
+    "orchestratorV4.whitelistPolicy": a.whitelistPolicy,
     "orchestratorRegistry.owner": e.governance,
-    "freshWhitelistPolicy.owner": e.governance,
-    "freshWhitelistPolicy.escrowRegistry": a.escrowRegistry,
-    "freshWhitelistPolicy.groupRegistry": a.groupRegistry,
-    "freshWhitelistPolicy.orchestratorRegistry": a.orchestratorRegistry,
     "whitelistPolicy.escrowRegistry": a.escrowRegistry,
     "whitelistPolicy.groupRegistry": a.groupRegistry,
     "whitelistPolicy.orchestratorRegistry": a.orchestratorRegistry,
@@ -361,10 +349,6 @@ function commonInvariants(
   const invariants: Invariant[] = Object.entries(wanted).map(
     ([path, value]) => [path, equal(getPath(s, path), value)]
   );
-  invariants.push([
-    "freshWhitelistPolicy.distinct",
-    !equal(a.freshWhitelistPolicy, a.whitelistPolicy),
-  ]);
   invariants.push([
     "whitelistPolicy.owner",
     e.allowedWhitelistPolicyOwners.some((owner) =>
@@ -640,7 +624,6 @@ export function buildBypassTrustSurface(
     disputeVerifier: a.disputeVerifier,
     whitelistPolicy: a.whitelistPolicy,
     whitelistPolicyOwner: snapshot.whitelistPolicy.owner,
-    freshWhitelistPolicy: a.freshWhitelistPolicy,
     groupRegistry: a.groupRegistry,
     stakeToken: a.stakeToken,
     predecessorVault: a.predecessorVault,
@@ -678,7 +661,6 @@ export function bypassTrustSurfaceTuple(
     s.disputeVerifier,
     s.whitelistPolicy,
     s.whitelistPolicyOwner,
-    s.freshWhitelistPolicy,
     s.groupRegistry,
     s.stakeToken,
     s.predecessorVault,
@@ -748,10 +730,6 @@ export const BYPASS_GUARD_BOUND_FIELDS = [
   "orchestratorV4.registered",
   "orchestratorV4.chainId",
   "orchestratorRegistry.owner",
-  "freshWhitelistPolicy.owner",
-  "freshWhitelistPolicy.escrowRegistry",
-  "freshWhitelistPolicy.groupRegistry",
-  "freshWhitelistPolicy.orchestratorRegistry",
   "whitelistPolicy.owner",
   "whitelistPolicy.escrowRegistry",
   "whitelistPolicy.groupRegistry",

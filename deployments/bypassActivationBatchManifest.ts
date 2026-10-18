@@ -16,7 +16,7 @@ export { canonicalJson } from "./activationBatchManifest";
 export type { ContractIdentity } from "./activationBatchManifest";
 
 export type BypassActivationBatchManifest = {
-  version: 11;
+  version: 10;
   kind: "dispute-bypass-cutover";
   chainId: 8453;
   safe: string;
@@ -186,12 +186,6 @@ const snapshot = object({
     groupRegistry: address,
     orchestratorRegistry: address,
   }),
-  freshWhitelistPolicy: object({
-    owner: address,
-    escrowRegistry: address,
-    groupRegistry: address,
-    orchestratorRegistry: address,
-  }),
   attestationVerifier: object({
     owner: address,
     requiredSignatures: uint256,
@@ -223,7 +217,6 @@ const trustSurface = object({
   disputeVerifier: address,
   whitelistPolicy: address,
   whitelistPolicyOwner: address,
-  freshWhitelistPolicy: address,
   groupRegistry: address,
   stakeToken: address,
   predecessorVault: address,
@@ -255,7 +248,7 @@ const transaction = object({
 });
 const manifestSchema = object({
   version: (value) => {
-    if (value !== 11) throw new Error("Invalid version");
+    if (value !== 10) throw new Error("Invalid version");
   },
   kind: (value) => {
     if (value !== "dispute-bypass-cutover") throw new Error("Invalid kind");

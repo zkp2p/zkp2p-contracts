@@ -56,8 +56,7 @@ export async function extractAddresses(): Promise<void> {
     network: string;
     data: OutputsFileShape;
   }[] = [];
-  // Expose the O4 key before live recording; missing deployments remain zero.
-  const allContractNames = new Set<string>(["WhitelistPolicyV4"]);
+  const allContractNames = new Set<string>();
 
   for (const file of files) {
     const network = normalizeNetworkName(file);

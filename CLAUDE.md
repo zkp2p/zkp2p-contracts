@@ -177,8 +177,8 @@ Current numbered lanes include:
   2026-10-01 from `88be796` and is still mounted; tagged reruns only verify.
 
 - `45`: cascade stack and O4 deploy-only preparation, retargeted in source and not executed on either
-  network. Deploys multi-controller `StakeVaultV2`, fresh `WhitelistPolicyV4`, `DisputeProtectionPolicyV2`,
-  UPV4 and O4; authorizes the policy with `vault.setController(policy, true)`, passes the fresh `WhitelistPolicyV4` to policy/O4 while the policy reads O4's current relayer registry at settlement, authorizes O4 on the policy, sets O4's settlement policy, matches O3's other configuration and hands ownership to the Safe on Base. O4 remains
+  network. Deploys multi-controller `StakeVaultV2`, `DisputeProtectionPolicyV2`,
+  UPV4 and O4; authorizes the policy with `vault.setController(policy, true)`, passes the same whitelist to policy/O4 while the policy reads O4's current relayer registry at settlement, authorizes O4 on the policy, sets O4's settlement policy, matches O3's other configuration and hands ownership to the Safe on Base. O4 remains
   unregistered. Only the pinned superseded staging UPV4 address/runtime may be deleted and redeployed at
   a fresh address; pre-cutover binding checks use that pin independently of the mutable record.
   Historical staging deployment: 2026-10-11 from `f9eab7f`; replacement stake-owner trio: 2026-10-13 from
@@ -201,7 +201,7 @@ Current numbered lanes include:
   transactions, nonces 16340–16349; block 52531092 reduced to `active`. Their temporary executor was
   deleted and the lanes then restored to `314298e`, before this cascade retargeting. The August writer,
   UPV4 and all 14 routes/currencies/order were unchanged. Base has executed neither lane.
-  Recording must save the five fresh records and address/runtime pins, update the committed-record test
+  Recording must save the four fresh records and address/runtime pins, update the committed-record test
   when staging UPV4's JSON changes, restore staging aliases/evidence/predecessor identities to main's
   August O3 selection, regenerate outputs with the O4 stack by name and update docs. Base records pins
   after lane 45 before lane-46 preparation and flips `BYPASS_PAYMENT_BINDING_RECORDED.base` after activation.
@@ -395,20 +395,15 @@ Manual release skips it. Off-chain v1 convention is
 Use a cryptographically random salt per intent and keep it off-chain with the conditions supplied
 to the gating service and attestor.
 
-Lanes 45/46 deploy StakeVaultV2, WhitelistPolicyV4, DisputeProtectionPolicyV2, UPV4 and O4 without a lifecycle hook.
+Lanes 45/46 deploy StakeVaultV2, DisputeProtectionPolicyV2, UPV4 and O4 without a lifecycle hook.
 Lane 45 authorizes the policy on the vault immediately, without an accept-controller step.
-They pass a fresh `WhitelistPolicyV4` to O4 and the policy, set O4's policy, authorize O4 on the policy,
-and register O4 last. `WhitelistPolicyV4` uses unchanged `WhitelistPolicy.sol` with the same
-AddressGroupRegistry, EscrowRegistry and OrchestratorRegistry as `WhitelistPolicyMethodScoped`.
-No deposit entries are seeded: existing deposits start with whitelist off on O4, while O3 and its
-August hook keep `WhitelistPolicyMethodScoped` and its settings. Merchant groups remain available
-when a depositor enables them on the fresh instance. The deployer retains ownership on staging/local;
-Base transfers its single-step Ownable ownership directly to the Safe during lane 45.
-The policy reads the calling orchestrator's current relayer registry at settlement, so O4 registry updates immediately govern bypass for existing and new intents.
+They pass the same whitelist to O4 and the policy, set O4's policy, authorize O4 on the policy,
+and register O4 last. The policy reads the calling orchestrator's current relayer registry at
+settlement, so O4 registry updates immediately govern bypass for existing and new intents.
 Deployment checks, activation snapshots and the on-chain guard retain O4's pinned registry check.
-Depositor opt-outs are allowed before activation. Bypass batch manifest version 11 records the
-selected policy's vault-controller authorization, O4 authorization, fresh whitelist ownership/registries
-and the separate O3/O4 whitelist bindings, without a separate policy registry; older manifests are rejected. Historical O3 predecessor checks
+Depositor opt-outs are allowed before activation. Bypass batch manifest version 10 records the
+selected policy's vault-controller authorization, O4 authorization and both whitelist dependencies,
+without a separate policy registry; older manifests are rejected. Historical O3 predecessor checks
 remain separate. The package drops the removed hook ABI. Its source ABI catalog does not export interface ABIs;
 generated TypeChain interface exports include `IIntentSettlementPolicy` and `IStakeVaultV2`.
 The source ABI catalog exports `StakeVaultV2` separately from the August `StakeVault`.
