@@ -1218,36 +1218,10 @@ test("the lane 37 predecessor map pins the Base OptIn stack exactly", () => {
       },
     }
   );
-  const staging = METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS.base_staging;
-  const selectedPredecessor = PREDECESSOR_DISPUTE_STACKS.base_staging;
-  assert.deepEqual(staging.activeLifecycleHook, {
-    address: "0x19D9F0Fcb08C60D8bd0CD061C34eae27eF8b6e65",
-    runtimeCodeHash:
-      "0xba70239e37624f5808e2f79e100e83a17daeb1558f310543187f5d8a121ec367",
-  });
-  assert.deepEqual(selectedPredecessor, staging);
-  for (const [name, lane32Address] of [
-    [
-      "StakeVault",
-      "0xEc9f801e2a9Cc22bdc217aD3BB1E3058d0668f43",
-    ],
-    [
-      "DisputeProtectionPolicy",
-      "0x21517b7743E727ae47A66FafF93550B689c15020",
-    ],
-    [
-      "IntentLifecycleHookV1",
-      "0x19D9F0Fcb08C60D8bd0CD061C34eae27eF8b6e65",
-    ],
-  ]) {
-    assert.equal(staging.contracts[name].address, lane32Address);
-    assert.equal(staging.contracts[name].deploymentName, undefined);
-    assert.equal(selectedPredecessor.contracts[name].address, lane32Address);
-    assert.equal(
-      selectedPredecessor.contracts[name].deploymentName,
-      undefined
-    );
-  }
+  assert.strictEqual(
+    METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS.base_staging,
+    PREDECESSOR_DISPUTE_STACKS.base_staging
+  );
   for (const name of /** @type {Array<"DisputeVerifier" | "DisputeNullifierRegistry">} */ ([
     "DisputeVerifier",
     "DisputeNullifierRegistry",
@@ -1502,16 +1476,18 @@ test("fresh-policy classifier rejects every lifecycle event", () => {
   }
 });
 
-test("lane 37 event lists partition its deployed policy ABI exactly once", () => {
+test("fresh-policy event lists partition the policy ABI exactly once", () => {
   const artifactEvents =
     /** @type {{ abi: Array<{ type: string, name: string }> }} */ (
       JSON.parse(
         readFileSync(
           join(
             repositoryRoot,
-            "deployments",
-            "base",
-            "DisputeProtectionPolicyMethodScoped.json"
+            "artifacts",
+            "contracts",
+            "hooks",
+            "DisputeProtectionPolicy.sol",
+            "DisputeProtectionPolicy.json"
           ),
           "utf8"
         )

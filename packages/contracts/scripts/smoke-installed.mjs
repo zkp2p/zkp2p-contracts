@@ -153,7 +153,6 @@ for (const contractName of [
   "DisputeVerifier",
   "IntentLifecycleHookV1",
   "StakeVault",
-  "StakeVaultV2",
 ]) {
   if (
     !Array.isArray(sourceAbis[contractName]) ||
