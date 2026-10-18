@@ -131,6 +131,7 @@ interface IOrchestratorV4 {
     error InvalidPreIntentHook(address hook);
     error InvalidSettlementPolicy(address policy);
     error InvalidSignature();
+    error GatingDigestAlreadyUsed(bytes32 digest);
     error DataRequiresPolicy();
     error DataRequiresGatingService();
     error SignatureExpired(uint256 expiration, uint256 currentTime);
@@ -158,6 +159,7 @@ interface IOrchestratorV4 {
     /// Its keccak256(data) is appended to the gating message covered by the service's signature.
     /// Empty data preserves the plain V3 gating message byte-for-byte. Only the settlement policy interprets this data.
     /// For DisputeProtectionPolicyV2, pass abi.encodePacked(conditionsHash) or empty data; O4 checks no data format.
+    /// Each gating message can create only one intent, including after cancellation or settlement.
     function signalIntent(SignalIntentParams calldata params) external;
 
     /// @notice Sets the deposit pre-intent hook as depositor or delegate.

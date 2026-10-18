@@ -58,6 +58,9 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     mapping(bytes32 => Intent) internal intents;                       // Mapping of intentHashes to intent structs
     mapping(address => bytes32[]) internal accountIntents;             // Mapping of address to array of intentHashes
 
+    /// @notice Raw gating message digest to the intent that consumed it; retained after the intent closes.
+    mapping(bytes32 => bytes32) public usedGatingDigests;
+
     // Snapshot of per-intent manager fee terms at the time of signal
     mapping(bytes32 => address) internal intentManagerFeeRecipient;
     mapping(bytes32 => uint256) internal intentManagerFee;
@@ -120,6 +123,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      * Non-empty data requires a settlement policy and appends its keccak256 hash to the gating message;
      * empty data preserves the plain V3 gating message byte-for-byte. The data is opaque to this contract.
      * DisputeProtectionPolicyV2 expects abi.encodePacked(conditionsHash) or empty data; O4 checks no data format.
+     * Each gated authorization can signal only once. A failed transaction does not consume it.
      *
      * @param _params                   Struct containing all the intent parameters
      */
@@ -129,11 +133,12 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         whenNotPaused
     {
         // Checks
-        _validateSignalIntent(_params);
+        bytes32 gatingDigest = _validateSignalIntent(_params);
         _executeHookIfSet(depositPreIntentHooks[_params.escrow][_params.depositId], _params);
 
         // Effects
         bytes32 intentHash = _calculateIntentHash();
+        if (gatingDigest != bytes32(0)) usedGatingDigests[gatingDigest] = intentHash;
         IEscrow.DepositPaymentMethodData memory depData = IEscrow(_params.escrow).getDepositPaymentMethodData(
             _params.depositId,
             _params.paymentMethod
@@ -521,7 +526,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     /**
      * @notice Validates an intent before it is signaled.
      */
-    function _validateSignalIntent(SignalIntentParams calldata _intent) internal view {
+    function _validateSignalIntent(SignalIntentParams calldata _intent) internal view returns (bytes32 gatingDigest) {
         // Check if account can have multiple intents
         bool canHaveMultipleIntents = relayerRegistry.isWhitelistedRelayer(msg.sender) || allowMultipleIntents;
         if (!canHaveMultipleIntents && accountIntents[msg.sender].length > 0) {
@@ -570,7 +575,9 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
                 revert SignatureExpired(_intent.signatureExpiration, block.timestamp);
             }
 
-            if (!_isValidIntentGatingSignature(_intent, intentGatingService, msg.sender)) {
+            gatingDigest = _intentGatingDigest(_intent, msg.sender);
+            if (usedGatingDigests[gatingDigest] != bytes32(0)) revert GatingDigestAlreadyUsed(gatingDigest);
+            if (!intentGatingService.isValidSignatureNow(gatingDigest.toEthSignedMessageHash(), _intent.gatingServiceSignature)) {
                 revert InvalidSignature();
             }
         }
@@ -755,16 +762,15 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     }
 
     /**
-     * @notice Checks if a intent gating service signature is valid.
+     * @notice Hashes the gating message before its EIP-191 signing prefix.
      */
-    function _isValidIntentGatingSignature(
+    function _intentGatingDigest(
         SignalIntentParams calldata _intent,
-        address _intentGatingService,
         address _caller
     )
         internal
         view
-        returns(bool)
+        returns(bytes32)
     {
         bytes memory message = abi.encodePacked(
             address(this),
@@ -785,7 +791,6 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
             message = abi.encodePacked(message, keccak256(_intent.data));
         }
 
-        bytes32 verifierPayload = keccak256(message).toEthSignedMessageHash();
-        return _intentGatingService.isValidSignatureNow(verifierPayload, _intent.gatingServiceSignature);
+        return keccak256(message);
     }
 }

@@ -61,7 +61,7 @@ contract OrchestratorV4PolicyDataTest is OrchestratorV4Fixture {
         bytes[4] memory extensions = [bytes(""), bytes(hex"01"), new bytes(31), abi.encode(bytes32(0))];
         for (uint256 i; i < extensions.length; ++i) {
             IOrchestratorV4.SignalIntentParams memory params =
-                _gatedParams(depositId, gatingServiceKey, taker, block.timestamp + 1 days);
+                _gatedParams(depositId, gatingServiceKey, taker, block.timestamp + 1 days + i);
             bytes32 id = _signal(taker, params);
             assertEq(orchestrator.getIntent(id).data, "");
             verifier.setExtensionData(extensions[i]);
