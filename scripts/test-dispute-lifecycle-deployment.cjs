@@ -45,9 +45,9 @@ const EXPECTED_RUNTIME_HASHES = {
     StakeVault:
       "0xfd8d2a910b9ac2c55675ae06d0504f9aac43b02b7022755cf229b571156c681d",
     DisputeProtectionPolicy:
-      "0x4e6617a94819ad15693289b173a9a66a78cfe1dd706f6b4fdc5a5f6ad6a32971",
+      "0x70c43bfae8253a6a166f9697ddc27b2d77b4d9841e01fefc2db84037d9a98622",
     IntentLifecycleHookV1:
-      "0xba70239e37624f5808e2f79e100e83a17daeb1558f310543187f5d8a121ec367",
+      "0xb9ce42108c706f9241aeb41ffdc0da6b7584e8482183055452098b2f16c7abfd",
     DisputeVerifier:
       "0xb3b34734cfd162cd129d0c84285461c751321545213ec20164745b8e72f9dd6c",
     DisputeNullifierRegistry:
@@ -144,9 +144,9 @@ async function run() {
   assert.deepEqual(
     PREDECESSOR_DISPUTE_STACKS.base_staging.activeLifecycleHook,
     {
-      address: "0x19D9F0Fcb08C60D8bd0CD061C34eae27eF8b6e65",
+      address: "0x5A7f6cb7397134da1fDEFA7E2D434b4Cf18E56D9",
       runtimeCodeHash:
-        "0xba70239e37624f5808e2f79e100e83a17daeb1558f310543187f5d8a121ec367",
+        "0xb9ce42108c706f9241aeb41ffdc0da6b7584e8482183055452098b2f16c7abfd",
     }
   );
   /** @type {Array<"base" | "base_staging">} */

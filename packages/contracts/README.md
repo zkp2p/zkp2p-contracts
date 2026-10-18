@@ -2,31 +2,6 @@
 
 Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, and utilities.
 
-## Release 0.4.4-rc.6
-
-Records the Base staging O4 stack deployed by lane 45 on 2026-10-16 from `c635d4c`:
-
-- `StakeVaultV2`: `0xC9E36A036274530EBd28F97f4eDaC212ADdEf01E`.
-- `WhitelistPolicyV4`: `0xd8e22BDfDBD6969d1641E7495294A94aF4893952`.
-- `DisputeProtectionPolicyV2`: `0x9dfB75e0ef06Bf757176c5bE3C9537c6ccdB5215`.
-- `UnifiedPaymentVerifierV4`: `0xbB7d595FB1c94AEE11c19162BA4E0c167F4Ab68f`.
-- `OrchestratorV4`: `0x338dfB48fAcA1F2dddD0da83Ecb31819b0Cf4612`.
-
-These are deploy-only addresses: lane 46 is pending and O4 remains unregistered. The fresh UPV4
-replaces the superseded `0x3fe38Afdfa85A9E14D9b0ae5A5B2E577A8a71DA7` package record; live payment
-routes still use that superseded verifier until activation.
-
-The staging canonical aliases and dispute-stack manifest return to O3's August selection:
-`StakeVaultMethodScoped`, `DisputeProtectionPolicyMethodScopedStaked`,
-`IntentLifecycleHookV1MethodScopedStaked` and `WhitelistPolicyMethodScoped`. This is the package
-selection for the rollout; O3's live hook restoration is lane 46's first pending action.
-O4 consumers use the five records above by name. Historical vaults remain exported for withdrawals.
-
-The source ABI catalog includes `OrchestratorV4`, `DisputeProtectionPolicyV2` and `StakeVaultV2`,
-while the canonical O3 dispute ABIs retain their August behavior. `WhitelistPolicyV4` is a fresh
-instance of the unchanged `WhitelistPolicy` contract. Base addresses are unchanged and remain zero
-for all five O4 stack names. Targets the `rc` tag; `latest` remains at `0.4.3`.
-
 ## Release 0.4.4-rc.5
 
 Compared with rc.4, Base staging exports the dispute trio redeployed with the stake-owner policy bytecode

@@ -37,7 +37,6 @@ const OTHER = ethers.constants.AddressZero;
 function fixture(superseded = false) {
   const pins = BYPASS_EXPECTED_LIVE.base_staging;
   const shared = EXPECTED_LIVE.base_staging;
-  const original = BYPASS_RECORDED_DEPLOYMENTS.base_staging;
   const recorded = {
     UnifiedPaymentVerifierV4: {
       ...BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS.UnifiedPaymentVerifierV4,
@@ -50,10 +49,9 @@ function fixture(superseded = false) {
   assert.ok(recorded);
   const verifierRecord = {
     ...require("../deployments/base_staging/UnifiedPaymentVerifierV4.json"),
-    address: superseded
-      ? BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS.UnifiedPaymentVerifierV4.address
-      : "0x0000000000000000000000000000000000000001",
   };
+  if (!superseded)
+    verifierRecord.address = "0x0000000000000000000000000000000000000001";
   recorded.UnifiedPaymentVerifierV4.address = verifierRecord.address;
   /** @type {Record<string, string>} */
   const addresses = {
@@ -173,8 +171,7 @@ function fixture(superseded = false) {
       hashes.forEach(([object, key], index) => {
         object[key] = before[index];
       });
-      if (original === undefined) delete BYPASS_RECORDED_DEPLOYMENTS.base_staging;
-      else BYPASS_RECORDED_DEPLOYMENTS.base_staging = original;
+      delete BYPASS_RECORDED_DEPLOYMENTS.base_staging;
     },
   };
 }
@@ -471,9 +468,8 @@ const drifts = [
   ],
   [
     "missing recorded pin with noncanonical record",
-    (s) => {
+    () => {
       delete BYPASS_RECORDED_DEPLOYMENTS.base_staging;
-      s.records.UnifiedPaymentVerifierV4.solcInputHash = "noncanonical-test-build";
     },
     /lacks canonical deployment evidence/,
   ],

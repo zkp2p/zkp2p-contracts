@@ -161,9 +161,7 @@
     and pinned in `deployments/immutableDeploymentLanes.ts`.
 - `deploy/45_deploy_bypass_dispute_stack.ts` is retargeted to `StakeVaultV2` (multiple authorized controllers),
   `WhitelistPolicyV4`, `DisputeProtectionPolicyV2`, `UnifiedPaymentVerifierV4` and `OrchestratorV4`.
-  The cascade/O4 source executed deploy-only on Base staging on 2026-10-16 from `c635d4c`;
-  all five deployment records and their on-chain runtime hashes are recorded. Base has not executed it.
-  Lane 46 is pending and O4 remains unregistered. The existing tag and
+  This cascade/O4 source has not executed on Base or Base staging. The existing tag and
   `ENABLE_{STAGING,BASE}_V3_DISPUTE_BYPASS_STACK_DEPLOYMENT=true` select resumable deploy-only steps.
   Lane 45 authorizes the policy with `vault.setController(policy, true)`, authorizes O4 on the policy,
   sets O4's settlement policy, and passes the fresh `WhitelistPolicyV4` to both. The policy reads O4's current
@@ -208,8 +206,7 @@
   On 2026-10-13, `285bc5c` activated the replacement trio: add its writer, switch O3's hook, remove the
   abandoned writer. Lanes 45/46 took ten transactions at deployer nonces 16340–16349; block 52531092
   reduced to `active`. That temporary replacement executor was deleted in the recording PR, which then
-  restored the lanes to `314298e`. The cascade lane 45 executed on staging on 2026-10-16 from `c635d4c`;
-  the retargeted lane 46 remains unexecuted on both networks.
+  restored the lanes to `314298e`; the current source is now retargeted and remains unexecuted on both networks.
   The first staging trio is abandoned: no protected intent, stake, live reference or writer permission.
   The recorded 2026-10-13 trio remains `StakeVaultBypass` `0x6b32df91EB92637F64bA444996702fC9582C87a1`,
   `DisputeProtectionPolicyBypass` `0x1a9C442E3Ae99fB08313242fCdA601431027B39C` and
@@ -217,13 +214,12 @@
   all 14 routes, currencies, method order and the sole NRV2 writer unchanged. The August policy
   `0x484fA07F085eb66bb7C2b649Ea9d5894b2B6681c` stayed a passive writer. No opt-outs were mirrored in those
   ten transactions; the historical `active` result did not attest opt-out mirroring.
-  Staging aliases/evidence/`PREDECESSOR_DISPUTE_STACKS.base_staging` now select the August O3 stack,
-  as required for the cascade recording; Base retains MethodScoped aliases and UPV3 binding.
-  The package selection does not attest live hook restoration: staging O3 still uses the 2026-10-13
-  bypass hook until lane 46's first action. Superseded identities remain in
-  `BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS`; `BYPASS_RECORDED_DEPLOYMENTS.base_staging` pins the five
-  fresh records. The regenerated staging output exports O4 and its stack by name, including the fresh
-  UPV4 record. Payment routes and the sole NRV2 writer remain on the superseded UPV4 until lane 46.
+  Staging aliases/evidence still describe that executed bypass stack; Base retains MethodScoped aliases
+  and UPV3 binding. Superseded identities live in `BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS`; fresh
+  `BYPASS_RECORDED_DEPLOYMENTS` pins are empty until recording. The staging recording PR must save all
+  five fresh records and address/runtime pins, update the committed-record test after replacing UPV4's
+  JSON, restore staging aliases/evidence/`PREDECESSOR_DISPUTE_STACKS.base_staging` to main's August O3
+  selection, regenerate outputs with the O4 stack exported by name and update these docs.
   Base requires separate approvals for lane 45, its recording PR with pins, and lane-46 preparation;
   after activation, record evidence/outputs and flip `BYPASS_PAYMENT_BINDING_RECORDED.base` to `true`.
   Canonical dispute aliases keep describing O3's August stack; O4 consumers use `StakeVaultV2` and

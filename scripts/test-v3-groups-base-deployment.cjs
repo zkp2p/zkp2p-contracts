@@ -638,12 +638,6 @@ async function run() {
 
   if (scenario === "managed-hook-superseded-bypass-successor") {
     const assert = require("node:assert/strict");
-    assert.equal(
-      getActiveDisputeDeploymentName("base_staging", "IntentLifecycleHookV1"),
-      "IntentLifecycleHookV1MethodScopedStaked"
-    );
-    const manifest = require("../deployments/active-dispute-stack.json");
-    const original = manifest.networks.base_staging;
     const {
       BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS,
     } = require("../deployments/bypassDisputeStack.ts");
@@ -652,22 +646,13 @@ async function run() {
     assert.ok(pin);
     const record = require("../deployments/base_staging/IntentLifecycleHookV1Bypass.json");
     assert.equal(record.address.toLowerCase(), pin.address.toLowerCase());
+    const state = await fixture();
+    const installed = await installManagedHookState(state, "base_staging", {
+      kind: "successor",
+    });
     const previousHash = pin.runtimeCodeHash;
     const previousCode = await ethers.provider.getCode(record.address);
-    /** @type {Awaited<ReturnType<typeof installManagedHookState>> | undefined} */
-    let installed;
     try {
-      // Reproduce the historical bypass selection because staging now selects the August stack.
-      manifest.networks.base_staging = {
-        StakeVault: "StakeVaultBypass",
-        DisputeProtectionPolicy: "DisputeProtectionPolicyBypass",
-        IntentLifecycleHookV1: "IntentLifecycleHookV1Bypass",
-        WhitelistPolicy: "WhitelistPolicyMethodScoped",
-      };
-      const state = await fixture();
-      installed = await installManagedHookState(state, "base_staging", {
-        kind: "successor",
-      });
       assert.equal(
         getActiveDisputeDeploymentName("base_staging", "IntentLifecycleHookV1"),
         "IntentLifecycleHookV1Bypass"
@@ -713,13 +698,12 @@ async function run() {
         /runtime bytecode mismatch/
       );
     } finally {
-      manifest.networks.base_staging = original;
       pin.runtimeCodeHash = previousHash;
       await ethers.provider.send("hardhat_setCode", [
         record.address,
         previousCode,
       ]);
-      installed?.restore();
+      installed.restore();
     }
     process.stdout.write("0x01");
     return;
