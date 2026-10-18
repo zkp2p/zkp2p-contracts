@@ -37,10 +37,13 @@ export const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
   FxRateFeed: "contracts/oracles/FxRateFeed.sol/FxRateFeed.json",
   IntentGuardian: "contracts/IntentGuardian.sol/IntentGuardian.json",
   OrchestratorV3: "contracts/OrchestratorV3.sol/OrchestratorV3.json",
+  OrchestratorV4: "contracts/OrchestratorV4.sol/OrchestratorV4.json",
   NullifierRegistryV2:
     "contracts/registries/NullifierRegistryV2.sol/NullifierRegistryV2.json",
   UnifiedPaymentVerifierV3:
     "contracts/unifiedVerifier/UnifiedPaymentVerifierV3.sol/UnifiedPaymentVerifierV3.json",
+  UnifiedPaymentVerifierV4:
+    "contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol/UnifiedPaymentVerifierV4.json",
   AddressGroupRegistry:
     "contracts/registries/AddressGroupRegistry.sol/AddressGroupRegistry.json",
   WhitelistPolicy: "contracts/hooks/WhitelistPolicy.sol/WhitelistPolicy.json",
@@ -50,11 +53,14 @@ export const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
     "contracts/registries/NullifierRegistry.sol/NullifierRegistry.json",
   DisputeProtectionPolicy:
     "contracts/hooks/DisputeProtectionPolicy.sol/DisputeProtectionPolicy.json",
+  DisputeProtectionPolicyV2:
+    "contracts/hooks/DisputeProtectionPolicyV2.sol/DisputeProtectionPolicyV2.json",
   DisputeVerifier:
     "contracts/unifiedVerifier/DisputeVerifier.sol/DisputeVerifier.json",
   IntentLifecycleHookV1:
     "contracts/hooks/IntentLifecycleHookV1.sol/IntentLifecycleHookV1.json",
   StakeVault: "contracts/StakeVault.sol/StakeVault.json",
+  StakeVaultV2: "contracts/StakeVaultV2.sol/StakeVaultV2.json",
 };
 
 function ensureDir(dir: string) {
@@ -118,6 +124,12 @@ export async function extractABIs(): Promise<void> {
 
   const contractsDir = path.join(ABIS_DIR, "contracts");
   ensureDir(contractsDir);
+  // Source ABI exports are authoritative; remove artifacts retired from this catalog.
+  for (const file of fs.readdirSync(contractsDir)) {
+    if (file.endsWith(".json") && !Object.prototype.hasOwnProperty.call(SOURCE_ABI_ARTIFACTS, file.slice(0, -5))) {
+      fs.unlinkSync(path.join(contractsDir, file));
+    }
+  }
   const sourceIndex: string[] = [];
   for (const [name, artifactRelativePath] of Object.entries(
     SOURCE_ABI_ARTIFACTS

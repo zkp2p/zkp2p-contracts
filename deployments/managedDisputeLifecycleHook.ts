@@ -1,6 +1,7 @@
 import { ethers } from "hardhat";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 
+import { supersededBypassLifecycleHookRuntimeHash } from "./bypassDisputeStack";
 import { zeroImmutableValues } from "./canonicalDeployment";
 import {
   findPinnedLifecycleHookRuntimeHash,
@@ -204,10 +205,9 @@ export async function guardManagedDisputeLifecycleHook(
         zeroImmutableValues(runtimeCode, immutableReferences)
       );
     } else {
-      const pinnedRuntimeCodeHash = findPinnedLifecycleHookRuntimeHash(
-        network,
-        currentHook
-      );
+      const pinnedRuntimeCodeHash =
+        findPinnedLifecycleHookRuntimeHash(network, currentHook) ??
+        supersededBypassLifecycleHookRuntimeHash(network, currentHook);
       if (!pinnedRuntimeCodeHash) {
         throw new Error(
           `Managed successor lifecycle hook ${currentHook} was built from a different source and has no pinned runtime hash`
