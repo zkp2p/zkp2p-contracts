@@ -450,7 +450,6 @@ contracts/
   ProtocolViewerV2.sol
   RateManagerV1.sol
   StakeVault.sol
-  StakeVaultV2.sol
   archive/                          # superseded sources, still compiled for executed lanes and tests
   hooks/
   interfaces/
@@ -702,9 +701,8 @@ and runtime-bytecode verification used by lane 34 and the Safe tooling.
 networks and, through its Safe batch, activated them on Base. It is immutable and retired: the supported
 runner verifies its digest, excludes it from every tagged and untagged run, and rejects both of its tags.
 `yarn verify:dispute-opt-in-safe-batch` and `yarn simulate:obsolete-dispute-safe-batch` remain as tooling
-for that executed history. Lanes 39/40 superseded the Base `*OptIn` trio on 2026-08-28, and
-`PREDECESSOR_DISPUTE_STACKS` records it as the predecessor of the selected Base stack; the Base-staging
-`*OptIn` trio was deployed but never activated.
+for that executed history. The Base `*OptIn` trio is the live dispute stack until the method-scoped
+activation lane replaces it; the Base-staging `*OptIn` trio was deployed but never activated.
 
 `deploy/36_deploy_method_scoped_whitelist_policy.ts` deploys `WhitelistPolicyMethodScoped`, the
 payment-method-scoped `WhitelistPolicy`, against the existing `AddressGroupRegistry`, `EscrowRegistry`,
@@ -796,84 +794,12 @@ Both lanes are immutable and pinned after their 2026-08-28 Base execution.
 Stake in the old vaults is abandoned: stakers withdraw once their locks release and takers re-stake in the new vault
 before the cutover; that readiness is part of `CONFIRM_BASE_V3_DISPUTE_METHOD_SCOPED_VAULT_DOWNSTREAM_READY`.
 
-`deploy/45_deploy_bypass_dispute_stack.ts` is retargeted to `StakeVaultV2` (multiple authorized controllers),
-`DisputeProtectionPolicyV2`, `UnifiedPaymentVerifierV4` and `OrchestratorV4`.
-This cascade/O4 source has not executed on Base or Base staging. The existing tag and
-`ENABLE_{STAGING,BASE}_V3_DISPUTE_BYPASS_STACK_DEPLOYMENT=true` select resumable deploy-only steps.
-Lane 45 authorizes the policy with `vault.setController(policy, true)`, authorizes O4 on the policy,
-sets O4's settlement policy, and passes the same whitelist to both. The policy reads O4's current
-relayer registry at settlement. It configures O4
-with O3's registries, fees and `allowMultipleIntents`. O4 stays unregistered; Base starts vault/policy
-two-step ownership transfers and transfers UPV4/O4 ownership directly to the Safe.
-Only the exact superseded staging UPV4 address `0x3fe38Afdfa85A9E14D9b0ae5A5B2E577A8a71DA7` with its
-pinned runtime hash may be replaced. Lane 45 deletes that record and deploys a different address.
-Pre-cutover binding checks use the pinned retired verifier independently of the mutable record, including
-after a crash between deletion and deployment; other identity or runtime mismatches fail closed.
-The cascade policy protects stake-token settlements with a nonzero attested window; it has no per-method
-  windows or admissions pause. Registered relayer takers bypass collateral by default, with a
-  depositor-only per-deposit opt-out. Lanes 45/46 permit opt-outs before activation.
-Historical lane 45 first executed on staging on 2026-10-11 from `f9eab7f`. The stake-owner bypass trio
-replaced that first trio on 2026-10-13 from `285bc5c`; UPV4 and its record were unchanged by that run.
-
-`deploy/46_activate_bypass_dispute_stack.ts` activates the cascade stack with O4 registration last.
-O3 stays registered with its August hook on Base/local; staging restores that hook as its first action.
-Lane 46 adds the cascade dispute writer, makes fresh UPV4 the sole `NullifierRegistryV2` writer and
-routes every method to it with identical currencies and method order (reverse-remove, in-order-add).
-Existing dispute writers remain passive, including staging's superseded bypass policy. Every PENDING
-intent opened by that stale policy blocks verifier rotation and every later action, including staked
-intents that could switch to no-stake; cancel or prune them before continuing.
-Live runs require `DEPLOY_ACTIVE_TAG=46_activate_bypass_dispute_stack`. Staging runs lane 45 first
-(it reports open stale intents), then lane 46 `ENABLE_STAGING_V3_DISPUTE_BYPASS_ACTIVATION=true` with
-both `CONFIRM_STAGING_V3_DISPUTE_BYPASS_ACTIVATION` and
-`CONFIRM_STAGING_V3_DISPUTE_BYPASS_DOWNSTREAM_READY` set to `true`, then lane 46
-`PREPARE_STAGING_V3_DISPUTE_BYPASS_ACTIVATION=true` to verify `active`. Do not prepare lane 46 first.
-Keep one build through deployment and verification; avoid untagged staging runs until recording merges.
-Downstream readiness requires attestations with the 448-byte payload and signed extension words
-  for the new UPV4 domain for both orchestrators
-(attestation-service #529) and clients routing new intents to O4. RelayerRegistry is shared; its relayers
-are allowed on every orchestrator.
-Base preparation requires `ENABLE_BASE_V3_DISPUTE_BYPASS_CUTOVER_PREPARATION=true`, both Base
-`CONFIRM_` flags and `CONFIRM_BASE_V3_DISPUTE_BYPASS_RELEASE_READY_SHA` matching the source SHA.
-The unsigned atomic Safe batch is guard → conditional vault/policy `acceptOwnership` → activation
-actions → `addOrchestrator(O4)`. No canonical Base call targets O3. The guard checks O3's August hook;
-the deployed postcondition runs only in the pinned fork simulation. Artifacts remain
-`deployments/outputs/safe-batches/base_dispute_bypass_cutover{,.sha256}.json`; run
-`yarn verify:dispute-bypass-safe-batch` immediately before Safe execution. Preparation never signs,
-proposes or executes a Safe transaction.
-Historical lane 46 executed on staging on 2026-10-12 from `a6970aa` in 32 actions over three runs.
-On 2026-10-13, `285bc5c` activated the replacement trio: add its writer, switch O3's hook, remove the
-abandoned writer. Lanes 45/46 took ten transactions at deployer nonces 16340–16349; block 52531092
-reduced to `active`. That temporary replacement executor was deleted in the recording PR, which then
-restored the lanes to `314298e`; the current source is now retargeted and remains unexecuted on both networks.
-The first staging trio is abandoned: no protected intent, stake, live reference or writer permission.
-The recorded 2026-10-13 trio remains `StakeVaultBypass` `0x6b32df91EB92637F64bA444996702fC9582C87a1`,
-`DisputeProtectionPolicyBypass` `0x1a9C442E3Ae99fB08313242fCdA601431027B39C` and
-`IntentLifecycleHookV1Bypass` `0xec27Cc47370267c843177375c3Fe43D29D498bB4`. That execution kept UPV4,
-all 14 routes, currencies, method order and the sole NRV2 writer unchanged. The August policy
-`0x484fA07F085eb66bb7C2b649Ea9d5894b2B6681c` stayed a passive writer. No opt-outs were mirrored in those
-ten transactions; the historical `active` result did not attest opt-out mirroring.
-Staging aliases/evidence still describe that executed bypass stack; Base retains MethodScoped aliases
-and UPV3 binding. Superseded identities live in `BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS`; fresh
-`BYPASS_RECORDED_DEPLOYMENTS` pins are empty until recording. The staging recording PR must save all
-four fresh records and address/runtime pins, update the committed-record test after replacing UPV4's
-JSON, restore staging aliases/evidence/`PREDECESSOR_DISPUTE_STACKS.base_staging` to main's August O3
-selection, regenerate outputs with the O4 stack exported by name and update these docs.
-Base requires separate approvals for lane 45, its recording PR with pins, and lane-46 preparation;
-after activation, record evidence/outputs and flip `BYPASS_PAYMENT_BINDING_RECORDED.base` to `true`.
-Canonical dispute aliases keep describing O3's August stack; O4 consumers use `StakeVaultV2` and
-the other O4 records by name. Retain stale vault exports for withdrawals. Lane 31 selects UPV4 through
-the binding flag independently of aliases; staging lanes 35/41/43 still pin UPV3 and fail closed.
-Lanes 45/46 remain unpinned until Base executes. RC publication is a later, separately approved boundary.
-Local aliases select MethodScopedStaked while lanes 45/46 deploy and activate O4 beside O3. Restart the
-node before another full `yarn deploy:localhost`; lanes 31/39 retain historical local wiring checks.
-
 The package exports the currently selected (latest) addresses for each network, and consumers should treat them as
 the addresses to use.
 
 Dispute-evidence issuance in `attestation-service` remains a separate follow-up and is intentionally not implemented
-by these contract lanes. O3's selected policy gives only PayPal and Venmo nonzero onchain risk windows;
-Cash App and every other active method have a zero window. O4 instead consumes each settlement's
-attested dispute window from extension word 0.
+by these contract lanes. Only PayPal and Venmo receive non-zero onchain risk windows; Cash App and every other
+active payment method have a zero window and do not require stake.
 
 `deploy/42_retire_dispute_risk_windows.ts` is the governed write behind that statement (decided 2026-08-28). It zeroes
 the `RETIRED_DISPUTABLE_PAYMENT_METHODS` risk windows on `DisputeProtectionPolicyMethodScopedStaked`, which makes
@@ -989,141 +915,3 @@ These parameters live in `deployments/parameters.ts`.
 ## License
 
 MIT
-
-### UPV4 return compatibility and O4 settlement
-
-UPV4 accepts the same 448-byte `abi.encode(PaymentDetails, IntentSnapshot)` prefix as UPV3,
-followed by signed extension bytes. Witness signatures cover the entire payload. UPV4 returns
-those bytes untouched and uninterpreted; O3 continues to decode the V1 result prefix.
-Extension word 0 is the dispute window in uint256 seconds, required for non-manual settlements
-and capped at 180 days. Word 1 is the conditions hash; an incomplete word reads as zero.
-Words 2+ are reserved. O4 settlement payloads therefore contain at least 480 bytes, or 512 bytes
-with conditions. Manual release forwards an empty extension.
-
-OrchestratorV4 calls `IIntentSettlementPolicy` directly. This minimal interface contains only
-`settleIntent(SettlementContext)` and `onDeferredPayoutFunded(bytes32)`. A replacement policy
-needs only these settlement functions and ERC-165 support, so its rules can change without a new
-orchestrator. `setSettlementPolicy` accepts zero (no protection) or a contract advertising this
-interface through ERC-165; `InvalidSettlementPolicy` rejects the wrong contract at configuration
-time instead of failing every fulfil. `settlementPolicy`, `getIntentSettlementPolicy`,
-`SettlementPolicyUpdated` and `IntentSettlementPolicySnapshotted` expose the current selection
-and each intent's snapshot. Changing the selection affects only future intents. O4 retains its
-own `IOrchestratorV4` ERC-165 advertisement. OrchestratorV3, IntentLifecycleHookV1 and the August
-DisputeProtectionPolicy are unchanged.
-
-O4 and DisputeProtectionPolicyV2 receive the same immutable, nonzero deployed `IWhitelistPolicy`
-in their constructors. The policy reads the calling authorized orchestrator's current
-`IRelayerRegistry` at settlement through `IRelayerRegistryProvider`; it stores no registry.
-A zero registry reverts with `ZeroRelayerRegistry`. The lookup occurs at the relayer exemption,
-after the whitelist exemption and before the deposit opt-out and token checks. O4 enforces admission
-at signal: an enabled deposit/payment-method whitelist must allow the taker. `TakerNotWhitelisted` rejects non-members even with a zero
-settlement policy. Signal does not call the settlement policy. Cancel, escrow prune and orphan
-cleanup clear the intent and policy snapshot without policy callbacks.
-
-IOrchestratorV4 retains V3's `Intent` field order with `postIntentHook` removed:
-`owner, to, escrow, depositId, amount, timestamp, paymentMethod, fiatCurrency, conversionRate, payeeId, referralFees, data`.
-`SignalIntentParams` drops `postIntentHook`; `FulfillIntentParams` drops `postIntentHookData`.
-O4 never executes a post-intent hook. ProtocolViewerV2 still reads the V2/V3 layout; read O4
-intents directly through `getIntent`.
-
-`data` is opaque to O4 and stored only in `Intent.data`. Non-empty data requires a current policy
-(`DataRequiresPolicy`) and a deposit payment-method gating service (`DataRequiresGatingService`).
-O4 appends `keccak256(data)` to the existing 336-byte packed gating message, producing 368 bytes.
-Empty data preserves V3's message byte-for-byte. Read data through `getIntent(intentHash).data`
-until pruning; there is no separate policy-data mapping or getter.
-
-Settlement preserves O3's order: escrow unlock, the unchanged protocol/referral/manager fee
-function, the snapshotted policy, then net payout. O4 captures the token and depositor before
-unlock, even when escrow deletes an exhausted deposit, and the policy never reads escrow during
-settlement. Only the depositor opt-out setter reads escrow.
-`SettlementContext` is `{ intentHash, token, taker, recipient, depositor, escrow, depositId,
-paymentMethod, releaseAmount, netAmount, data, extensionData, isManualRelease }`.
-The policy returns zero to pay `intent.to` now, or the vault that must receive `netAmount`.
-O4 transfers the net to that vault, calls `onDeferredPayoutFunded` in the same transaction,
-and emits `IntentPayoutDeferred` and `IntentFulfilled` naming the vault. A revert rolls back
-escrow unlock, fees and payment verification. A zero snapshotted policy pays `intent.to` directly.
-O4 does not decode extensions, validate conditions, read the whitelist at settlement or select
-collateral based on the token.
-
-DisputeProtectionPolicyV2 authorizes callers with `setOrchestratorAuthorization` and
-`isOrchestratorAuthorized`, emits `OrchestratorAuthorizationUpdated`, and rejects unauthorized
-callers with `UnauthorizedOrchestrator`, including manual settlements and funding callbacks.
-Governance must retain authorization for an old policy's orchestrator until its snapshots drain.
-Authorize a successor alongside its predecessor with `StakeVaultV2.setController(successor, true)`,
-then select it with O4's `setSettlementPolicy`: new intents snapshot the successor for settlement,
-while existing snapshots and locks remain with the predecessor. The predecessor stays authorized
-until its locks drain; complete any policy-mediated payouts before de-authorizing it.
-
-`StakeVaultV2` is a separate contract and source ABI. The August `StakeVault` / `IStakeVault` retain
-main's delayed single-controller behavior. V2 has no proposal, acceptance, initialization-once or
-controller delay. Its constructor accepts an optional initial controller; non-zero controllers must
-have deployed code. Owner-only `setController(address,bool)` takes effect immediately and emits
-`ControllerUpdated`. Each lock stores its creator, exposed by `lockController(lockId)`; only that
-creator while authorized may increase, resize, unlock or resolve it. Removing authorization freezes
-its open locks until re-authorization. Lock events and the `locks` tuple remain unchanged.
-Every authorized controller is governance-trusted: it can lock any owner's free stake and call
-`payOutStake` to pay any owner's free stake only to that owner's own address. Payout authority is
-per owner, independent of which controller released the stake. Staking, claims, withdrawals,
-taker delegation and accounting invariants are unchanged.
-The policy validates settlement in this order:
-
-1. Manual release returns zero.
-2. Require extension word 0 (`MissingDisputeWindow`) and check the uint256 window against
-   `MAX_RISK_WINDOW` (180 days) before narrowing (`InvalidDisputeWindow(uint256)`).
-3. Require extension word 1 to equal `bytes32(data)` (`ConditionsNotAttested(intentHash)`).
-4. Window zero returns zero.
-5. A live enabled whitelist allowing the taker returns zero.
-6. A registered relayer taker returns zero unless the deposit has opted out of relayer bypass.
-7. A token other than `stakeVault.stakeToken()` returns zero.
-8. Reject duplicate records and zero amounts, enforce timestamp bounds, then lock gross stake
-   (`STAKE`) or defer the net payout (`DEFERRED_PAYOUT`).
-
-Whitelist and relayer membership belong to the taker, not the recipient, and are read live at
-settlement. Registered relayer takers bypass collateral on every deposit by default. Only the
-depositor may call `setDepositOptOutForRelayerBypass(escrow, depositId, optOut)` to opt out or back
-in; delegates are rejected with `NotDepositor(escrow, depositId, caller)`. The setter emits
-`DepositOptOutForRelayerBypassUpdated`; `isDepositOptedOutForRelayerBypass` exposes the current
-value. Opt-outs are scoped to escrow and deposit ID. A fake escrow can only write its own key,
-because settlement uses the escrow validated by O4. Opting out restores the collateral cascade
-for relayers, but whitelist and manual-release exemptions still take precedence. Disabling a
-whitelist or removing its taker restores the cascade only if relayer bypass does not apply.
-Exempt settlements write no record, emit no policy event and make no vault call (except the
-stake-token read for the non-stake-token exemption). There are no signal/cancel records,
-per-method windows or admissions pause.
-Both protected paths create a `SETTLED` record; the deferred path returns `address(stakeVault)`.
-Funding requires a `SETTLED` `DEFERRED_PAYOUT` record and calls `fundLock`; the vault rejects double
-funding with `LockAlreadyExists`. Skipping funding leaves a settled record without a vault lock.
-Funding does not change the policy record or emit a policy event.
-
-Status ordinals are `NONE=0`, `SETTLED=1`, `RELEASED=2`, `DISPUTED=3`; collateral ordinals are
-`NONE=0`, `STAKE=1`, `DEFERRED_PAYOUT=2`. The stored record remains
-`taker, recipient, stakeOwner, depositor, paymentMethod, status, collateralSource,
-releaseEligibleAt, lockedAmount, claimedAmount`. It stores neither releaseAmount nor riskWindow.
-`DisputeProtectionIntentSettled` preserves both in the event and fires only for protected
-settlements. Only matured collateral releases emit `DisputeProtectionIntentReleased`.
-Disputes, releases and claims retain their own guards; no Opened or Cancelled event is emitted.
-
-The policy reads the conditions hash as `bytes32(data)`: empty/all-zero data means none,
-shorter data is right-padded and longer data uses the first word. Clients normally send
-`abi.encodePacked(conditionsHash)` or empty data. There is no length/version decoding.
-The comparison is symmetric, including zero windows, whitelisted takers and relayer bypass.
-Manual release skips it. Off-chain v1 convention is
-`conditionsHash = keccak256(abi.encode(uint8(1), salt, payerIdHash))`, with two bytes32 values.
-Use a cryptographically random salt per intent and keep it off-chain with the conditions supplied
-to the gating service and attestor.
-
-Lanes 45/46 deploy StakeVaultV2, DisputeProtectionPolicyV2, UPV4 and O4 without a lifecycle hook.
-Lane 45 authorizes the policy on the vault immediately, without an accept-controller step.
-They pass the same whitelist to O4 and the policy, set O4's policy, authorize O4 on the policy,
-and register O4 last. The policy reads the calling orchestrator's current relayer registry at
-settlement, so O4 registry updates immediately govern bypass for existing and new intents.
-Deployment checks, activation snapshots and the on-chain guard retain O4's pinned registry check.
-Depositor opt-outs are allowed before activation. Bypass batch manifest version 10 records the
-selected policy's vault-controller authorization, O4 authorization and both whitelist dependencies,
-without a separate policy registry; older manifests are rejected. Historical O3 predecessor checks
-remain separate. The package drops the removed hook ABI. Its source ABI catalog does not export interface ABIs;
-generated TypeChain interface exports include `IIntentSettlementPolicy` and `IStakeVaultV2`.
-The source ABI catalog exports `StakeVaultV2` separately from the August `StakeVault`.
-
-The cross-repo attestor smoke is gated by `ATTESTOR_POLICY_SMOKE_ROOT`; its signed payload
-contains word 0 (zero for pay now, the attested window for protected settlements).
