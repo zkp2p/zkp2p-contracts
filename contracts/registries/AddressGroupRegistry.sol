@@ -17,7 +17,9 @@ import { IWhitelistResolver } from "../interfaces/IWhitelistResolver.sol";
  * TRUST MODEL: attaching a group to a maker's admission policy via WhitelistPolicy.addAllowedGroups
  * delegates ongoing admission policy to the group's controller set: the current curator, any future
  * curator after transfer, and the current and any future resolver. Any of these can admit arbitrary
- * accounts at any time.
+ * accounts at any time. It also accepts the group's arbitrator, current or future, for intents a member
+ * signals through the group on OrchestratorV4: the arbitrator can release, partially release or cancel
+ * them without a payment proof.
  */
 contract AddressGroupRegistry is IAddressGroupRegistry {
 
@@ -28,6 +30,7 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
         address pendingCurator;
         address resolver;
         bool isPublic;
+        address arbitrator;
     }
 
     /* ============ Events ============ */
@@ -40,6 +43,7 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
     event MemberRemoved(bytes32 indexed groupId, address indexed member);
     event ResolverSet(bytes32 indexed groupId, address indexed oldResolver, address indexed newResolver);
     event GroupVisibilityChanged(bytes32 indexed groupId, bool isPublic);
+    event ArbitratorSet(bytes32 indexed groupId, address indexed oldArbitrator, address indexed newArbitrator);
 
     /* ============ Errors ============ */
 
@@ -200,6 +204,18 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
         group.resolver = _resolver;
     }
 
+    /**
+     * @notice Sets or clears the group's arbitrator. Intents keep the arbitrator they were signaled with.
+     * @param _groupId      Group id.
+     * @param _arbitrator   Arbitrator for new intents signaled through the group (address(0) to clear).
+     */
+    function setArbitrator(bytes32 _groupId, address _arbitrator) external override {
+        Group storage group = _requireGroupCurator(_groupId);
+
+        emit ArbitratorSet(_groupId, group.arbitrator, _arbitrator);
+        group.arbitrator = _arbitrator;
+    }
+
     /* ============ External View Functions ============ */
 
     /**
@@ -234,10 +250,24 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
         external
         view
         override
-        returns (address curator, address pendingCurator, address resolver, bool isPublic, bool exists)
+        returns (
+            address curator,
+            address pendingCurator,
+            address resolver,
+            bool isPublic,
+            bool exists,
+            address arbitrator
+        )
     {
         Group storage group = groups[_groupId];
-        return (group.curator, group.pendingCurator, group.resolver, group.isPublic, group.curator != address(0));
+        return (
+            group.curator,
+            group.pendingCurator,
+            group.resolver,
+            group.isPublic,
+            group.curator != address(0),
+            group.arbitrator
+        );
     }
 
     /* ============ Internal Functions ============ */

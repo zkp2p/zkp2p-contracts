@@ -19,6 +19,7 @@ import { IEscrow } from "./interfaces/IEscrow.sol";
 import { IEscrowV2 } from "./interfaces/IEscrowV2.sol";
 import { IEscrowRegistry } from "./interfaces/IEscrowRegistry.sol";
 import { IWhitelistPolicy } from "./interfaces/IWhitelistPolicy.sol";
+import { IAddressGroupRegistry } from "./interfaces/IAddressGroupRegistry.sol";
 import { IIntentSettlementPolicy } from "./interfaces/IIntentSettlementPolicy.sol";
 import { IPaymentVerifierV2 } from "./interfaces/IPaymentVerifierV2.sol";
 import { IPaymentVerifierRegistry } from "./interfaces/IPaymentVerifierRegistry.sol";
@@ -31,7 +32,7 @@ import { ReferralFeeLib } from "./lib/ReferralFeeLib.sol";
  * lifecycle — signal, cancel, fulfill, manual release, prune, orphan cleanup — and extends it
  * with a governance-selected settlement policy and deferred settlement.
  * @dev Intent keeps V3 field order with the intent hooks removed and the hook data replaced by payerCommitment,
- * then appends takerWhitelisted.
+ * then appends takerWhitelisted and arbitrator.
  */
 contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
 
@@ -66,6 +67,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     IEscrowRegistry public escrowRegistry;                              // Registry of escrow contracts
     IPaymentVerifierRegistry public  paymentVerifierRegistry;          // Registry of payment verifiers
     IWhitelistPolicy public immutable whitelistPolicy;
+    IAddressGroupRegistry internal immutable groupRegistry;            // whitelistPolicy's group registry
     IRelayerRegistry public relayerRegistry;                           // Registry of relayers
 
     // Protocol fee configuration
@@ -96,6 +98,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         protocolFee = _protocolFee;
         protocolFeeRecipient = _protocolFeeRecipient;
         whitelistPolicy = _whitelistPolicy;
+        groupRegistry = _whitelistPolicy.groupRegistry();
 
         transferOwnership(_owner);
     }
@@ -107,7 +110,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      * their given _payeeId in order to unlock _amount of funds on-chain. Caller must provide a signature from the deposit's gating
      * service to prove their eligibility to take liquidity. This function captures and stores all values required for fullfilling
      * the intent to give strong guarantees to the buyer. Checks whitelist admission and records whether the taker was
-     * whitelisted before locking liquidity for the corresponding deposit on the escrow contract.
+     * whitelisted, and the arbitrator of the group the taker signals through, before locking liquidity for the
+     * corresponding deposit on the escrow contract.
      *
      * @param _params                   Struct containing all the intent parameters
      */
@@ -117,7 +121,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         whenNotPaused
     {
         // Checks
-        bool takerWhitelisted = _validateSignalIntent(_params);
+        (bool takerWhitelisted, address arbitrator) = _validateSignalIntent(_params);
 
         // Effects
         bytes32 intentHash = _calculateIntentHash();
@@ -145,6 +149,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         storedIntent.timestamp = block.timestamp;
         storedIntent.payerCommitment = _params.payerCommitment;
         storedIntent.takerWhitelisted = takerWhitelisted;
+        storedIntent.arbitrator = arbitrator;
 
         for (uint256 i = 0; i < _params.referralFees.length; ++i) {
             IReferralFee.ReferralFee calldata referralFee = _params.referralFees[i];
@@ -180,8 +185,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     }
 
     /**
-     * @notice Only callable by the originator of the intent. Cancels an outstanding intent. Unlocks liquidity
-     * for the corresponding deposit on the escrow contract.
+     * @notice Only callable by the originator or the arbitrator of the intent. Cancels an outstanding intent. Unlocks
+     * liquidity for the corresponding deposit on the escrow contract.
      *
      * @param _intentHash    Hash of intent being cancelled
      */
@@ -190,7 +195,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         Intent memory intent = intents[_intentHash];
         
         if (intent.timestamp == 0) revert IntentNotFound(_intentHash);
-        if (intent.owner != msg.sender) revert UnauthorizedCaller(msg.sender, intent.owner);
+        if (intent.owner != msg.sender && intent.arbitrator != msg.sender) revert UnauthorizedCaller(msg.sender, intent.owner);
 
         // Effects
         _pruneIntent(_intentHash);
@@ -246,15 +251,16 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
             settlementData,
             managerFeeRecipient,
             managerFee,
-            false,
+            address(0),
             deposit.depositor
         );
     }
 
     /**
-     * @notice Allows depositor to release funds to the payer in case of a failed fulfill intent or because of some other arrangement
-     * between the two parties. Upon submission we check to make sure the msg.sender is the depositor, the intent is removed, and 
-     * escrow state is updated. Manual release pays the recipient directly without calling the settlement policy.
+     * @notice Allows depositor or the intent's arbitrator to release funds to the payer in case of a failed fulfill intent, a
+     * dispute ruling, or some other arrangement between the two parties. Upon submission we check to make sure the msg.sender
+     * is the depositor or arbitrator, the intent is removed, and escrow state is updated. Manual release pays the recipient
+     * directly without calling the settlement policy.
      *
      * @param _intentHash        Hash of intent to resolve by releasing the funds
      */
@@ -264,7 +270,9 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
 
         IEscrow.Deposit memory deposit = IEscrow(intent.escrow).getDeposit(intent.depositId);
-        if (deposit.depositor != msg.sender) revert UnauthorizedCaller(msg.sender, deposit.depositor);
+        if (deposit.depositor != msg.sender && intent.arbitrator != msg.sender) {
+            revert UnauthorizedCaller(msg.sender, deposit.depositor);
+        }
 
         // Snapshot manager fee terms before pruning (pruning deletes the mappings).
         address managerFeeRecipient = intentManagerFeeRecipient[_intentHash];
@@ -284,7 +292,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
             "",
             managerFeeRecipient,
             managerFee,
-            true,
+            msg.sender,
             deposit.depositor
         );
     }
@@ -425,7 +433,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      *
      * Functionalities that remain unpaused to allow users to recover funds:
      * - Intent cancellation (cancelIntent)
-     * - Manual fund release by depositor (releaseFundsToPayer)
+     * - Manual fund release by depositor or arbitrator (releaseFundsToPayer)
      * - Intent pruning by escrow (pruneIntents)
      * - All governance functions
      * - All view functions
@@ -459,9 +467,13 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     /* ============ Internal Functions ============ */
 
     /**
-     * @notice Validates an intent before it is signaled.
+     * @notice Validates an intent before it is signaled and returns the arbitrator of the group it names.
      */
-    function _validateSignalIntent(SignalIntentParams calldata _intent) internal view returns (bool takerWhitelisted) {
+    function _validateSignalIntent(SignalIntentParams calldata _intent)
+        internal
+        view
+        returns (bool takerWhitelisted, address arbitrator)
+    {
         // Check if account can have multiple intents
         bool canHaveMultipleIntents = relayerRegistry.isWhitelistedRelayer(msg.sender) || allowMultipleIntents;
         if (!canHaveMultipleIntents && accountIntents[msg.sender].length > 0) {
@@ -493,7 +505,17 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (_intent.conversionRate < minConversionRate) revert RateBelowMinimum(_intent.conversionRate, minConversionRate);
 
         takerWhitelisted = whitelistPolicy.enabled(_intent.escrow, _intent.depositId, _intent.paymentMethod);
-        if (takerWhitelisted && !whitelistPolicy.isTakerAllowed(_intent.escrow, _intent.depositId, _intent.paymentMethod, msg.sender)) {
+        if (_intent.groupId != bytes32(0)) {
+            // Allowing a group accepts its arbitrator; a member of an allowed group also passes the whitelist.
+            if (!whitelistPolicy.isGroupAllowed(_intent.escrow, _intent.depositId, _intent.paymentMethod, _intent.groupId)) {
+                revert GroupNotAllowed(_intent.escrow, _intent.depositId, _intent.paymentMethod, _intent.groupId);
+            }
+            if (!groupRegistry.isMember(_intent.groupId, msg.sender)) revert NotGroupMember(_intent.groupId, msg.sender);
+            (,,,,, arbitrator) = groupRegistry.getGroup(_intent.groupId);
+        } else if (
+            takerWhitelisted
+                && !whitelistPolicy.isTakerAllowed(_intent.escrow, _intent.depositId, _intent.paymentMethod, msg.sender)
+        ) {
             revert TakerNotWhitelisted(_intent.escrow, _intent.depositId, _intent.paymentMethod, msg.sender);
         }
 
@@ -600,7 +622,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         bytes memory _settlementData,
         address _managerFeeRecipient,
         uint256 _managerFee,
-        bool _isManualRelease,
+        address _releasedBy,
         address _depositor
     ) internal {
         IIntentSettlementPolicy policy = settlementPolicy;
@@ -610,7 +632,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
 
         address vault;
         IIntentSettlementPolicy.SettlementContext memory context;
-        if (address(policy) != address(0) && !_isManualRelease && !_intent.takerWhitelisted) {
+        if (address(policy) != address(0) && _releasedBy == address(0) && !_intent.takerWhitelisted) {
             context = IIntentSettlementPolicy.SettlementContext({
                 intentHash: _intentHash,
                 token: address(_token),
@@ -640,7 +662,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
             _intentHash, 
             fundsTransferredTo, 
             netAmount, 
-            _isManualRelease
+            _releasedBy
         );
     }
 

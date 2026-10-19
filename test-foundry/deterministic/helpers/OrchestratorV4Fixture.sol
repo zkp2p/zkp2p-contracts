@@ -167,7 +167,8 @@ abstract contract OrchestratorV4Fixture is Test {
             referralFees: referralFees,
             gatingServiceSignature: "",
             signatureExpiration: block.timestamp + 1 days,
-            payerCommitment: ""
+            payerCommitment: "",
+            groupId: bytes32(0)
         });
     }
 

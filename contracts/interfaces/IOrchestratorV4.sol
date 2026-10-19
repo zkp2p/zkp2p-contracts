@@ -9,7 +9,7 @@ import { IIntentSettlementPolicy } from "./IIntentSettlementPolicy.sol";
  * @title IOrchestratorV4
  * @notice Interface for the V4 orchestrator with deferred settlement.
  * @dev Intent keeps V3 field order with the intent hooks removed and the hook data replaced by payerCommitment,
- * then appends takerWhitelisted.
+ * then appends takerWhitelisted and arbitrator.
  */
 interface IOrchestratorV4 {
 
@@ -29,6 +29,7 @@ interface IOrchestratorV4 {
         IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker
         bytes payerCommitment;                      // What the payer commits to, e.g. a salted payer ID hash; empty = none
         bool takerWhitelisted;                      // Taker passed the deposit's enabled whitelist at signal; skips the policy
+        address arbitrator;                         // Arbitrator of the group the taker signaled through; can release or cancel; zero = none
     }
 
     struct SignalIntentParams {
@@ -43,6 +44,7 @@ interface IOrchestratorV4 {
         bytes gatingServiceSignature;               // Signature from the deposit's gating service
         uint256 signatureExpiration;                // Timestamp when the gating service signature expires
         bytes payerCommitment;                      // Signed by the gating service; UPV4 requires the attestor to sign its hash
+        bytes32 groupId;                            // Allowed group the taker is a member of; its arbitrator rules the intent; zero = none
     }
 
     struct FulfillIntentParams {
@@ -76,7 +78,7 @@ interface IOrchestratorV4 {
         bytes32 indexed intentHash,
         address indexed fundsTransferredTo,
         uint256 amount,
-        bool isManualRelease
+        address releasedBy                          // Depositor or arbitrator for a manual release; zero for a verified payment
     );
 
     event IntentReferralFeeDistributed(
@@ -113,6 +115,8 @@ interface IOrchestratorV4 {
     error PaymentMethodNotWhitelisted(bytes32 paymentMethod);
     error EscrowNotWhitelisted(address escrow);
     error TakerNotWhitelisted(address escrow, uint256 depositId, bytes32 paymentMethod, address taker);
+    error GroupNotAllowed(address escrow, uint256 depositId, bytes32 paymentMethod, bytes32 groupId);
+    error NotGroupMember(bytes32 groupId, address taker);
 
     // Amount and fee errors
     error AmountBelowMin(uint256 amount, uint256 min);
@@ -149,14 +153,14 @@ interface IOrchestratorV4 {
     /// @notice Sets the settlement policy applied to every later settlement; zero disables protection.
     function setSettlementPolicy(IIntentSettlementPolicy policy) external;
 
-    /// @notice Cancels the caller's intent and unlocks its funds.
+    /// @notice Cancels an intent as its owner or arbitrator and unlocks its funds.
     function cancelIntent(bytes32 intentHash) external;
 
     /// @notice Verifies payment and settles immediately or defers the net payout.
     /// @dev Forwards the signed settlement data to the current settlement policy.
     function fulfillIntent(FulfillIntentParams calldata params) external;
 
-    /// @notice Manually settles an intent as its depositor.
+    /// @notice Manually settles an intent as its depositor or arbitrator.
     function releaseFundsToPayer(bytes32 intentHash) external;
 
     /* ============ External Functions for Escrow ============ */

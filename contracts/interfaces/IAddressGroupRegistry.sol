@@ -58,6 +58,11 @@ interface IAddressGroupRegistry {
     function setResolver(bytes32 _groupId, address _resolver) external;
 
     /**
+     * @notice Sets or clears the arbitrator for intents signaled through the group (curator only).
+     */
+    function setArbitrator(bytes32 _groupId, address _arbitrator) external;
+
+    /**
      * @notice Returns whether an account is a member (curated OR resolver; fail-closed).
      */
     function isMember(bytes32 _groupId, address _account) external view returns (bool);
@@ -73,7 +78,14 @@ interface IAddressGroupRegistry {
     function getGroup(bytes32 _groupId)
         external
         view
-        returns (address curator, address pendingCurator, address resolver, bool isPublic, bool exists);
+        returns (
+            address curator,
+            address pendingCurator,
+            address resolver,
+            bool isPublic,
+            bool exists,
+            address arbitrator
+        );
 
     /**
      * @notice Returns the number of groups created (the counter used to derive group ids).

@@ -13,6 +13,7 @@ contract AddressGroupRegistryTest is Test {
     event MemberAdded(bytes32 indexed groupId, address indexed member);
     event MemberRemoved(bytes32 indexed groupId, address indexed member);
     event GroupVisibilityChanged(bytes32 indexed groupId, bool isPublic);
+    event ArbitratorSet(bytes32 indexed groupId, address indexed oldArbitrator, address indexed newArbitrator);
 
     AddressGroupRegistry internal registry;
     address internal alice;
@@ -56,18 +57,19 @@ contract AddressGroupRegistryTest is Test {
 
     function test_CreateGroupSetsCallerAsCurator() public {
         bytes32 groupId = _createGroup(alice);
-        (address curator, address pendingCurator, address resolver, bool isPublic, bool exists) =
+        (address curator, address pendingCurator, address resolver, bool isPublic, bool exists, address arbitrator) =
             registry.getGroup(groupId);
         assertEq(curator, alice);
         assertEq(pendingCurator, address(0));
         assertEq(resolver, address(0));
         assertFalse(isPublic);
         assertTrue(exists);
+        assertEq(arbitrator, address(0));
     }
 
     function test_GroupZeroDoesNotExist() public view {
         assertFalse(registry.groupExists(bytes32(0)));
-        (,,,, bool exists) = registry.getGroup(bytes32(0));
+        (,,,, bool exists,) = registry.getGroup(bytes32(0));
         assertFalse(exists);
     }
 
@@ -83,7 +85,7 @@ contract AddressGroupRegistryTest is Test {
         emit GroupCuratorTransferStarted(groupId, alice, bob);
         vm.prank(alice);
         registry.transferGroupCurator(groupId, bob);
-        (address curator, address pendingCurator,,,) = registry.getGroup(groupId);
+        (address curator, address pendingCurator,,,,) = registry.getGroup(groupId);
         assertEq(curator, alice);
         assertEq(pendingCurator, bob);
     }
@@ -94,7 +96,7 @@ contract AddressGroupRegistryTest is Test {
         registry.transferGroupCurator(groupId, bob);
         vm.prank(alice);
         registry.transferGroupCurator(groupId, carol);
-        (, address pendingCurator,,,) = registry.getGroup(groupId);
+        (, address pendingCurator,,,,) = registry.getGroup(groupId);
         assertEq(pendingCurator, carol);
     }
 
@@ -126,7 +128,7 @@ contract AddressGroupRegistryTest is Test {
         emit GroupCuratorTransferCancelled(groupId, bob);
         vm.prank(alice);
         registry.cancelGroupCuratorTransfer(groupId);
-        (, address pendingCurator,,,) = registry.getGroup(groupId);
+        (, address pendingCurator,,,,) = registry.getGroup(groupId);
         assertEq(pendingCurator, address(0));
     }
 
@@ -145,7 +147,7 @@ contract AddressGroupRegistryTest is Test {
         emit GroupCuratorTransferred(groupId, alice, bob);
         vm.prank(bob);
         registry.acceptGroupCurator(groupId);
-        (address curator, address pendingCurator,,,) = registry.getGroup(groupId);
+        (address curator, address pendingCurator,,,,) = registry.getGroup(groupId);
         assertEq(curator, bob);
         assertEq(pendingCurator, address(0));
     }
@@ -346,14 +348,14 @@ contract AddressGroupRegistryTest is Test {
         emit GroupVisibilityChanged(groupId, true);
         vm.prank(alice);
         registry.setGroupVisibility(groupId, true);
-        (,,, bool isPublic,) = registry.getGroup(groupId);
+        (,,, bool isPublic,,) = registry.getGroup(groupId);
         assertTrue(isPublic);
 
         vm.expectEmit(true, true, true, true, address(registry));
         emit GroupVisibilityChanged(groupId, false);
         vm.prank(alice);
         registry.setGroupVisibility(groupId, false);
-        (,,, isPublic,) = registry.getGroup(groupId);
+        (,,, isPublic,,) = registry.getGroup(groupId);
         assertFalse(isPublic);
 
         vm.expectEmit(true, true, true, true, address(registry));
@@ -372,6 +374,38 @@ contract AddressGroupRegistryTest is Test {
     function test_SetVisibilityOnNonexistentGroupReverts() public {
         vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.GroupDoesNotExist.selector, bytes32(uint256(7))));
         registry.setGroupVisibility(bytes32(uint256(7)), true);
+    }
+
+    /* ============ setArbitrator ============ */
+
+    function test_CuratorSetsAndClearsArbitratorAndEmitsOldAndNew() public {
+        bytes32 groupId = _createGroup(alice);
+
+        vm.expectEmit(true, true, true, true, address(registry));
+        emit ArbitratorSet(groupId, address(0), bob);
+        vm.prank(alice);
+        registry.setArbitrator(groupId, bob);
+        (,,,,, address arbitrator) = registry.getGroup(groupId);
+        assertEq(arbitrator, bob);
+
+        vm.expectEmit(true, true, true, true, address(registry));
+        emit ArbitratorSet(groupId, bob, address(0));
+        vm.prank(alice);
+        registry.setArbitrator(groupId, address(0));
+        (,,,,, arbitrator) = registry.getGroup(groupId);
+        assertEq(arbitrator, address(0));
+    }
+
+    function test_NonCuratorCannotSetArbitrator() public {
+        bytes32 groupId = _createGroup(alice);
+        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedGroupCurator.selector, bob, alice));
+        vm.prank(bob);
+        registry.setArbitrator(groupId, bob);
+    }
+
+    function test_SetArbitratorOnNonexistentGroupReverts() public {
+        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.GroupDoesNotExist.selector, bytes32(uint256(7))));
+        registry.setArbitrator(bytes32(uint256(7)), bob);
     }
 
     /* ============ public self-service membership ============ */

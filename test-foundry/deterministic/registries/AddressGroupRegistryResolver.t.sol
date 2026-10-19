@@ -36,7 +36,7 @@ contract AddressGroupRegistryResolverTest is Test {
         vm.expectEmit(true, true, true, true, address(registry));
         emit ResolverSet(groupId, address(0), address(resolver));
         _setResolver(address(resolver));
-        (,, address stored,,) = registry.getGroup(groupId);
+        (,, address stored,,,) = registry.getGroup(groupId);
         assertEq(stored, address(resolver));
     }
 
@@ -45,7 +45,7 @@ contract AddressGroupRegistryResolverTest is Test {
         vm.expectEmit(true, true, true, true, address(registry));
         emit ResolverSet(groupId, address(resolver), address(0));
         _setResolver(address(0));
-        (,, address stored,,) = registry.getGroup(groupId);
+        (,, address stored,,,) = registry.getGroup(groupId);
         assertEq(stored, address(0));
     }
 

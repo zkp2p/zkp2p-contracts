@@ -11,7 +11,7 @@ import {SettlementPolicyMock} from "../../mocks/SettlementPolicyMock.sol";
 
 contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
     event IntentPayoutDeferred(bytes32 indexed intentHash, address indexed recipient, address indexed vault, uint256 amount);
-    event IntentFulfilled(bytes32 indexed intentHash, address indexed fundsTransferredTo, uint256 amount, bool manual);
+    event IntentFulfilled(bytes32 indexed intentHash, address indexed fundsTransferredTo, uint256 amount, address releasedBy);
     SettlementPolicyMock internal hook;
 
     function setUp() public override {
@@ -38,7 +38,7 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
         vm.expectEmit(true, true, true, true, address(orchestrator));
         emit IntentPayoutDeferred(hash, taker, address(hook), net);
         vm.expectEmit(true, true, false, true, address(orchestrator));
-        emit IntentFulfilled(hash, address(hook), net, false);
+        emit IntentFulfilled(hash, address(hook), net, address(0));
         _fulfill(hash, INTENT_AMOUNT, CONVERSION_RATE);
         assertEq(token.balanceOf(address(hook)), net);
         assertEq(hook.balanceAtFunding(), net);
