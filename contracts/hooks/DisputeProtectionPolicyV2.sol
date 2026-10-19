@@ -83,14 +83,11 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
         if (window > MAX_DISPUTE_WINDOW) revert InvalidDisputeWindow(window);
         if (window == 0) return address(0);
         if (_context.token != address(stakeVault.stakeToken())) return address(0);
-        return _protect(_context, uint64(window));
-    }
 
-    function _protect(SettlementContext calldata _context, uint64 _window) internal nonReentrant returns (address deferralVault) {
         protections[_context.intentHash] = Protection({depositor: _context.depositor, paymentMethod: _context.paymentMethod});
         address stakeOwner = stakeVault.stakeOwnerOf(_context.taker);
         if (stakeVault.freeStake(stakeOwner) >= _context.releaseAmount) {
-            stakeVault.lockStake(stakeOwner, _context.intentHash, _context.releaseAmount, _maturity(_window));
+            stakeVault.lockStake(stakeOwner, _context.intentHash, _context.releaseAmount, _maturity(uint64(window)));
         } else {
             deferralVault = address(stakeVault);
         }
