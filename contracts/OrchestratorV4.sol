@@ -31,7 +31,7 @@ import { ReferralFeeLib } from "./lib/ReferralFeeLib.sol";
  * @title OrchestratorV4
  * @notice Standalone V4 orchestrator for the ZKP2P protocol. Owns the complete intent (order)
  * lifecycle — signal, cancel, fulfill, manual release, prune, orphan cleanup — and extends it
- * with a snapshotted governance-selected settlement policy and deferred settlement.
+ * with a governance-selected settlement policy and deferred settlement.
  * @dev Intent keeps V3 field order with the intent hooks removed and the hook data replaced by payerCommitment.
  */
 contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
@@ -60,9 +60,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     mapping(bytes32 => address) internal intentManagerFeeRecipient;
     mapping(bytes32 => uint256) internal intentManagerFee;
 
-    // Governance-selected settlement policy; snapshotted per intent at signal.
+    // Governance-selected settlement policy applied at settlement.
     IIntentSettlementPolicy public settlementPolicy;
-    mapping(bytes32 => IIntentSettlementPolicy) internal intentSettlementPolicies;
 
     // Contract references
     IEscrowRegistry public escrowRegistry;                              // Registry of escrow contracts
@@ -110,7 +109,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      * @notice Signals intent to pay the depositor defined in the _depositId the _amount * deposit conversionRate off-chain at 
      * their given _payeeId in order to unlock _amount of funds on-chain. Caller must provide a signature from the deposit's gating
      * service to prove their eligibility to take liquidity. This function captures and stores all values required for fullfilling
-     * the intent to give strong guarantees to the buyer. Snapshots the global settlement policy and checks whitelist
+     * the intent to give strong guarantees to the buyer. Checks whitelist
      * admission before locking liquidity for the corresponding deposit on the escrow contract.
      *
      * @param _params                   Struct containing all the intent parameters
@@ -178,12 +177,6 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         // Emit manager fee snapshot last for easier indexing
         emit IntentManagerFeeSnapshotted(intentHash, managerFeeRecipient, managerFee);
 
-        // Snapshot the governance-selected settlement policy.
-        IIntentSettlementPolicy snapshottedPolicy = settlementPolicy;
-        intentSettlementPolicies[intentHash] = snapshottedPolicy;
-
-        emit IntentSettlementPolicySnapshotted(intentHash, address(snapshottedPolicy));
-
         // Interactions
         IEscrow(_params.escrow).lockFunds(_params.depositId, intentHash, _params.amount);
     }
@@ -202,7 +195,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (intent.owner != msg.sender) revert UnauthorizedCaller(msg.sender, intent.owner);
 
         // Effects
-        _pruneCancelledIntent(_intentHash);
+        _pruneIntent(_intentHash);
 
         // Interactions
         IEscrow(intent.escrow).unlockFunds(intent.depositId, _intentHash);
@@ -211,9 +204,9 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     /**
      * @notice Anyone can submit a fulfill intent transaction, even if caller isn't the intent owner. Upon submission the
      * offchain payment proof is verified, payment details are validated, intent is removed, and escrow state is updated.
-     * Settlement unlocks escrow funds, transfers fees, notifies the snapshotted settlement policy (fail-closed),
+     * Settlement unlocks escrow funds, transfers fees, notifies the current settlement policy (fail-closed),
      * and transfers the net payout to intent.to or the deferral vault.
-     * @dev Raw signed extension bytes are forwarded opaquely to the snapshotted policy.
+     * @dev Raw signed extension bytes are forwarded opaquely to the current policy.
      * @dev Guarded against reentrancy through verifiers, tokens and settlement policies.
      *
      * @param _params               Struct containing all the fulfill intent parameters
@@ -264,7 +257,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     /**
      * @notice Allows depositor to release funds to the payer in case of a failed fulfill intent or because of some other arrangement
      * between the two parties. Upon submission we check to make sure the msg.sender is the depositor, the intent is removed, and 
-     * escrow state is updated. Manual release notifies the snapshotted settlement policy with isManualRelease = true
+     * escrow state is updated. Manual release notifies the current settlement policy with isManualRelease = true
      * and an empty extension, then transfers the net payout to the recipient or the policy-selected deferral vault.
      *
      * @param _intentHash        Hash of intent to resolve by releasing the funds
@@ -317,7 +310,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
                     intent.timestamp != 0 && // Only prune if intent exists on this contract; otherwise skip
                     intent.escrow == msg.sender // Ensure only the escrow that owns the intent can prune it; otherwise skip
                 ) {
-                    _pruneCancelledIntent(intentHash);
+                    _pruneIntent(intentHash);
                 }
             }
         }
@@ -348,7 +341,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
 
             // If intent doesn't exist on escrow, it's orphaned — prune it
             if (escrowIntent.intentHash == bytes32(0)) {
-                _pruneCancelledIntent(intentHash);
+                _pruneIntent(intentHash);
             }
         }
     }
@@ -356,9 +349,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     /* ============ Governance Functions ============ */
 
     /**
-     * @notice GOVERNANCE ONLY: Updates the global settlement policy used by future intents.
-     * @dev Existing intents retain their snapshotted policy. The zero address disables protection
-     * for future intents.
+     * @notice GOVERNANCE ONLY: Updates the global settlement policy.
+     * @dev Applies to every later settlement, including open intents. The zero address disables protection.
      *
      * @param _policy   New global settlement policy
      */
@@ -474,20 +466,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         return accountIntents[_account];
     }
 
-    /**
-     * @notice Returns the immutable policy snapshot for an active intent.
-     */
-    function getIntentSettlementPolicy(bytes32 _intentHash) external view returns (IIntentSettlementPolicy) {
-        return intentSettlementPolicies[_intentHash];
-    }
-
     /* ============ Internal Functions ============ */
-
-    /// @notice Prunes a cancelled intent and clears its settlement policy snapshot.
-    function _pruneCancelledIntent(bytes32 _intentHash) internal {
-        _pruneIntent(_intentHash);
-        delete intentSettlementPolicies[_intentHash];
-    }
 
     /**
      * @notice Validates an intent before it is signaled.
@@ -619,7 +598,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     }
 
     /**
-     * @notice Transfers fees, notifies the snapshotted settlement policy of settlement (fail-closed), then routes the
+     * @notice Transfers fees, notifies the current settlement policy of settlement (fail-closed), then routes the
      * executable remainder to the deferral vault or directly to the recipient.
      * @dev A reverting settlement policy aborts the entire settlement, including the preceding fee transfers.
      * The settlement policy receives the depositor captured before escrow unlock and no token allowance.
@@ -636,15 +615,14 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         bool _isManualRelease,
         address _depositor
     ) internal {
-        IIntentSettlementPolicy snapshottedPolicy = intentSettlementPolicies[_intentHash];
-        delete intentSettlementPolicies[_intentHash];
+        IIntentSettlementPolicy policy = settlementPolicy;
 
         uint256 netFees = _calculateAndTransferFees(_token, _intentHash, _intent, _releaseAmount, _managerFeeRecipient, _managerFee);
         uint256 netAmount = _releaseAmount - netFees;
 
         address vault;
-        if (address(snapshottedPolicy) != address(0)) {
-            vault = snapshottedPolicy.settleIntent(
+        if (address(policy) != address(0)) {
+            vault = policy.settleIntent(
                 IIntentSettlementPolicy.SettlementContext({
                     intentHash: _intentHash,
                     token: address(_token),
@@ -665,7 +643,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         address fundsTransferredTo = _intent.to;
         if (vault != address(0)) {
             _token.safeTransfer(vault, netAmount);
-            snapshottedPolicy.onDeferredPayoutFunded(_intentHash);
+            policy.onDeferredPayoutFunded(_intentHash);
             emit IntentPayoutDeferred(_intentHash, _intent.to, vault, netAmount);
             fundsTransferredTo = vault;
         } else {

@@ -25,10 +25,9 @@ import { IPaymentVerifierV2 } from "../interfaces/IPaymentVerifierV2.sol";
  * registry, route payment methods to this verifier, and retire V3's registry write permission during activation.
  * attestation.data starts with the 480-byte `abi.encode(PaymentDetails, IntentSnapshot)`
  * payload, optionally followed by opaque extension bytes. The entire data is signed through dataHash;
- * unsigned attestation.metadata is never returned. Extension words are decoded only by O4's snapshotted settlement policy,
+ * unsigned attestation.metadata is never returned. Extension words are decoded only by O4's current settlement policy,
  * not this verifier or the non-upgradeable OrchestratorV4. The policy defines the extension layout and
  * validation rules; this verifier returns every signed byte after the prefix without interpreting it.
- * intent.data is never interpreted here; O4 forwards it and the raw signed extension to its snapshotted settlement policy.
  */
 contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerifierV3 {
 

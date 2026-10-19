@@ -24,7 +24,6 @@ contract SettlementPolicySwapTest is DisputeProtectionStackV2Fixture {
 
         vm.warp(block.timestamp + 1 hours);
         bytes32 second = _signalDefault();
-        assertEq(address(orchestrator.getIntentSettlementPolicy(second)), address(successor));
         _settle(second, INTENT_AMOUNT, RISK_WINDOW);
         assertEq(vault.lockController(second), address(successor));
         assertEq(

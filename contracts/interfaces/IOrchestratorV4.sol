@@ -84,7 +84,6 @@ interface IOrchestratorV4 {
     );
     event IntentManagerFeeSnapshotted(bytes32 indexed intentHash, address indexed feeRecipient, uint256 fee);
     event SettlementPolicyUpdated(address indexed previousPolicy, address indexed newPolicy);
-    event IntentSettlementPolicySnapshotted(bytes32 indexed intentHash, address indexed settlementPolicy);
     event AllowMultipleIntentsUpdated(bool allowMultiple);
 
     event RelayerRegistryUpdated(address indexed relayerRegistry);
@@ -141,21 +140,20 @@ interface IOrchestratorV4 {
     function getIntent(bytes32 intentHash) external view returns (Intent memory);
     function getAccountIntents(address account) external view returns (bytes32[] memory);
     function settlementPolicy() external view returns (IIntentSettlementPolicy);
-    function getIntentSettlementPolicy(bytes32 intentHash) external view returns (IIntentSettlementPolicy);
 
     /* ============ External Functions for Users ============ */
 
     /// @notice Signals an intent and locks its escrow funds.
     function signalIntent(SignalIntentParams calldata params) external;
 
-    /// @notice Sets a compatible settlement policy for future intents; zero disables protection.
+    /// @notice Sets the settlement policy applied to every later settlement; zero disables protection.
     function setSettlementPolicy(IIntentSettlementPolicy policy) external;
 
     /// @notice Cancels the caller's intent and unlocks its funds.
     function cancelIntent(bytes32 intentHash) external;
 
     /// @notice Verifies payment and settles immediately or defers the net payout.
-    /// @dev Forwards the raw signed extension bytes to the snapshotted settlement policy.
+    /// @dev Forwards the raw signed extension bytes to the current settlement policy.
     function fulfillIntent(FulfillIntentParams calldata params) external;
 
     /// @notice Manually settles an intent as its depositor.

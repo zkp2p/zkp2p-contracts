@@ -28,7 +28,7 @@ contract SettlementPolicyHandler is DisputeProtectionStackV2Fixture {
             whitelist.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), allowed);
         }
         uint256 recipientBefore = token.balanceOf(other);
-        bool protected = enabledAtSignal && !manual && !zeroWindow && !exempt;
+        bool protected = enableAfterSignal && !manual && !zeroWindow && !exempt;
         bool hasStake = vault.freeStake(taker) >= INTENT_AMOUNT;
         if (manual) {
             vm.prank(depositor);
@@ -46,7 +46,6 @@ contract SettlementPolicyHandler is DisputeProtectionStackV2Fixture {
             assertEq(record.lockedAmount, hasStake ? INTENT_AMOUNT : NET);
             assertEq(token.balanceOf(other) - recipientBefore, hasStake ? NET : 0);
         }
-        assertEq(address(orchestrator.getIntentSettlementPolicy(id)), address(0));
         settled.push(id);
     }
 

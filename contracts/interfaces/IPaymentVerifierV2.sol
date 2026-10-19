@@ -41,7 +41,7 @@ interface IPaymentVerifierV2 {
 
     /// @notice Verifies a payment and returns all verified fields plus signed extension data (never unsigned metadata).
     /// @dev Extension words: 0 = disputeWindow (uint256 seconds), 1+ = reserved.
-    /// The verifier returns these bytes untouched; the snapshotted settlement policy decodes and validates them.
+    /// The verifier returns these bytes untouched; the current settlement policy decodes and validates them.
     function verifyPayment(IPaymentVerifier.VerifyPaymentData calldata _verifyPaymentData)
         external
         returns (PaymentVerificationResultV2 memory result, bytes memory extensionData);

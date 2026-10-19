@@ -80,7 +80,6 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
         assertEq(hook.lastFundedIntentHash(), hash);
         assertEq(token.balanceOf(taker), 0);
         assertEq(orchestrator.getIntent(hash).owner, address(0));
-        assertEq(address(orchestrator.getIntentSettlementPolicy(hash)), address(0));
     }
 
     function test_DeferredPaysVaultWithoutPostIntentHook() public {
@@ -154,7 +153,6 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
         vm.expectRevert("risk funding failed");
         _fulfill(hash, INTENT_AMOUNT, CONVERSION_RATE);
         assertEq(orchestrator.getIntent(hash).owner, taker);
-        assertEq(address(orchestrator.getIntentSettlementPolicy(hash)), address(hook));
         assertEq(token.balanceOf(address(escrow)), escrowBalance);
         assertEq(token.balanceOf(protocolFeeRecipient), 0);
         assertEq(token.balanceOf(address(hook)), 0);

@@ -139,7 +139,6 @@ contract OrchestratorV4SurfaceTest is OrchestratorV4Fixture {
         bytes32[] memory hashes = orchestrator.getAccountIntents(taker);
         assertEq(hashes.length, 1);
         assertEq(hashes[0], hash);
-        assertEq(address(orchestrator.getIntentSettlementPolicy(hash)), address(0));
     }
 
     function test_PruneSkipsForeignEscrowAndUnknownHash() public {

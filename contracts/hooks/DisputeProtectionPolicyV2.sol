@@ -24,9 +24,8 @@ import {IStakeVaultV2} from "../interfaces/IStakeVaultV2.sol";
  * TRUST: Authorized orchestrators must invoke callbacks only for their own validated intents and escrows.
  * Settlement uses the depositor and token captured before escrow unlock and never reads escrow.
  * Only the deposit opt-out setter reads escrow to authenticate its depositor.
- * Intent hashes must embed the originating orchestrator so identities cannot collide. Governance must keep
- * orchestrators authorized on predecessor policies until their snapshotted intents drain. Authorize a successor
- * policy alongside its predecessor in StakeVaultV2 and select it on O4 for new intents and settlements. The
+ * Intent hashes must embed the originating orchestrator so identities cannot collide. Authorize a successor
+ * policy alongside its predecessor in StakeVaultV2 and select it on O4; every later settlement uses it. The
  * predecessor keeps serving its own locks; de-authorize it only after its locks drain. Any authorized vault
  * controller can lock any owner's free stake and pay out that free stake only to its owner.
  * Protection applies only to stake-token deposits with a nonzero attested window supplied in the signed extension.
@@ -289,8 +288,7 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
 
     /**
      * @notice GOVERNANCE ONLY: Authorizes or revokes one orchestrator.
-     * @dev Authorize an orchestrator before configuring this policy on it. Revoke it only after every intent
-     * snapshotted to this policy has been cancelled or settled.
+     * @dev Authorize an orchestrator before configuring this policy on it.
      * @param _orchestrator Orchestrator whose callback authority is updated.
      * @param _isAuthorized Whether the orchestrator may mutate dispute protection intent state.
      */

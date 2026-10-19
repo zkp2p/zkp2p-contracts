@@ -116,7 +116,6 @@ contract DeferredPayoutDepositClosureTest is DisputeProtectionStackV2Fixture {
         assertEq(address(escrow.getDeposit(depositId).token), address(0));
         assertEq(escrow.getDepositIntent(depositId, id).amount, 0);
         assertEq(orchestrator.getIntent(id).owner, address(0));
-        assertEq(address(orchestrator.getIntentSettlementPolicy(id)), address(0));
         assertEq(token.balanceOf(address(escrow)), 0);
         assertEq(token.balanceOf(address(orchestrator)), 0);
         assertEq(token.balanceOf(protocolFeeRecipient), INTENT_AMOUNT * PROTOCOL_FEE / 1e18);

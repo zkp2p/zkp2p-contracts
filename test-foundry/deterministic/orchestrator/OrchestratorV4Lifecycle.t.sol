@@ -18,19 +18,6 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         policyMock = new SettlementPolicyMock();
     }
 
-    function test_SignalWithoutPolicySnapshotsZeroAddress() public {
-        bytes32 intentHash = _signalDefault();
-        assertEq(address(orchestrator.getIntentSettlementPolicy(intentHash)), address(0));
-    }
-
-    function test_SignalWithPolicySnapshotsPolicy() public {
-        orchestrator.setSettlementPolicy(IIntentSettlementPolicy(address(policyMock)));
-
-        bytes32 intentHash = _signalDefault();
-
-        assertEq(address(orchestrator.getIntentSettlementPolicy(intentHash)), address(policyMock));
-    }
-
     function test_SettlementCallsPolicyAndFundsFlowNormally() public {
         verifier.setExtensionData(abi.encode(uint256(1)));
         orchestrator.setSettlementPolicy(policyMock);
@@ -137,10 +124,10 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         orchestrator.setSettlementPolicy(policyMock);
         vm.mockCallRevert(address(policyMock), bytes(""), bytes("policy called"));
         bytes32 id = _signalDefault();
-        assertEq(address(orchestrator.getIntentSettlementPolicy(id)), address(policyMock));
+        assertEq(orchestrator.getIntent(id).owner, taker);
     }
 
-    function test_CancelAndPruneDoNotCallPolicyAndClearSnapshot() public {
+    function test_CancelAndPruneDoNotCallPolicy() public {
         orchestrator.setSettlementPolicy(policyMock);
         bytes32 cancelled = _signalDefault();
         bytes32 expired = _signalDefault();
@@ -151,12 +138,10 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         escrow.pruneExpiredIntents(depositId);
         assertEq(orchestrator.getIntent(cancelled).owner, address(0));
         assertEq(orchestrator.getIntent(expired).owner, address(0));
-        assertEq(address(orchestrator.getIntentSettlementPolicy(cancelled)), address(0));
-        assertEq(address(orchestrator.getIntentSettlementPolicy(expired)), address(0));
         assertEq(escrow.getDeposit(depositId).remainingDeposits, 500e6);
     }
 
-    function test_OrphanCleanupDoesNotCallPolicyAndClearsSnapshot() public {
+    function test_OrphanCleanupDoesNotCallPolicy() public {
         orchestrator.setSettlementPolicy(policyMock);
         bytes32 id = _signalDefault();
         vm.store(address(escrow), keccak256(abi.encode(id, uint256(15))), bytes32(0));
@@ -167,10 +152,9 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         ids[0] = id;
         orchestrator.cleanupOrphanedIntents(ids);
         assertEq(orchestrator.getIntent(id).owner, address(0));
-        assertEq(address(orchestrator.getIntentSettlementPolicy(id)), address(0));
     }
 
-    function test_PolicyReplacementOnlyAffectsNewIntents() public {
+    function test_PolicyReplacementAppliesToOpenIntents() public {
         orchestrator.setSettlementPolicy(policyMock);
         bytes32 first = _signalDefault();
         SettlementPolicyMock next = new SettlementPolicyMock();
@@ -179,16 +163,26 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         bytes32 second = _signalDefault();
         _fulfill(first, INTENT_AMOUNT, CONVERSION_RATE);
         _fulfill(second, INTENT_AMOUNT, CONVERSION_RATE);
-        assertEq(policyMock.settlementCalls(), 1);
-        assertEq(next.settlementCalls(), 1);
-        assertEq(token.balanceOf(taker), INTENT_AMOUNT);
-        assertEq(token.balanceOf(address(next)), INTENT_AMOUNT);
+        assertEq(policyMock.settlementCalls(), 0);
+        assertEq(next.settlementCalls(), 2);
+        assertEq(token.balanceOf(taker), 0);
+        assertEq(token.balanceOf(address(next)), 2 * INTENT_AMOUNT);
     }
 
-    function test_ZeroPolicySnapshotPaysNowAfterPolicyEnabled() public {
+    function test_PolicyEnabledAfterSignalSettles() public {
         bytes32 id = _signalDefault();
-        policyMock.setRevertOnCallback(true);
         orchestrator.setSettlementPolicy(policyMock);
+        _fulfill(id, INTENT_AMOUNT, CONVERSION_RATE);
+        assertEq(policyMock.settlementCalls(), 1);
+        assertEq(policyMock.lastIntentHash(), id);
+        assertEq(token.balanceOf(taker), INTENT_AMOUNT);
+    }
+
+    function test_PolicyDisabledAfterSignalPaysNow() public {
+        orchestrator.setSettlementPolicy(policyMock);
+        policyMock.setRevertOnCallback(true);
+        bytes32 id = _signalDefault();
+        orchestrator.setSettlementPolicy(IIntentSettlementPolicy(address(0)));
         _fulfill(id, INTENT_AMOUNT, CONVERSION_RATE);
         assertEq(token.balanceOf(taker), INTENT_AMOUNT);
         assertEq(policyMock.settlementCalls(), 0);
