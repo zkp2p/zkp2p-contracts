@@ -4,7 +4,6 @@ pragma solidity ^0.8.18;
 
 import { IReferralFee } from "./IReferralFee.sol";
 import { IIntentSettlementPolicy } from "./IIntentSettlementPolicy.sol";
-import { IPreIntentHook } from "./IPreIntentHook.sol";
 
 /**
  * @title IOrchestratorV4
@@ -42,7 +41,6 @@ interface IOrchestratorV4 {
         IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker
         bytes gatingServiceSignature;               // Signature from the deposit's gating service
         uint256 signatureExpiration;                // Timestamp when the gating service signature expires
-        bytes preIntentHookData;                    // Ephemeral data passed only to the pre-intent hook during signalIntent
         bytes data;                                 // Opaque settlement policy data persisted in Intent; empty = none
     }
 
@@ -86,7 +84,6 @@ interface IOrchestratorV4 {
         uint256 feeAmount
     );
     event IntentManagerFeeSnapshotted(bytes32 indexed intentHash, address indexed feeRecipient, uint256 fee);
-    event DepositPreIntentHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
     event SettlementPolicyUpdated(address indexed previousPolicy, address indexed newPolicy);
     event IntentSettlementPolicySnapshotted(bytes32 indexed intentHash, address indexed settlementPolicy);
     event AllowMultipleIntentsUpdated(bool allowMultiple);
@@ -105,7 +102,6 @@ interface IOrchestratorV4 {
     // Authorization errors
     error UnauthorizedEscrowCaller(address caller);
     error UnauthorizedCaller(address caller, address authorized);
-    error UnauthorizedCallerOrDelegate(address caller, address owner, address delegate);
 
     // Not found errors
     error IntentNotFound(bytes32 intentHash);
@@ -128,7 +124,6 @@ interface IOrchestratorV4 {
 
     // Validation errors
     error AccountHasActiveIntent(address account, bytes32 existingIntent);
-    error InvalidPreIntentHook(address hook);
     error InvalidSettlementPolicy(address policy);
     error InvalidSignature();
     error DataRequiresPolicy();
@@ -147,7 +142,6 @@ interface IOrchestratorV4 {
 
     function getIntent(bytes32 intentHash) external view returns (Intent memory);
     function getAccountIntents(address account) external view returns (bytes32[] memory);
-    function getDepositPreIntentHook(address escrow, uint256 depositId) external view returns (IPreIntentHook);
     function settlementPolicy() external view returns (IIntentSettlementPolicy);
     function getIntentSettlementPolicy(bytes32 intentHash) external view returns (IIntentSettlementPolicy);
 
@@ -159,9 +153,6 @@ interface IOrchestratorV4 {
     /// Empty data preserves the plain V3 gating message byte-for-byte. Only the settlement policy interprets this data.
     /// For DisputeProtectionPolicyV2, pass abi.encodePacked(conditionsHash) or empty data; O4 checks no data format.
     function signalIntent(SignalIntentParams calldata params) external;
-
-    /// @notice Sets the deposit pre-intent hook as depositor or delegate.
-    function setDepositPreIntentHook(address escrow, uint256 depositId, IPreIntentHook hook) external;
 
     /// @notice Sets a compatible settlement policy for future intents; zero disables protection.
     function setSettlementPolicy(IIntentSettlementPolicy policy) external;

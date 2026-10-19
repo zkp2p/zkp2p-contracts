@@ -11,9 +11,6 @@ import {OrchestratorV4} from "contracts/OrchestratorV4.sol";
 import {OrchestratorMock} from "../../mocks/OrchestratorMock.sol";
 import {PaymentVerifierV2Mock} from "../../mocks/PaymentVerifierV2Mock.sol";
 import {PostIntentHookV2Mock} from "../../mocks/PostIntentHookV2Mock.sol";
-import {PreIntentHookMock} from "../../mocks/PreIntentHookMock.sol";
-import {ReentrantPreIntentHookMock} from "../../mocks/ReentrantPreIntentHookMock.sol";
-import {ReentrantSignalIntentCallerV2Mock} from "../../mocks/ReentrantSignalIntentCallerV2Mock.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
@@ -52,10 +49,7 @@ abstract contract OrchestratorV4Fixture is Test {
     PaymentVerifierRegistry internal paymentVerifierRegistry;
     RelayerRegistry public relayerRegistry;
     PaymentVerifierV2Mock internal verifier;
-    PreIntentHookMock internal preIntentHook;
     PostIntentHookV2Mock internal postIntentHook;
-    ReentrantSignalIntentCallerV2Mock internal reentrantSignalCaller;
-    ReentrantPreIntentHookMock internal reentrantPreIntentHook;
     OrchestratorMock internal orchestratorMock;
     uint256 internal depositId;
 
@@ -75,7 +69,6 @@ abstract contract OrchestratorV4Fixture is Test {
         orchestratorRegistry = new OrchestratorRegistry();
         relayerRegistry = new RelayerRegistry();
         verifier = new PaymentVerifierV2Mock();
-        preIntentHook = new PreIntentHookMock();
         bytes32[] memory currencies = new bytes32[](1);
         currencies[0] = USD;
         paymentVerifierRegistry.addPaymentMethod(METHOD, address(verifier), currencies);
@@ -103,8 +96,6 @@ abstract contract OrchestratorV4Fixture is Test {
         );
         orchestrator.setAllowMultipleIntents(true);
         postIntentHook = new PostIntentHookV2Mock(address(token), address(orchestrator));
-        reentrantSignalCaller = new ReentrantSignalIntentCallerV2Mock(address(orchestrator));
-        reentrantPreIntentHook = new ReentrantPreIntentHookMock(address(reentrantSignalCaller));
         orchestratorMock = new OrchestratorMock(address(escrow));
 
         escrowRegistry.addEscrow(address(escrow));
@@ -177,7 +168,6 @@ abstract contract OrchestratorV4Fixture is Test {
             referralFees: referralFees,
             gatingServiceSignature: "",
             signatureExpiration: block.timestamp + 1 days,
-            preIntentHookData: "",
             data: data
         });
     }
@@ -195,7 +185,7 @@ abstract contract OrchestratorV4Fixture is Test {
             paymentMethod: params.paymentMethod, fiatCurrency: params.fiatCurrency,
             conversionRate: params.conversionRate, referralFees: params.referralFees,
             gatingServiceSignature: params.gatingServiceSignature, signatureExpiration: params.signatureExpiration,
-            postIntentHook: IPostIntentHookV2(address(0)), preIntentHookData: params.preIntentHookData, data: params.data
+            postIntentHook: IPostIntentHookV2(address(0)), preIntentHookData: "", data: params.data
         });
     }
 

@@ -9,9 +9,9 @@ import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
 
 contract OrchestratorV4StructLayoutTest is Test {
-    function test_SignalSelectorOmitsPostIntentHook() public pure {
+    function test_SignalSelectorOmitsIntentHooks() public pure {
         bytes4 expected = bytes4(keccak256(
-            "signalIntent((address,uint256,uint256,address,bytes32,bytes32,uint256,(address,uint256)[],bytes,uint256,bytes,bytes))"
+            "signalIntent((address,uint256,uint256,address,bytes32,bytes32,uint256,(address,uint256)[],bytes,uint256,bytes))"
         ));
         assertEq(IOrchestratorV4.signalIntent.selector, expected);
     }
@@ -42,7 +42,7 @@ contract OrchestratorV4StructLayoutTest is Test {
         assertEq(abi.encode(intent), expected);
     }
 
-    function test_SignalIntentParamsMatchesV3MinusPostIntentHook() public pure {
+    function test_SignalIntentParamsMatchesV3MinusIntentHooks() public pure {
         IReferralFee.ReferralFee[] memory fees = _fees();
         IOrchestratorV3.SignalIntentParams memory v3 = IOrchestratorV3.SignalIntentParams({
             escrow: address(1),
@@ -59,7 +59,7 @@ contract OrchestratorV4StructLayoutTest is Test {
             preIntentHookData: hex"44556677",
             data: hex"8899"
         });
-        // Positional construction locks V3's field order with only postIntentHook removed.
+        // Positional construction locks V3's field order with both intent hooks removed.
         IOrchestratorV4.SignalIntentParams memory v4 = IOrchestratorV4.SignalIntentParams(
             v3.escrow,
             v3.depositId,
@@ -71,7 +71,6 @@ contract OrchestratorV4StructLayoutTest is Test {
             v3.referralFees,
             v3.gatingServiceSignature,
             v3.signatureExpiration,
-            v3.preIntentHookData,
             v3.data
         );
         assertEq(v4.escrow, v3.escrow);
@@ -84,7 +83,6 @@ contract OrchestratorV4StructLayoutTest is Test {
         assertEq(abi.encode(v4.referralFees), abi.encode(v3.referralFees));
         assertEq(v4.gatingServiceSignature, v3.gatingServiceSignature);
         assertEq(v4.signatureExpiration, v3.signatureExpiration);
-        assertEq(v4.preIntentHookData, v3.preIntentHookData);
         assertEq(v4.data, v3.data);
     }
 

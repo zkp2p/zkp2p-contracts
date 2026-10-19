@@ -82,14 +82,6 @@ contract OrchestratorV4ValidationTest is OrchestratorV4Fixture {
 
 
 
-    function test_HookSetterRejectsUnauthorizedCaller() public {
-        vm.expectRevert(
-            abi.encodeWithSelector(IOrchestratorV4.UnauthorizedCallerOrDelegate.selector, other, depositor, delegate)
-        );
-        vm.prank(other);
-        orchestrator.setDepositPreIntentHook(address(escrow), depositId, preIntentHook);
-    }
-
     function test_FulfillRejectsMissingIntent() public {
         bytes32 missing = bytes32("missing");
         vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.IntentNotFound.selector, missing));

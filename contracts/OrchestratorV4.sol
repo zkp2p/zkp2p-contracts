@@ -21,7 +21,6 @@ import { IEscrowV2 } from "./interfaces/IEscrowV2.sol";
 import { IEscrowRegistry } from "./interfaces/IEscrowRegistry.sol";
 import { IWhitelistPolicy } from "./interfaces/IWhitelistPolicy.sol";
 import { IIntentSettlementPolicy } from "./interfaces/IIntentSettlementPolicy.sol";
-import { IPreIntentHook } from "./interfaces/IPreIntentHook.sol";
 import { IPaymentVerifierV2 } from "./interfaces/IPaymentVerifierV2.sol";
 import { IPaymentVerifier } from "./interfaces/IPaymentVerifier.sol";
 import { IPaymentVerifierRegistry } from "./interfaces/IPaymentVerifierRegistry.sol";
@@ -61,9 +60,6 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     // Snapshot of per-intent manager fee terms at the time of signal
     mapping(bytes32 => address) internal intentManagerFeeRecipient;
     mapping(bytes32 => uint256) internal intentManagerFee;
-
-    // Optional pre-intent hooks configured per escrow + depositId.
-    mapping(address => mapping(uint256 => IPreIntentHook)) internal depositPreIntentHooks;
 
     // Governance-selected settlement policy; snapshotted per intent at signal.
     IIntentSettlementPolicy public settlementPolicy;
@@ -130,7 +126,6 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     {
         // Checks
         _validateSignalIntent(_params);
-        _executeHookIfSet(depositPreIntentHooks[_params.escrow][_params.depositId], _params);
 
         // Effects
         bytes32 intentHash = _calculateIntentHash();
@@ -215,22 +210,6 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
 
         // Interactions
         IEscrow(intent.escrow).unlockFunds(intent.depositId, _intentHash);
-    }
-
-    /**
-     * @notice Sets or removes the pre-intent hook for a specific deposit.
-     * @dev Callable only by the deposit's depositor or delegate.
-     *
-     * @param _escrow       Escrow address.
-     * @param _depositId    Deposit id.
-     * @param _hook         Hook address (address(0) to remove).
-     */
-    function setDepositPreIntentHook(address _escrow, uint256 _depositId, IPreIntentHook _hook) external nonReentrant {
-        _validateAndAuthorizeHookSetter(_escrow, _depositId, _hook);
-
-        depositPreIntentHooks[_escrow][_depositId] = _hook;
-
-        emit DepositPreIntentHookSet(_escrow, _depositId, address(_hook), msg.sender);
     }
 
     /**
@@ -499,10 +478,6 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         return accountIntents[_account];
     }
 
-    function getDepositPreIntentHook(address _escrow, uint256 _depositId) external view returns (IPreIntentHook) {
-        return depositPreIntentHooks[_escrow][_depositId];
-    }
-
     /**
      * @notice Returns the immutable policy snapshot for an active intent.
      */
@@ -574,49 +549,6 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
                 revert InvalidSignature();
             }
         }
-    }
-
-    /**
-     * @notice Validates hook address and authorizes the caller as depositor or delegate.
-     * @dev Validation used by setDepositPreIntentHook.
-     */
-    function _validateAndAuthorizeHookSetter(address _escrow, uint256 _depositId, IPreIntentHook _hook) internal view {
-        if (_escrow == address(0)) revert ZeroAddress();
-
-        address hookAddress = address(_hook);
-        if (hookAddress != address(0) && hookAddress.code.length == 0) {
-            revert InvalidPreIntentHook(hookAddress);
-        }
-
-        IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);
-        bool isDepositorOrDelegate = msg.sender == deposit.depositor
-            || (deposit.delegate != address(0) && msg.sender == deposit.delegate);
-        if (!isDepositorOrDelegate) {
-            revert UnauthorizedCallerOrDelegate(msg.sender, deposit.depositor, deposit.delegate);
-        }
-    }
-
-    /**
-     * @notice Executes a pre-intent hook if the address is non-zero.
-     * @dev Used by the deposit pre-intent hook.
-     */
-    function _executeHookIfSet(IPreIntentHook _hook, SignalIntentParams calldata _params) internal {
-        if (address(_hook) == address(0)) return;
-
-        _hook.validateSignalIntent(
-            IPreIntentHook.PreIntentContext({
-                taker: msg.sender,
-                escrow: _params.escrow,
-                depositId: _params.depositId,
-                amount: _params.amount,
-                to: _params.to,
-                paymentMethod: _params.paymentMethod,
-                fiatCurrency: _params.fiatCurrency,
-                conversionRate: _params.conversionRate,
-                referralFees: _params.referralFees,
-                preIntentHookData: _params.preIntentHookData
-            })
-        );
     }
 
     /**

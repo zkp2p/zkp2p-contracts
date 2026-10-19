@@ -3,38 +3,15 @@ pragma solidity ^0.8.18;
 
 import {OrchestratorV4Fixture} from "../helpers/OrchestratorV4Fixture.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
-import {IPreIntentHook} from "contracts/interfaces/IPreIntentHook.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 
 contract OrchestratorV4SurfaceTest is OrchestratorV4Fixture {
-    event DepositPreIntentHookSet(
-        address indexed escrow, uint256 indexed depositId, address indexed hook, address setter
-    );
     event EscrowRegistryUpdated(address indexed registry);
     event RelayerRegistryUpdated(address indexed registry);
     event AllowMultipleIntentsUpdated(bool allowMultiple);
     event ProtocolFeeUpdated(uint256 fee);
     event ProtocolFeeRecipientUpdated(address indexed recipient);
-
-    function test_DepositorSetsPreIntentHookAndEmits() public {
-        vm.expectEmit(true, true, true, true, address(orchestrator));
-        emit DepositPreIntentHookSet(address(escrow), depositId, address(preIntentHook), depositor);
-        vm.prank(depositor);
-        orchestrator.setDepositPreIntentHook(address(escrow), depositId, preIntentHook);
-    }
-
-    function test_HookSetterRejectsZeroEscrow() public {
-        vm.expectRevert(IOrchestratorV4.ZeroAddress.selector);
-        vm.prank(depositor);
-        orchestrator.setDepositPreIntentHook(address(0), depositId, preIntentHook);
-    }
-
-    function test_HookSetterRejectsEoaHook() public {
-        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.InvalidPreIntentHook.selector, other));
-        vm.prank(depositor);
-        orchestrator.setDepositPreIntentHook(address(escrow), depositId, IPreIntentHook(other));
-    }
 
     function test_GovernanceUpdatesRegistriesFeesAndPauseState() public virtual {
         EscrowRegistry newRegistry = new EscrowRegistry();
@@ -157,19 +134,12 @@ contract OrchestratorV4SurfaceTest is OrchestratorV4Fixture {
         vm.expectRevert(bytes("Pausable: paused"));
         _fulfill(intentHash, INTENT_AMOUNT, CONVERSION_RATE);
     }
-    function test_ViewsAndDelegateHookSetter() public {
-        vm.prank(delegate);
-        orchestrator.setDepositPreIntentHook(address(escrow), depositId, preIntentHook);
-        assertEq(address(orchestrator.getDepositPreIntentHook(address(escrow), depositId)), address(preIntentHook));
+    function test_Views() public {
         bytes32 hash = _signalDefault();
-        assertEq(preIntentHook.callCount(), 1);
         bytes32[] memory hashes = orchestrator.getAccountIntents(taker);
         assertEq(hashes.length, 1);
         assertEq(hashes[0], hash);
         assertEq(address(orchestrator.getIntentSettlementPolicy(hash)), address(0));
-        vm.prank(depositor);
-        orchestrator.setDepositPreIntentHook(address(escrow), depositId, IPreIntentHook(address(0)));
-        assertEq(address(orchestrator.getDepositPreIntentHook(address(escrow), depositId)), address(0));
     }
 
     function test_PruneSkipsForeignEscrowAndUnknownHash() public {
