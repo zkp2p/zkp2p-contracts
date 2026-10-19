@@ -154,8 +154,7 @@ abstract contract OrchestratorV4Fixture is Test {
         address to,
         uint256 amount,
         uint256 conversionRate,
-        IReferralFee.ReferralFee[] memory referralFees,
-        bytes memory data
+        IReferralFee.ReferralFee[] memory referralFees
     ) internal view returns (IOrchestratorV4.SignalIntentParams memory) {
         return IOrchestratorV4.SignalIntentParams({
             escrow: address(escrow),
@@ -168,13 +167,13 @@ abstract contract OrchestratorV4Fixture is Test {
             referralFees: referralFees,
             gatingServiceSignature: "",
             signatureExpiration: block.timestamp + 1 days,
-            data: data
+            payerCommitment: ""
         });
     }
 
     function _defaultParams() internal view virtual returns (IOrchestratorV4.SignalIntentParams memory) {
         return _params(
-            depositId, taker, INTENT_AMOUNT, CONVERSION_RATE, _emptyReferralFees(), ""
+            depositId, taker, INTENT_AMOUNT, CONVERSION_RATE, _emptyReferralFees()
         );
     }
 
@@ -185,7 +184,7 @@ abstract contract OrchestratorV4Fixture is Test {
             paymentMethod: params.paymentMethod, fiatCurrency: params.fiatCurrency,
             conversionRate: params.conversionRate, referralFees: params.referralFees,
             gatingServiceSignature: params.gatingServiceSignature, signatureExpiration: params.signatureExpiration,
-            postIntentHook: IPostIntentHookV2(address(0)), preIntentHookData: "", data: params.data
+            postIntentHook: IPostIntentHookV2(address(0)), preIntentHookData: "", data: ""
         });
     }
 
@@ -253,35 +252,13 @@ abstract contract OrchestratorV4Fixture is Test {
                 params.conversionRate,
                 _referralHash(params.referralFees),
                 expiration,
-                CHAIN_ID
+                CHAIN_ID,
+                params.payerCommitment
             )
         );
         bytes32 digest = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, digest);
         return abi.encodePacked(r, s, v);
-    }
-
-    function _policyDataSignature(IOrchestratorV4.SignalIntentParams memory params, bytes memory policyData)
-        internal view returns (bytes memory)
-    {
-        bytes memory message = abi.encodePacked(
-            address(orchestrator), params.escrow, params.depositId, params.amount, taker, params.to,
-            params.paymentMethod, params.fiatCurrency, params.conversionRate, _referralHash(params.referralFees),
-            params.signatureExpiration, CHAIN_ID, keccak256(policyData)
-        );
-        assertEq(message.length, 368);
-        bytes32 digest = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", keccak256(message)));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(gatingServiceKey, digest);
-        return abi.encodePacked(r, s, v);
-    }
-
-    function _signalWithPolicyData(bytes memory policyData) internal returns (bytes32 hash) {
-        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
-        params.data = policyData;
-        params.gatingServiceSignature = _policyDataSignature(params, policyData);
-        hash = _intentHash(orchestrator.intentCounter());
-        vm.prank(taker);
-        orchestrator.signalIntent(params);
     }
 
     function _gatedParams(uint256 gatedDepositId, uint256 signerKey, address signedCaller, uint256 expiration)
@@ -294,8 +271,7 @@ abstract contract OrchestratorV4Fixture is Test {
             taker,
             INTENT_AMOUNT,
             CONVERSION_RATE,
-            _emptyReferralFees(),
-            ""
+            _emptyReferralFees()
         );
         params.signatureExpiration = expiration;
         params.gatingServiceSignature = _gatingSignature(signerKey, signedCaller, params, expiration);

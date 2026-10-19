@@ -18,76 +18,6 @@ import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 
 contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
-    bytes32 internal constant CONDITIONS = keccak256("signed conditions");
-
-    function test_ConditionsHashWithoutGatingServiceRejectedByOrchestrator() public {
-        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
-        params.data = abi.encodePacked(CONDITIONS);
-        bytes32 id = _intentHash(orchestrator.intentCounter());
-        vm.expectRevert(IOrchestratorV4.DataRequiresGatingService.selector);
-        _signalCall(taker, params);
-        assertEq(orchestrator.getIntent(id).owner, address(0));
-        assertEq(orchestrator.getIntent(id).data, "");
-        assertEq(escrow.getDeposit(depositId).outstandingIntentAmount, 0);
-        assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
-    }
-
-    function test_ConditionedZeroWindowSettlement() public {
-        _conditionedSettlement(true, false);
-    }
-
-    function test_ConditionedStakeSettlement() public {
-        _conditionedSettlement(false, true);
-    }
-
-    function test_ConditionedDeferredSettlement() public {
-        _conditionedSettlement(false, false);
-    }
-
-    function _conditionedSettlement(bool payNow, bool staked) internal {
-        vm.startPrank(depositor);
-        depositId = _createDeposit(gatingService, delegate);
-        vm.stopPrank();
-        if (staked) _stake(vault, taker, INTENT_AMOUNT);
-        bytes32 id = _signalWithPolicyData(abi.encodePacked(CONDITIONS));
-        UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(
-            _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, payNow ? 0 : RISK_WINDOW),
-            (UnifiedPaymentVerifierV4.PaymentAttestation)
-        );
-        bytes[4] memory invalidExtensions = [bytes(""), new bytes(31), abi.encode(bytes32(0)), abi.encode(keccak256("wrong"))];
-        uint256 escrowBalance = token.balanceOf(address(escrow));
-        uint256 vaultBalance = token.balanceOf(address(vault));
-        for (uint256 i; i < invalidExtensions.length; ++i) {
-            bytes memory invalidProof = _signedProof(
-                id, bytes.concat(attestation.data, invalidExtensions[i]), INTENT_AMOUNT
-            );
-            vm.expectRevert(abi.encodeWithSelector(P.ConditionsNotAttested.selector, id));
-            orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(invalidProof, id, ""));
-            assertEq(orchestrator.getIntent(id).data, abi.encodePacked(CONDITIONS));
-            assertEq(orchestrator.getIntent(id).owner, taker);
-            assertEq(token.balanceOf(address(escrow)), escrowBalance);
-            assertEq(token.balanceOf(address(vault)), vaultBalance);
-            assertEq(token.balanceOf(other), 0);
-            assertEq(token.balanceOf(protocolFeeRecipient), 0);
-            assertEq(nullifiers.nullifierByIntentHash(id), bytes32(0));
-        }
-        bytes memory proof = _signedProof(
-            id, bytes.concat(attestation.data, abi.encode(CONDITIONS, keccak256("reserved"))), INTENT_AMOUNT
-        );
-        orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, id, ""));
-        assertEq(orchestrator.getIntent(id).data, "");
-        assertEq(orchestrator.getIntent(id).owner, address(0));
-        assertEq(token.balanceOf(other), payNow || staked ? NET : 0);
-        P.CollateralSource source = payNow ? P.CollateralSource.NONE
-            : staked ? P.CollateralSource.STAKE : P.CollateralSource.DEFERRED_PAYOUT;
-        assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(source));
-        if (payNow) _assertLock(id, address(0), 0);
-        else if (staked) _assertLock(id, taker, INTENT_AMOUNT);
-        else _assertLock(id, other, NET);
-        assertEq(token.balanceOf(address(vault)), payNow ? 0 : staked ? INTENT_AMOUNT : NET);
-        _assertFees();
-    }
-
     function test_RelayerTakerPaysNowWithoutStakeRecordEventOrVaultCall() public {
         relayerRegistry.addRelayer(taker);
         assertEq(vault.freeStake(taker), 0);
@@ -341,14 +271,6 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         _assertFees();
     }
 
-    function test_ZeroHashDataIsUnconditioned() public {
-        vm.startPrank(depositor);
-        depositId = _createDeposit(gatingService, delegate);
-        vm.stopPrank();
-        bytes32 id = _signalWithPolicyData(abi.encodePacked(bytes32(0)));
-        _assertDeferredSettlement(id);
-    }
-
     function test_EnabledWhitelistRejectsNonMemberBeforeEscrowLock() public {
         vm.prank(depositor);
         whitelist.setEnabled(address(escrow), depositId, METHOD, true);
@@ -376,51 +298,6 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         );
         bytes memory proof = _signedProof(id, bytes.concat(attestation.data, abi.encode(bytes32(0), keccak256("reserved"))), INTENT_AMOUNT);
         orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, id, ""));
-        assertEq(token.balanceOf(other), 0);
-        _assertLock(id, other, NET);
-        assertEq(token.balanceOf(address(vault)), NET);
-        assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.DEFERRED_PAYOUT));
-        _assertFees();
-    }
-
-    function test_UnconditionedIntentRejectsNonZeroAttestedHash() public {
-        bytes32 id = _signalDefault();
-        UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(
-            _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, 0),
-            (UnifiedPaymentVerifierV4.PaymentAttestation)
-        );
-        assertEq(attestation.data.length, 480);
-        bytes memory proof = _signedProof(id, bytes.concat(attestation.data, abi.encode(CONDITIONS)), INTENT_AMOUNT);
-        uint256 escrowBalance = token.balanceOf(address(escrow));
-        vm.expectRevert(abi.encodeWithSelector(P.ConditionsNotAttested.selector, id));
-        orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, id, ""));
-        assertEq(orchestrator.getIntent(id).data, "");
-        assertEq(orchestrator.getIntent(id).owner, taker);
-        assertEq(token.balanceOf(address(escrow)), escrowBalance);
-        assertEq(token.balanceOf(address(vault)), 0);
-        assertEq(token.balanceOf(other), 0);
-        assertEq(token.balanceOf(protocolFeeRecipient), 0);
-        assertEq(token.balanceOf(referrer), 0);
-        assertEq(nullifiers.nullifierByIntentHash(id), bytes32(0));
-        assertEq(nullifiers.intentHashByNullifier(keccak256(abi.encodePacked(METHOD, _paymentId(id)))), bytes32(0));
-
-        orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(abi.encode(attestation), id, ""));
-        assertEq(orchestrator.getIntent(id).owner, address(0));
-        assertEq(token.balanceOf(other), NET);
-        _assertFees();
-    }
-
-    function test_UnconditionedIntentAcceptsZeroAttestedHashWithTrailingBytes() public {
-        bytes32 id = _signalDefault();
-        UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(
-            _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, RISK_WINDOW),
-            (UnifiedPaymentVerifierV4.PaymentAttestation)
-        );
-        bytes memory proof = _signedProof(
-            id, bytes.concat(attestation.data, abi.encode(bytes32(0)), hex"010203"), INTENT_AMOUNT
-        );
-        orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, id, ""));
-        assertEq(orchestrator.getIntent(id).owner, address(0));
         assertEq(token.balanceOf(other), 0);
         _assertLock(id, other, NET);
         assertEq(token.balanceOf(address(vault)), NET);

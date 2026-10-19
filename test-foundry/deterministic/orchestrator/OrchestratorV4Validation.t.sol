@@ -78,6 +78,25 @@ contract OrchestratorV4ValidationTest is OrchestratorV4Fixture {
         _signalCall(taker, params);
     }
 
+    function test_GatingSignatureCoversPayerCommitment() public {
+        uint256 gatedDepositId = _newGatedDeposit();
+        IOrchestratorV4.SignalIntentParams memory params =
+            _gatedParams(gatedDepositId, gatingServiceKey, taker, block.timestamp + 1 days);
+        params.payerCommitment = "payer";
+        vm.expectRevert(IOrchestratorV4.InvalidSignature.selector);
+        _signalCall(taker, params);
+        params.gatingServiceSignature = _gatingSignature(gatingServiceKey, taker, params, params.signatureExpiration);
+        bytes32 id = _signal(taker, params);
+        assertEq(orchestrator.getIntent(id).payerCommitment, "payer");
+    }
+
+    function test_PayerCommitmentRequiresGatingService() public {
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
+        params.payerCommitment = "payer";
+        vm.expectRevert(IOrchestratorV4.PayerCommitmentRequiresGatingService.selector);
+        _signalCall(taker, params);
+    }
+
 
 
 

@@ -50,7 +50,6 @@ interface IDisputeProtectionPolicyV2 is IIntentSettlementPolicy {
     error TimestampOverflow(uint256 timestamp);
     error MissingDisputeWindow();
     error InvalidDisputeWindow(uint256 window);
-    error ConditionsNotAttested(bytes32 intentHash);
     error OwnershipRenunciationDisabled();
 
     /// @notice Returns whether an orchestrator may create and fund settlement records.

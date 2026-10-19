@@ -32,8 +32,7 @@ import { ReferralFeeLib } from "./lib/ReferralFeeLib.sol";
  * @notice Standalone V4 orchestrator for the ZKP2P protocol. Owns the complete intent (order)
  * lifecycle — signal, cancel, fulfill, manual release, prune, orphan cleanup — and extends it
  * with a snapshotted governance-selected settlement policy and deferred settlement.
- * @dev Intent keeps V3 field order with the post-intent hook removed. Its data is opaque settlement policy data.
- * DisputeProtectionPolicyV2 uses a raw 32-byte conditions hash (or empty); only the snapshotted policy interprets data.
+ * @dev Intent keeps V3 field order with the intent hooks removed and the hook data replaced by payerCommitment.
  */
 contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
 
@@ -113,9 +112,6 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      * service to prove their eligibility to take liquidity. This function captures and stores all values required for fullfilling
      * the intent to give strong guarantees to the buyer. Snapshots the global settlement policy and checks whitelist
      * admission before locking liquidity for the corresponding deposit on the escrow contract.
-     * Non-empty data requires a settlement policy and appends its keccak256 hash to the gating message;
-     * empty data preserves the plain V3 gating message byte-for-byte. The data is opaque to this contract.
-     * DisputeProtectionPolicyV2 expects abi.encodePacked(conditionsHash) or empty data; O4 checks no data format.
      *
      * @param _params                   Struct containing all the intent parameters
      */
@@ -151,7 +147,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         storedIntent.conversionRate = _params.conversionRate;
         storedIntent.payeeId = depData.payeeDetails;
         storedIntent.timestamp = block.timestamp;
-        storedIntent.data = _params.data;
+        storedIntent.payerCommitment = _params.payerCommitment;
 
         for (uint256 i = 0; i < _params.referralFees.length; ++i) {
             IReferralFee.ReferralFee calldata referralFee = _params.referralFees[i];
@@ -217,7 +213,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      * offchain payment proof is verified, payment details are validated, intent is removed, and escrow state is updated.
      * Settlement unlocks escrow funds, transfers fees, notifies the snapshotted settlement policy (fail-closed),
      * and transfers the net payout to intent.to or the deferral vault.
-     * @dev Stored settlement policy data and raw signed extension bytes are forwarded opaquely to the snapshotted policy.
+     * @dev Raw signed extension bytes are forwarded opaquely to the snapshotted policy.
      * @dev Guarded against reentrancy through verifiers, tokens and settlement policies.
      *
      * @param _params               Struct containing all the fulfill intent parameters
@@ -535,9 +531,9 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         }
 
         address intentGatingService = IEscrow(_intent.escrow).getDepositGatingService(_intent.depositId, _intent.paymentMethod);
-        if (_intent.data.length != 0) {
-            if (address(settlementPolicy) == address(0)) revert DataRequiresPolicy();
-            if (intentGatingService == address(0)) revert DataRequiresGatingService();
+        // Only a gating service can vouch that the committed payer IDs belong to the taker.
+        if (_intent.payerCommitment.length != 0 && intentGatingService == address(0)) {
+            revert PayerCommitmentRequiresGatingService();
         }
         if (intentGatingService != address(0)) {
             // Check if signature has expired
@@ -660,7 +656,6 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
                     paymentMethod: _intent.paymentMethod,
                     releaseAmount: _releaseAmount,
                     netAmount: netAmount,
-                    data: _intent.data,
                     extensionData: _extensionData,
                     isManualRelease: _isManualRelease
                 })
@@ -710,12 +705,9 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
             _intent.conversionRate,
             ReferralFeeLib.hashReferralFees(_intent.referralFees),
             _intent.signatureExpiration,
-            chainId
+            chainId,
+            _intent.payerCommitment // Last and variable-length; empty keeps O3's message byte for byte
         );
-
-        if (_intent.data.length != 0) {
-            message = abi.encodePacked(message, keccak256(_intent.data));
-        }
 
         bytes32 verifierPayload = keccak256(message).toEthSignedMessageHash();
         return _intentGatingService.isValidSignatureNow(verifierPayload, _intent.gatingServiceSignature);

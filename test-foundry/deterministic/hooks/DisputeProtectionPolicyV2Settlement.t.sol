@@ -36,7 +36,7 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
     }
 
     function _context(bytes32 id, uint256 window) internal view returns (IIntentSettlementPolicy.SettlementContext memory) {
-        return IIntentSettlementPolicy.SettlementContext(id, address(token), taker, other, depositor, address(escrow), depositId, METHOD, INTENT_AMOUNT, NET, "", abi.encode(window), false);
+        return IIntentSettlementPolicy.SettlementContext(id, address(token), taker, other, depositor, address(escrow), depositId, METHOD, INTENT_AMOUNT, NET, abi.encode(window), false);
     }
 
     function _authorizeZeroRegistryOrchestrator() internal returns (address caller) {
@@ -347,7 +347,7 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
         assertEq(policy.settleIntent(_context(ID, 14 days)), address(0));
     }
 
-    function test_RelayerBypassStillRequiresWindowCapAndConditions() public {
+    function test_RelayerBypassStillRequiresWindowCap() public {
         relayerRegistry.addRelayer(taker);
         IIntentSettlementPolicy.SettlementContext memory context = _context(ID, 14 days);
         context.extensionData = "";
@@ -355,10 +355,6 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
         policy.settleIntent(context);
         context.extensionData = abi.encode(uint256(180 days + 1));
         vm.expectRevert(abi.encodeWithSelector(P.InvalidDisputeWindow.selector, uint256(180 days + 1)));
-        policy.settleIntent(context);
-        context.extensionData = abi.encode(uint256(14 days));
-        context.data = _conditionsData();
-        vm.expectRevert(abi.encodeWithSelector(P.ConditionsNotAttested.selector, ID));
         policy.settleIntent(context);
     }
 
@@ -372,50 +368,9 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
         assertEq(policy.settleIntent(_context(next, 14 days)), address(vault));
     }
 
-    function _conditionsData() internal pure returns (bytes memory) {
-        return abi.encodePacked(keccak256("conditions"));
-    }
-
-    function _useGatedDeposit() internal {
-        vm.startPrank(depositor);
-        depositId = _createDeposit(gatingService, delegate);
-        vm.stopPrank();
-
-    }
-
-    function test_ZeroHashDataIsUnconditioned() public {
-        bytes memory data = abi.encodePacked(bytes32(0));
-
-        IIntentSettlementPolicy.SettlementContext memory context = _context(ID, 14 days);
-        context.data = data;
-        context.extensionData = abi.encode(uint256(14 days));
-        _expectDeferredSettlement();
-        assertEq(policy.settleIntent(context), address(vault));
-    }
-
-    function test_PolicyDataUsesFirstWordWithRightPadding() public {
-        _useGatedDeposit();
-        bytes[2] memory data = [bytes(hex"01"), bytes.concat(_conditionsData(), hex"ff")];
-        for (uint256 i; i < data.length; ++i) {
-            bytes32 id = keccak256(abi.encode("raw data", i));
-
-
-            IIntentSettlementPolicy.SettlementContext memory context = _context(id, 0);
-            context.data = data[i];
-            bytes32 expected = i == 0 ? bytes32(uint256(1) << 248) : keccak256("conditions");
-            context.extensionData = abi.encode(uint256(0), expected);
-            assertEq(policy.settleIntent(context), address(0));
-        }
-    }
-
     function test_ZeroWindowDoesNotWriteStorage() public {
-        _useGatedDeposit();
         vm.record();
-
-        IIntentSettlementPolicy.SettlementContext memory context = _context(ID, 0);
-        context.data = _conditionsData();
-        context.extensionData = abi.encode(uint256(0), keccak256("conditions"));
-        policy.settleIntent(context);
+        policy.settleIntent(_context(ID, 0));
         (, bytes32[] memory writes) = vm.accesses(address(policy));
         assertEq(writes.length, 0);
     }
@@ -463,15 +418,13 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
         }
     }
 
-    function test_WindowAboveMaximumRevertsBeforeConditionsAndWhitelistRead() public {
+    function test_WindowAboveMaximumRevertsBeforeWhitelistRead() public {
         _whitelistTaker();
         vm.mockCallRevert(address(whitelist), bytes(""), bytes("whitelist called"));
         uint256[3] memory windows = [uint256(180 days + 1), uint256(type(uint64).max) + 1, type(uint256).max];
         for (uint256 i; i < windows.length; ++i) {
-            IIntentSettlementPolicy.SettlementContext memory context = _context(ID, windows[i]);
-            context.data = _conditionsData();
             vm.expectRevert(abi.encodeWithSelector(P.InvalidDisputeWindow.selector, windows[i]));
-            policy.settleIntent(context);
+            policy.settleIntent(_context(ID, windows[i]));
         }
         assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
     }
@@ -487,84 +440,19 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
         }
     }
 
-    function test_MissingConditionsWordMeansZero() public {
-        bytes[2] memory extensions = [abi.encode(uint256(0)), bytes.concat(abi.encode(uint256(0)), new bytes(31))];
-        for (uint256 i; i < extensions.length; ++i) {
-            IIntentSettlementPolicy.SettlementContext memory context = _context(ID, 0);
-            context.extensionData = extensions[i];
-            assertEq(policy.settleIntent(context), address(0));
-        }
-    }
-
-    function test_ConditionsMatchAndReservedWordsAreIgnored() public {
-
+    function test_ReservedExtensionWordsAreIgnored() public {
         IIntentSettlementPolicy.SettlementContext memory context = _context(ID, 0);
-        context.data = abi.encodePacked(keccak256("conditions"));
-        context.extensionData = abi.encode(uint256(0), keccak256("conditions"), type(uint256).max, uint256(2));
+        context.extensionData = abi.encode(uint256(0), keccak256("reserved"), type(uint256).max, uint256(2));
         assertEq(policy.settleIntent(context), address(0));
         assertEq(uint256(policy.getDisputeProtectionIntent(ID).collateralSource), uint256(P.CollateralSource.NONE));
     }
 
-    function test_ConditionsMismatchIncludingMissingWordsReverts() public {
-
-        IIntentSettlementPolicy.SettlementContext memory context = _context(ID, 14 days);
-        context.data = abi.encodePacked(keccak256("conditions"));
-        bytes[3] memory extensions = [abi.encode(uint256(0)), bytes.concat(abi.encode(uint256(0)), new bytes(31)), abi.encode(uint256(0), keccak256("wrong"))];
-        for (uint256 i; i < extensions.length; ++i) {
-            context.extensionData = extensions[i];
-            vm.expectRevert(abi.encodeWithSelector(P.ConditionsNotAttested.selector, ID));
-            policy.settleIntent(context);
-        }
-        assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
-    }
-
-    function test_UnconditionedIntentRejectsNonzeroAttestedConditions() public {
-
-        IIntentSettlementPolicy.SettlementContext memory context = _context(ID, 14 days);
-        context.extensionData = abi.encode(uint256(0), keccak256("unexpected conditions"));
-        vm.expectRevert(abi.encodeWithSelector(P.ConditionsNotAttested.selector, ID));
-        policy.settleIntent(context);
-    }
-
-    function test_WhitelistedTakerStillValidatesConditionsBeforeWhitelistRead() public {
-        _whitelistTaker();
-        vm.mockCallRevert(address(whitelist), bytes(""), bytes("whitelist called"));
-        IIntentSettlementPolicy.SettlementContext memory context = _context(ID, 14 days);
-        context.data = _conditionsData();
-        bytes[3] memory extensions = [abi.encode(uint256(14 days)), bytes.concat(abi.encode(uint256(14 days)), new bytes(31)), abi.encode(uint256(14 days), keccak256("wrong"))];
-        for (uint256 i; i < extensions.length; ++i) {
-            context.extensionData = extensions[i];
-            vm.expectRevert(abi.encodeWithSelector(P.ConditionsNotAttested.selector, ID));
-            policy.settleIntent(context);
-        }
-        context.data = "";
-        context.extensionData = abi.encode(uint256(14 days), keccak256("unexpected"));
-        vm.expectRevert(abi.encodeWithSelector(P.ConditionsNotAttested.selector, ID));
-        policy.settleIntent(context);
-    }
-
-    function test_WhitelistedTakerWithMatchingConditionsCreatesNoRecord() public {
-        _useGatedDeposit();
-        _whitelistTaker();
-
-        IIntentSettlementPolicy.SettlementContext memory context = _context(ID, 180 days);
-        context.data = _conditionsData();
-        context.extensionData = abi.encode(uint256(180 days), keccak256("conditions"));
-
-        vm.recordLogs();
-        assertEq(policy.settleIntent(context), address(0));
-        assertEq(vm.getRecordedLogs().length, 0);
-        vm.clearMockedCalls();
-        assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
-    }
-
-    function testFuzz_ManualReleaseIgnoresOptOutInvalidExtensionAndConditions(bool optOut) public {
+    function testFuzz_ManualReleaseIgnoresOptOutAndInvalidExtension(bool optOut) public {
         vm.prank(depositor);
         policy.setDepositOptOutForRelayerBypass(address(escrow), depositId, optOut);
 
         IIntentSettlementPolicy.SettlementContext memory context = _context(ID, 14 days);
         context.isManualRelease = true;
-        context.data = abi.encodePacked(keccak256("conditions"));
         context.extensionData = abi.encode(type(uint256).max, keccak256("wrong"));
         vm.mockCallRevert(address(whitelist), bytes(""), bytes("whitelist called"));
         relayerRegistry.addRelayer(taker);

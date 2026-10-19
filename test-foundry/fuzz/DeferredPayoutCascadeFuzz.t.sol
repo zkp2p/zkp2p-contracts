@@ -84,7 +84,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
     function testFuzz_AttestedWindowSetsMaturity(uint64 window, bool staked) public {
         window = uint64(bound(window, 1, 180 days));
         if (staked) _deposit(TAKER, 100e6);
-        bool deferred = (policy.settleIntent(S.SettlementContext(ID, address(token), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, 100e6, 99e6, "", abi.encode(uint256(window)), false)) != address(0));
+        bool deferred = (policy.settleIntent(S.SettlementContext(ID, address(token), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, 100e6, 99e6, abi.encode(uint256(window)), false)) != address(0));
         P.DisputeProtectionIntent memory record = policy.getDisputeProtectionIntent(ID);
         assertEq(deferred, !staked);
         assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.SETTLED));
@@ -106,7 +106,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
             uint256 relocked = bound(seed, 0, available);
             bytes32 lockId = keccak256(abi.encode("relock", step));
             if (relocked != 0) {
-                assertFalse((policy.settleIntent(S.SettlementContext(lockId, address(token), RECIPIENT, TAKER, DEPOSITOR, address(0), 0, METHOD, relocked, relocked, "", abi.encode(uint256(WINDOW)), false)) != address(0)));
+                assertFalse((policy.settleIntent(S.SettlementContext(lockId, address(token), RECIPIENT, TAKER, DEPOSITOR, address(0), 0, METHOD, relocked, relocked, abi.encode(uint256(WINDOW)), false)) != address(0)));
                 _accounting();
             }
             paid += _claim(net - paid, step % 2 == 0 ? TAKER : RECIPIENT);
@@ -134,7 +134,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
         uint256 referralFee = gross * referralBps / 10000;
         net = gross - protocolFee - referralFee;
         if (freeStake != 0) _deposit(TAKER, freeStake);
-        bool deferred = (policy.settleIntent(S.SettlementContext(ID, address(token), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, gross, net, "", abi.encode(uint256(WINDOW)), false)) != address(0));
+        bool deferred = (policy.settleIntent(S.SettlementContext(ID, address(token), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, gross, net, abi.encode(uint256(WINDOW)), false)) != address(0));
         _accounting();
         token.transfer(address(0x44), protocolFee);
         token.transfer(address(0x55), referralFee);

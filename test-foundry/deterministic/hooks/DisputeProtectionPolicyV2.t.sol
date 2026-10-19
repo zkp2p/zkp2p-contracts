@@ -64,7 +64,7 @@ contract DisputeProtectionPolicyV2Test is Test {
         disputes.addWritePermission(address(policy));
     }
     function _settle(bytes32 id, uint256 gross, uint256 net) internal returns (bool) {
-        return (policy.settleIntent(S.SettlementContext(id, address(usdc), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, gross, net, "", abi.encode(uint256(WINDOW)), false)) != address(0));
+        return (policy.settleIntent(S.SettlementContext(id, address(usdc), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, gross, net, abi.encode(uint256(WINDOW)), false)) != address(0));
     }
     function _stake(address owner, uint256 amount) internal {
         usdc.transfer(owner, amount);
@@ -135,7 +135,7 @@ contract DisputeProtectionPolicyV2Test is Test {
     }
     function test_SettlementZeroWindowCreatesNoRecord() public {
         vm.recordLogs();
-        assertFalse((policy.settleIntent(S.SettlementContext(ID, address(usdc), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, GROSS, NET, "", abi.encode(uint256(0)), false)) != address(0)));
+        assertFalse((policy.settleIntent(S.SettlementContext(ID, address(usdc), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, GROSS, NET, abi.encode(uint256(0)), false)) != address(0)));
         assertEq(vm.getRecordedLogs().length, 0);
         _status(P.DisputeProtectionIntentStatus.NONE);
     }
@@ -143,14 +143,14 @@ contract DisputeProtectionPolicyV2Test is Test {
     function test_NonStakeTokenCreatesNoRecordOrEvent() public {
         vm.recordLogs();
         vm.record();
-        assertFalse((policy.settleIntent(S.SettlementContext(ID, STRANGER, TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, GROSS, NET, "", abi.encode(uint256(WINDOW)), false)) != address(0)));
+        assertFalse((policy.settleIntent(S.SettlementContext(ID, STRANGER, TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, GROSS, NET, abi.encode(uint256(WINDOW)), false)) != address(0)));
         (, bytes32[] memory writes) = vm.accesses(address(policy));
         assertEq(writes.length, 0);
         assertEq(vm.getRecordedLogs().length, 0);
         _status(P.DisputeProtectionIntentStatus.NONE);
     }
     function test_SettlementUsesSuppliedDepositorWithoutEscrow() public {
-        assertTrue((policy.settleIntent(S.SettlementContext(ID, address(usdc), TAKER, RECIPIENT, STRANGER, address(0), 0, METHOD, GROSS, NET, "", abi.encode(uint256(WINDOW)), false)) != address(0)));
+        assertTrue((policy.settleIntent(S.SettlementContext(ID, address(usdc), TAKER, RECIPIENT, STRANGER, address(0), 0, METHOD, GROSS, NET, abi.encode(uint256(WINDOW)), false)) != address(0)));
         assertEq(_record().depositor, STRANGER);
     }
     function test_CollateralSourceOrdinals() public pure {
@@ -223,8 +223,8 @@ contract DisputeProtectionPolicyV2Test is Test {
         assertLe(vault.lockedStake(TAKER), vault.stakeBalance(TAKER));
     }
     function test_SettlementSnapshotsAttestedWindowPerIntent() public {
-        assertTrue((policy.settleIntent(S.SettlementContext(ID, address(usdc), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, GROSS, NET, "", abi.encode(uint256(1 days)), false)) != address(0)));
-        assertTrue((policy.settleIntent(S.SettlementContext(ID2, address(usdc), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, GROSS, NET, "", abi.encode(uint256(2 days)), false)) != address(0)));
+        assertTrue((policy.settleIntent(S.SettlementContext(ID, address(usdc), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, GROSS, NET, abi.encode(uint256(1 days)), false)) != address(0)));
+        assertTrue((policy.settleIntent(S.SettlementContext(ID2, address(usdc), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, GROSS, NET, abi.encode(uint256(2 days)), false)) != address(0)));
         assertEq(_record().releaseEligibleAt, block.timestamp + 1 days);
         assertEq(policy.getDisputeProtectionIntent(ID2).releaseEligibleAt, block.timestamp + 2 days);
     }
@@ -384,7 +384,7 @@ contract DisputeProtectionPolicyV2Test is Test {
         _fund();
         _mature();
         policy.releaseMaturedDisputeProtectionIntent(ID);
-        assertFalse((policy.settleIntent(S.SettlementContext(ID2, address(usdc), RECIPIENT, STRANGER, DEPOSITOR, address(0), 0, METHOD, 60e6, 59e6, "", abi.encode(uint256(WINDOW)), false)) != address(0)));
+        assertFalse((policy.settleIntent(S.SettlementContext(ID2, address(usdc), RECIPIENT, STRANGER, DEPOSITOR, address(0), 0, METHOD, 60e6, 59e6, abi.encode(uint256(WINDOW)), false)) != address(0)));
         _claim(TAKER);
         assertEq(usdc.balanceOf(RECIPIENT), 39.05e6);
         assertEq(_record().claimedAmount, 39.05e6);
@@ -483,9 +483,9 @@ contract DisputeProtectionPolicyV2Test is Test {
     function test_SettlementWindowBoundedAsDefenceInDepth() public {
         uint64 max = 180 days;
         vm.expectRevert(abi.encodeWithSelector(P.InvalidDisputeWindow.selector, max + 1));
-        policy.settleIntent(S.SettlementContext(ID, address(usdc), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, GROSS, NET, "", abi.encode(uint256(max + 1)), false));
+        policy.settleIntent(S.SettlementContext(ID, address(usdc), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, GROSS, NET, abi.encode(uint256(max + 1)), false));
         assertEq(policy.MAX_RISK_WINDOW(), max);
-        assertTrue((policy.settleIntent(S.SettlementContext(ID, address(usdc), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, GROSS, NET, "", abi.encode(uint256(max)), false)) != address(0)));
+        assertTrue((policy.settleIntent(S.SettlementContext(ID, address(usdc), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, GROSS, NET, abi.encode(uint256(max)), false)) != address(0)));
         assertEq(_record().releaseEligibleAt, block.timestamp + max);
     }
 

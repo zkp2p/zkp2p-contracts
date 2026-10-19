@@ -54,7 +54,6 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         assertEq(context.paymentMethod, METHOD);
         assertEq(context.releaseAmount, INTENT_AMOUNT);
         assertEq(context.netAmount, INTENT_AMOUNT - 250_000);
-        assertEq(context.data, "");
         assertEq(context.extensionData, abi.encode(uint256(1)));
         assertFalse(context.isManualRelease);
         assertEq(token.balanceOf(referrer) - referrerBefore, 150_000);
@@ -97,8 +96,7 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(intentHash);
         assertEq(policyMock.settlementCalls(), 1);
-        (,,,,,,,,,, bytes memory policyData, bytes memory extensionData, bool isManualRelease) = policyMock.lastSettlementContext();
-        assertEq(policyData, "");
+        (,,,,,,,,,, bytes memory extensionData, bool isManualRelease) = policyMock.lastSettlementContext();
         assertEq(extensionData, "");
         assertTrue(isManualRelease);
         assertEq(token.balanceOf(taker), recipientBefore);

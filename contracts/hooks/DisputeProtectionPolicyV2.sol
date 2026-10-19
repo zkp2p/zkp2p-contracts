@@ -135,10 +135,6 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
         if (_context.extensionData.length < 32) revert MissingDisputeWindow();
         uint256 window = abi.decode(_context.extensionData[:32], (uint256));
         if (window > MAX_RISK_WINDOW) revert InvalidDisputeWindow(window);
-        bytes32 expected = bytes32(_context.data);
-        bytes32 attested = _context.extensionData.length >= 64
-            ? abi.decode(_context.extensionData[32:64], (bytes32)) : bytes32(0);
-        if (attested != expected) revert ConditionsNotAttested(_context.intentHash);
         if (window == 0) return address(0);
         if (
             whitelistPolicy.enabled(_context.escrow, _context.depositId, _context.paymentMethod)

@@ -8,8 +8,7 @@ import { IIntentSettlementPolicy } from "./IIntentSettlementPolicy.sol";
 /**
  * @title IOrchestratorV4
  * @notice Interface for the V4 orchestrator with deferred settlement.
- * @dev Intent keeps V3 field order with the post-intent hook removed; data holds opaque settlement policy data.
- * DisputeProtectionPolicyV2 uses a raw 32-byte conditions hash (or empty); only the snapshotted policy interprets data.
+ * @dev Intent keeps V3 field order with the intent hooks removed and the hook data replaced by payerCommitment.
  */
 interface IOrchestratorV4 {
 
@@ -27,7 +26,7 @@ interface IOrchestratorV4 {
         uint256 conversionRate;                     // Conversion rate of deposit token to fiat currency at the time of intent
         bytes32 payeeId;                            // Hashed payee identifier to whom the owner will pay offchain
         IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker
-        bytes data;                                 // Opaque settlement policy data; empty = none
+        bytes payerCommitment;                      // What the payer commits to, e.g. a salted payer ID hash; empty = none
     }
 
     struct SignalIntentParams {
@@ -41,7 +40,7 @@ interface IOrchestratorV4 {
         IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker
         bytes gatingServiceSignature;               // Signature from the deposit's gating service
         uint256 signatureExpiration;                // Timestamp when the gating service signature expires
-        bytes data;                                 // Opaque settlement policy data persisted in Intent; empty = none
+        bytes payerCommitment;                      // Signed by the gating service; UPV4 requires the attestor to sign its hash
     }
 
     struct FulfillIntentParams {
@@ -126,8 +125,7 @@ interface IOrchestratorV4 {
     error AccountHasActiveIntent(address account, bytes32 existingIntent);
     error InvalidSettlementPolicy(address policy);
     error InvalidSignature();
-    error DataRequiresPolicy();
-    error DataRequiresGatingService();
+    error PayerCommitmentRequiresGatingService();
     error SignatureExpired(uint256 expiration, uint256 currentTime);
 
     // Verification errors
@@ -147,11 +145,7 @@ interface IOrchestratorV4 {
 
     /* ============ External Functions for Users ============ */
 
-    /// @notice Signals an intent and locks its escrow funds, with optional opaque settlement policy data.
-    /// @dev Non-empty data requires a settlement policy and a gating service for the deposit's payment method.
-    /// Its keccak256(data) is appended to the gating message covered by the service's signature.
-    /// Empty data preserves the plain V3 gating message byte-for-byte. Only the settlement policy interprets this data.
-    /// For DisputeProtectionPolicyV2, pass abi.encodePacked(conditionsHash) or empty data; O4 checks no data format.
+    /// @notice Signals an intent and locks its escrow funds.
     function signalIntent(SignalIntentParams calldata params) external;
 
     /// @notice Sets a compatible settlement policy for future intents; zero disables protection.
@@ -161,7 +155,7 @@ interface IOrchestratorV4 {
     function cancelIntent(bytes32 intentHash) external;
 
     /// @notice Verifies payment and settles immediately or defers the net payout.
-    /// @dev Forwards stored settlement policy data and raw signed extension bytes to the snapshotted settlement policy.
+    /// @dev Forwards the raw signed extension bytes to the snapshotted settlement policy.
     function fulfillIntent(FulfillIntentParams calldata params) external;
 
     /// @notice Manually settles an intent as its depositor.

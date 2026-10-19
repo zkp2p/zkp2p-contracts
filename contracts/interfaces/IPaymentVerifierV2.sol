@@ -22,12 +22,13 @@ interface IPaymentVerifierV2 {
         uint256 conversionRate;
         uint256 signalTimestamp;
         uint256 timestampBuffer;
+        bytes32 payerCommitmentHash;  // keccak256 of the O4 intent's payer commitment, zero if empty; the attestor checked the payer
     }
 
     /// @dev Must stay fully static and preserve the V1 three-field prefix: OrchestratorV3 calls
     /// through IPaymentVerifier and reads only the first three words. Dynamic data must be a
     /// separate trailing return value, never a field inside this struct. The dispute window (extension word 0)
-    /// and conditions hash (extension word 1) are returned in the trailing extension bytes, not this struct,
+    /// is returned in the trailing extension bytes, not this struct,
     /// so the V1 prefix remains unchanged.
     struct PaymentVerificationResultV2 {
         bool success;
@@ -39,7 +40,7 @@ interface IPaymentVerifierV2 {
     }
 
     /// @notice Verifies a payment and returns all verified fields plus signed extension data (never unsigned metadata).
-    /// @dev Extension words: 0 = disputeWindow (uint256 seconds), 1 = conditionsHash, 2+ = reserved.
+    /// @dev Extension words: 0 = disputeWindow (uint256 seconds), 1+ = reserved.
     /// The verifier returns these bytes untouched; the snapshotted settlement policy decodes and validates them.
     function verifyPayment(IPaymentVerifier.VerifyPaymentData calldata _verifyPaymentData)
         external

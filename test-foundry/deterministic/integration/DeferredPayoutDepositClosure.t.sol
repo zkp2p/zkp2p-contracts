@@ -4,7 +4,6 @@ pragma solidity ^0.8.18;
 import {DisputeProtectionStackV2Fixture} from "../helpers/DisputeProtectionStackV2Fixture.sol";
 import {IDisputeProtectionPolicyV2 as P} from "contracts/interfaces/IDisputeProtectionPolicyV2.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
-import {UnifiedPaymentVerifierV4} from "contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol";
 
 contract DeferredPayoutDepositClosureTest is DisputeProtectionStackV2Fixture {
     uint256 internal constant DUST = 1e5;
@@ -27,17 +26,11 @@ contract DeferredPayoutDepositClosureTest is DisputeProtectionStackV2Fixture {
 
     function test_FailedSettlementPreservesFinalDepositAndRollsBackPayment() public {
         bytes32 id = _signalFinalDeposit(DUST);
-        UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(
-            _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, RISK_WINDOW),
-            (UnifiedPaymentVerifierV4.PaymentAttestation)
-        );
-        bytes memory invalidProof = _signedProof(
-            id, bytes.concat(attestation.data, abi.encode(keccak256("unexpected conditions"))), INTENT_AMOUNT
-        );
+        bytes memory invalidProof = _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, 180 days + 1);
         uint256 dustRecipientBalance = token.balanceOf(address(this));
         uint256 depositorBalance = token.balanceOf(depositor);
 
-        vm.expectRevert(abi.encodeWithSelector(P.ConditionsNotAttested.selector, id));
+        vm.expectRevert(abi.encodeWithSelector(P.InvalidDisputeWindow.selector, 180 days + 1));
         orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(invalidProof, id, ""));
 
         assertEq(orchestrator.getIntent(id).owner, taker);

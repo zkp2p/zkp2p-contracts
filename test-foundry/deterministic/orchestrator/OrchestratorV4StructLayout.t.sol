@@ -9,14 +9,14 @@ import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
 
 contract OrchestratorV4StructLayoutTest is Test {
-    function test_SignalSelectorOmitsIntentHooks() public pure {
+    function test_SignalSelectorOmitsIntentHooksAndAddsPayerCommitment() public pure {
         bytes4 expected = bytes4(keccak256(
             "signalIntent((address,uint256,uint256,address,bytes32,bytes32,uint256,(address,uint256)[],bytes,uint256,bytes))"
         ));
         assertEq(IOrchestratorV4.signalIntent.selector, expected);
     }
 
-    function test_IntentEncodingMatchesV3MinusPostIntentHook() public pure {
+    function test_IntentEncodingReplacesV3HookFieldsWithPayerCommitment() public pure {
         IReferralFee.ReferralFee[] memory fees = _fees();
         IOrchestratorV4.Intent memory intent = IOrchestratorV4.Intent({
             owner: address(1),
@@ -30,19 +30,19 @@ contract OrchestratorV4StructLayoutTest is Test {
             conversionRate: 9,
             payeeId: bytes32(uint256(10)),
             referralFees: fees,
-            data: hex"aabbcc"
+            payerCommitment: hex"0b"
         });
-        // Top-level tuple offset, twelve-word head, two referrals, and three bytes of data.
+        // Top-level tuple offset, twelve-word head ending in the two tails' offsets, two referrals, then the commitment.
         bytes memory expected = bytes.concat(
             abi.encode(uint256(32), address(1), address(2), address(3), uint256(4), uint256(5), uint256(6)),
             abi.encode(bytes32(uint256(7)), bytes32(uint256(8)), uint256(9), bytes32(uint256(10)), uint256(384), uint256(544)),
             abi.encode(uint256(2), address(12), uint256(13), address(14), uint256(15)),
-            abi.encode(uint256(3), bytes32(hex"aabbcc"))
+            abi.encode(uint256(1), bytes32(bytes1(0x0b)))
         );
         assertEq(abi.encode(intent), expected);
     }
 
-    function test_SignalIntentParamsMatchesV3MinusIntentHooks() public pure {
+    function test_SignalIntentParamsMatchesV3MinusIntentHooksPlusPayerCommitment() public pure {
         IReferralFee.ReferralFee[] memory fees = _fees();
         IOrchestratorV3.SignalIntentParams memory v3 = IOrchestratorV3.SignalIntentParams({
             escrow: address(1),
@@ -59,7 +59,8 @@ contract OrchestratorV4StructLayoutTest is Test {
             preIntentHookData: hex"44556677",
             data: hex"8899"
         });
-        // Positional construction locks V3's field order with both intent hooks removed.
+        // Positional construction locks V3's field order with both intent hooks and the hook data removed,
+        // then the payer commitment appended.
         IOrchestratorV4.SignalIntentParams memory v4 = IOrchestratorV4.SignalIntentParams(
             v3.escrow,
             v3.depositId,
@@ -71,7 +72,7 @@ contract OrchestratorV4StructLayoutTest is Test {
             v3.referralFees,
             v3.gatingServiceSignature,
             v3.signatureExpiration,
-            v3.data
+            hex"0a"
         );
         assertEq(v4.escrow, v3.escrow);
         assertEq(v4.depositId, v3.depositId);
@@ -83,7 +84,7 @@ contract OrchestratorV4StructLayoutTest is Test {
         assertEq(abi.encode(v4.referralFees), abi.encode(v3.referralFees));
         assertEq(v4.gatingServiceSignature, v3.gatingServiceSignature);
         assertEq(v4.signatureExpiration, v3.signatureExpiration);
-        assertEq(v4.data, v3.data);
+        assertEq(v4.payerCommitment, hex"0a");
     }
 
     function test_FulfillIntentParamsMatchesV3MinusPostIntentHookData() public pure {
@@ -105,18 +106,18 @@ contract OrchestratorV4StructLayoutTest is Test {
 
     function test_SettlementInterfaceAndContextLayout() public pure {
         assertEq(IIntentSettlementPolicy.settleIntent.selector, bytes4(keccak256(
-            "settleIntent((bytes32,address,address,address,address,address,uint256,bytes32,uint256,uint256,bytes,bytes,bool))"
+            "settleIntent((bytes32,address,address,address,address,address,uint256,bytes32,uint256,uint256,bytes,bool))"
         )));
         assertEq(type(IIntentSettlementPolicy).interfaceId,
             IIntentSettlementPolicy.settleIntent.selector ^ IIntentSettlementPolicy.onDeferredPayoutFunded.selector);
         IIntentSettlementPolicy.SettlementContext memory context = IIntentSettlementPolicy.SettlementContext(
             bytes32(uint256(1)), address(2), address(3), address(4), address(5), address(6), 7,
-            bytes32(uint256(8)), 9, 10, hex"aabb", hex"cc", true
+            bytes32(uint256(8)), 9, 10, hex"cc", true
         );
         bytes memory expected = bytes.concat(
             abi.encode(uint256(32), bytes32(uint256(1)), address(2), address(3), address(4), address(5), address(6)),
-            abi.encode(uint256(7), bytes32(uint256(8)), uint256(9), uint256(10), uint256(416), uint256(480), true),
-            abi.encode(uint256(2), bytes32(hex"aabb"), uint256(1), bytes32(hex"cc"))
+            abi.encode(uint256(7), bytes32(uint256(8)), uint256(9), uint256(10), uint256(384), true),
+            abi.encode(uint256(1), bytes32(hex"cc"))
         );
         assertEq(abi.encode(context), expected);
         assertEq(context.taker, address(3));

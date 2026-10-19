@@ -23,7 +23,7 @@ import { IPaymentVerifierV2 } from "../interfaces/IPaymentVerifierV2.sol";
  * - Verifies standardized payment details against provided data
  * @dev Payment attestations use this deployment's EIP-712 domain. Governance must reuse the payment-nullifier
  * registry, route payment methods to this verifier, and retire V3's registry write permission during activation.
- * attestation.data starts with the 448-byte `abi.encode(PaymentDetails, IntentSnapshot)`
+ * attestation.data starts with the 480-byte `abi.encode(PaymentDetails, IntentSnapshot)`
  * payload, optionally followed by opaque extension bytes. The entire data is signed through dataHash;
  * unsigned attestation.metadata is never returned. Extension words are decoded only by O4's snapshotted settlement policy,
  * not this verifier or the non-upgradeable OrchestratorV4. The policy defines the extension layout and
@@ -34,7 +34,7 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
 
     /* ============ Constants ============ */
 
-    uint256 private constant PAYMENT_PAYLOAD_LENGTH = 448;
+    uint256 private constant PAYMENT_PAYLOAD_LENGTH = 480;
 
     // Max timestamp buffer
     uint256 private constant MAX_TIMESTAMP_BUFFER = 48 * 60 * 60 * 1000; // 48 hours
@@ -116,7 +116,7 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
      *
      * @param _verifyPaymentData Payment proof and intent details required for verification
      * @return result Fully static verified result with the V1 three-word prefix and uncapped attested amount
-     * @return extensionData Signed bytes after the 448-byte payload, returned untouched and uninterpreted
+     * @return extensionData Signed bytes after the 480-byte payload, returned untouched and uninterpreted
      * @dev Ensure the orchestrator verifies the intent exists before calling this function
      */
     function verifyPayment(
@@ -180,7 +180,7 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
         pure
         returns (PaymentDetails memory paymentDetails, IntentSnapshot memory intentSnapshot)
     {
-        // Both structs are static: decoding reads exactly the first 448 bytes and ignores the extension.
+        // Both structs are static: decoding reads exactly the first 480 bytes and ignores the extension.
         (paymentDetails, intentSnapshot) = abi.decode(paymentData, (PaymentDetails, IntentSnapshot));
     }
 
@@ -240,7 +240,8 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
                 intentV4.paymentMethod,
                 intentV4.fiatCurrency,
                 intentV4.conversionRate,
-                intentV4.timestamp
+                intentV4.timestamp,
+                intentV4.payerCommitment.length == 0 ? bytes32(0) : keccak256(intentV4.payerCommitment)
             );
         } else if (_isV2Orchestrator(msg.sender)) {
             IOrchestratorV2.Intent memory intentV2 = IOrchestratorV2(msg.sender).getIntent(intentHash);
@@ -251,7 +252,8 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
                 intentV2.paymentMethod,
                 intentV2.fiatCurrency,
                 intentV2.conversionRate,
-                intentV2.timestamp
+                intentV2.timestamp,
+                bytes32(0)
             );
         } else {
             IOrchestrator.Intent memory intent = IOrchestrator(msg.sender).getIntent(intentHash);
@@ -262,7 +264,8 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
                 intent.paymentMethod,
                 intent.fiatCurrency,
                 intent.conversionRate,
-                intent.timestamp
+                intent.timestamp,
+                bytes32(0)
             );
         }
 
@@ -276,7 +279,8 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
         bytes32 paymentMethod,
         bytes32 fiatCurrency,
         uint256 conversionRate,
-        uint256 signalTimestamp
+        uint256 signalTimestamp,
+        bytes32 payerCommitmentHash
     ) internal pure {
         require(snapshot.payeeDetails == payeeId, "UPV: Snapshot payee mismatch");
         require(snapshot.amount == amount, "UPV: Snapshot amount mismatch");
@@ -284,6 +288,7 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
         require(snapshot.fiatCurrency == fiatCurrency, "UPV: Snapshot currency mismatch");
         require(snapshot.conversionRate == conversionRate, "UPV: Snapshot rate mismatch");
         require(snapshot.signalTimestamp == signalTimestamp, "UPV: Snapshot timestamp mismatch");
+        require(snapshot.payerCommitmentHash == payerCommitmentHash, "UPV: Snapshot payer commitment mismatch");
     }
 
     function _isV2Orchestrator(address orchestrator) internal view returns (bool isV2Orchestrator) {

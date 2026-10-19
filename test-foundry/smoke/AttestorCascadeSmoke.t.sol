@@ -37,9 +37,9 @@ contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
             bytes memory proof = _serviceProof(attestor, id, modes[index], index);
             UnifiedPaymentVerifierV4.PaymentAttestation memory attestation =
                 abi.decode(proof, (UnifiedPaymentVerifierV4.PaymentAttestation));
-            // Decode the 448-byte static payload independently of the optional extension words.
-            assertGe(attestation.data.length, 480);
-            assertEq((attestation.data.length - 448) % 32, 0);
+            // Decode the 480-byte static payload independently of the optional extension words.
+            assertGe(attestation.data.length, 512);
+            assertEq((attestation.data.length - 480) % 32, 0);
             (, IPaymentVerifierV2.IntentSnapshot memory snapshot) = abi.decode(
                 attestation.data, (IPaymentVerifierV2.PaymentDetails, IPaymentVerifierV2.IntentSnapshot)
             );
@@ -88,7 +88,7 @@ contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
     }
 
     function _extensionWord(bytes memory data, uint256 index) private pure returns (uint256 word) {
-        uint256 offset = 448 + index * 32;
+        uint256 offset = 480 + index * 32;
         if (data.length < offset + 32) return 0;
         bytes memory encoded = new bytes(32);
         for (uint256 i; i < 32; ++i) encoded[i] = data[offset + i];
