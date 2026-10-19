@@ -37,9 +37,8 @@ import {IStakeVaultV2} from "./interfaces/IStakeVaultV2.sol";
  *      lock is unlocked or converted into claims. `NEVER_MATURES` represents exposure requiring an explicit controller
  *      transition on all paths.
  *
- *      Every authorized controller is governance-trusted: it can lock any owner's free stake and pay out any
- *      owner's free stake only to that owner's address. Each lock records its creating controller; only that
- *      controller, while still authorized, can increase, resize, unlock, or resolve it. Governance can authorize a
+ *      Every authorized controller is governance-trusted: it can lock any owner's free stake. Each lock records its
+ *      creating controller; only that controller, while still authorized, can increase, resize, unlock, or resolve it. Governance can authorize a
  *      successor immediately alongside its predecessor. De-authorize a controller only after its locks drain;
  *      revocation freezes its locks until it is re-authorized. The owner cannot renounce ownership, preserving recovery.
  *
@@ -78,7 +77,7 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
 
     /* ============ Controller State ============ */
 
-    /// @notice Governance-trusted controllers allowed to create locks and pay out owner free stake.
+    /// @notice Governance-trusted controllers allowed to create locks.
     mapping(address => bool) public override isController;
 
     /// @notice Creating controller of each active lock, or zero after the lock is removed.
@@ -171,20 +170,20 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
     }
 
     /**
-     * @notice Withdraws caller-owned free stake directly to the caller.
-     * @dev Reverts unless the complete amount is free; active locks are never implicitly matured, resolved, or resized.
-     *      Accounting is reduced before the token transfer and the function is reentrancy guarded.
+     * @notice Withdraws caller-owned free stake to the caller.
      * @param _amount Amount of free stake principal to withdraw.
      */
     function withdrawStake(uint256 _amount) external override nonReentrant {
-        if (_amount == 0) revert ZeroAmount();
-        uint256 available = freeStake(msg.sender);
-        if (available < _amount) revert InsufficientFreeStake(msg.sender, available, _amount);
+        _withdrawStake(msg.sender, _amount);
+    }
 
-        stakeBalance[msg.sender] -= _amount;
-        totalStaked -= _amount;
-        emit StakeWithdrawn(msg.sender, _amount, stakeBalance[msg.sender]);
-        stakeToken.safeTransfer(msg.sender, _amount);
+    /**
+     * @notice Withdraws caller-owned free stake to another address.
+     * @param _to Address receiving the tokens.
+     * @param _amount Amount of free stake principal to withdraw.
+     */
+    function withdrawStakeTo(address _to, uint256 _amount) external override nonReentrant {
+        _withdrawStake(_to, _amount);
     }
 
     /**
@@ -434,30 +433,11 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
         );
     }
 
-    /**
-     * @notice CONTROLLER ONLY: Pays free stake only to the stake owner itself.
-     * @dev Any authorized controller can pay out an owner's free stake to that owner. Accounting is reduced before
-     *      the token transfer; a controller cannot redirect the payout.
-     * @param _stakeOwner Owner whose free stake is paid to its own address.
-     * @param _amount Amount of free stake to pay out.
-     */
-    function payOutStake(address _stakeOwner, uint256 _amount) external override onlyController nonReentrant {
-        if (_stakeOwner == address(0)) revert ZeroAddress();
-        if (_amount == 0) revert ZeroAmount();
-        uint256 available = freeStake(_stakeOwner);
-        if (available < _amount) revert InsufficientFreeStake(_stakeOwner, available, _amount);
-
-        stakeBalance[_stakeOwner] -= _amount;
-        totalStaked -= _amount;
-        emit StakePaidOut(_stakeOwner, _amount, stakeBalance[_stakeOwner]);
-        stakeToken.safeTransfer(_stakeOwner, _amount);
-    }
-
     /* ============ Controller Governance ============ */
 
     /**
      * @notice GOVERNANCE ONLY: Immediately authorizes or de-authorizes a controller.
-     * @dev Every authorized controller can lock any owner's free stake and pay free stake to that owner.
+     * @dev Every authorized controller can lock any owner's free stake.
      *      De-authorize a controller only after its locks drain; only an authorized creator can service its locks.
      * @param _controller Non-zero controller address; authorization additionally requires deployed code.
      * @param _authorized Whether the controller may act.
@@ -558,6 +538,20 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
         uint256 tokenBalance = stakeToken.balanceOf(address(this));
         uint256 accounted = totalAccounted();
         return tokenBalance > accounted ? tokenBalance - accounted : 0;
+    }
+
+    /* ============ Internal Stake Helpers ============ */
+
+    /// @dev Reverts unless the complete amount is free; accounting is reduced before the token transfer.
+    function _withdrawStake(address _to, uint256 _amount) internal {
+        if (_amount == 0) revert ZeroAmount();
+        uint256 available = freeStake(msg.sender);
+        if (available < _amount) revert InsufficientFreeStake(msg.sender, available, _amount);
+
+        stakeBalance[msg.sender] -= _amount;
+        totalStaked -= _amount;
+        emit StakeWithdrawn(msg.sender, _to, _amount, stakeBalance[msg.sender]);
+        stakeToken.safeTransfer(_to, _amount);
     }
 
     /* ============ Internal Lock Helpers ============ */

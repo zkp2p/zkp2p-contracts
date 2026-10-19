@@ -7,7 +7,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 /**
  * @title IStakeVaultV2
  * @notice Custody, delegation, locking, and immediately claimable token accounting.
- * @dev Every authorized controller is governance-trusted: it can lock any owner's free stake and pay it to that owner.
+ * @dev Every authorized controller is governance-trusted: it can lock any owner's free stake.
  * Only a lock's still-authorized creator can service it. De-authorize controllers only after their locks drain.
  * Controllers supply all risk policy; lock identifiers and claim allocations are opaque to the vault.
  * ZKP2P deployments support canonical USDC only; fee-on-transfer and rebasing tokens are unsupported.
@@ -46,8 +46,7 @@ interface IStakeVaultV2 {
     error OwnershipRenunciationDisabled();
 
     event StakeDeposited(address indexed stakeOwner, uint256 amount, uint256 newStakeBalance);
-    event StakeWithdrawn(address indexed stakeOwner, uint256 amount, uint256 newStakeBalance);
-    event StakePaidOut(address indexed stakeOwner, uint256 amount, uint256 newStakeBalance);
+    event StakeWithdrawn(address indexed stakeOwner, address indexed to, uint256 amount, uint256 newStakeBalance);
     event TakerAuthorizationUpdated(address indexed stakeOwner, address indexed taker, bool authorized);
     event StakeOwnerSelected(address indexed taker, address indexed previousStakeOwner, address indexed newStakeOwner);
     event StakeLocked(
@@ -88,6 +87,7 @@ interface IStakeVaultV2 {
 
     function depositStake(uint256 _amount) external;
     function withdrawStake(uint256 _amount) external;
+    function withdrawStakeTo(address _to, uint256 _amount) external;
     function claim() external;
 
     function setTakerAuthorization(address _taker, bool _authorized) external;
@@ -100,14 +100,6 @@ interface IStakeVaultV2 {
     function resizeLock(bytes32 _lockId, uint256 _newAmount, uint64 _newMaturesAt) external;
     function unlockStake(bytes32 _lockId) external;
     function resolveLock(bytes32 _lockId, Claim[] calldata _claims) external;
-
-    /**
-     * @notice Pays free stake only to the stake owner itself.
-     * @dev Any authorized controller can pay out an owner's free stake only to that owner.
-     * @param _stakeOwner Owner whose free stake is paid to its own address.
-     * @param _amount Amount of free stake to pay out.
-     */
-    function payOutStake(address _stakeOwner, uint256 _amount) external;
 
     /// @notice Immediately changes controller authorization; de-authorize only after its locks drain.
     /// @dev Authorization requires a non-zero address with deployed code.

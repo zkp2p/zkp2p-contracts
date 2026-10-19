@@ -48,7 +48,7 @@ contract StakeVaultV2Test is Test {
         bytes32 indexed lockId, address indexed stakeOwner, uint256 amount, uint64 maturesAt, uint256 totalLockedStake
     );
     event StakeUnlocked(bytes32 indexed lockId, address indexed stakeOwner, uint256 amount, uint256 totalLockedStake);
-    event StakePaidOut(address indexed stakeOwner, uint256 amount, uint256 newStakeBalance);
+    event StakeWithdrawn(address indexed stakeOwner, address indexed to, uint256 amount, uint256 newStakeBalance);
     event LockFunded(bytes32 indexed lockId, address indexed stakeOwner, uint256 amount, uint256 newStakeBalance);
 
     uint64 internal constant NEVER_MATURES = type(uint64).max;
@@ -638,49 +638,38 @@ contract StakeVaultV2Test is Test {
         assertEq(vault.lockedStake(safeA), 80e6);
     }
 
-    function test_PayOutStakeTransfersFreeStakeToOwner() public {
+    function test_WithdrawStakeToSendsFreeStakeToRecipient() public {
         _deposit(safeA, 100e6);
-        uint256 balanceBefore = token.balanceOf(safeA);
+        address recipient = makeAddr("recipient");
+        uint256 ownerBefore = token.balanceOf(safeA);
         uint256 totalStakedBefore = vault.totalStaked();
 
-        vm.expectEmit(true, false, false, true, address(vault));
-        emit StakePaidOut(safeA, 40e6, 60e6);
-        vm.prank(controller);
-        vault.payOutStake(safeA, 40e6);
+        vm.expectEmit(true, true, false, true, address(vault));
+        emit StakeWithdrawn(safeA, recipient, 40e6, 60e6);
+        vm.prank(safeA);
+        vault.withdrawStakeTo(recipient, 40e6);
 
-        assertEq(token.balanceOf(safeA), balanceBefore + 40e6);
+        assertEq(token.balanceOf(recipient), 40e6);
+        assertEq(token.balanceOf(safeA), ownerBefore);
         assertEq(vault.stakeBalance(safeA), 60e6);
         assertEq(vault.totalStaked(), totalStakedBefore - 40e6);
     }
 
-    function test_PayOutStakeOnlyController() public {
-        _deposit(safeA, 100e6);
-        vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.UnauthorizedController.selector, attacker));
-        vm.prank(attacker);
-        vault.payOutStake(safeA, 40e6);
-    }
-
-    function test_PayOutStakeRejectsLockedStake() public {
+    function test_WithdrawStakeToRejectsLockedStakeAndZero() public {
         _deposit(safeA, 100e6);
         vm.prank(controller);
-        vault.lockStake(safeA, keccak256("locked-payout"), 70e6, NEVER_MATURES);
+        vault.lockStake(safeA, keccak256("locked-withdrawal-to"), 70e6, NEVER_MATURES);
 
         vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.InsufficientFreeStake.selector, safeA, 30e6, 31e6));
-        vm.prank(controller);
-        vault.payOutStake(safeA, 31e6);
-    }
+        vm.prank(safeA);
+        vault.withdrawStakeTo(makeAddr("recipient"), 31e6);
 
-    function test_PayOutStakeRejectsZero() public {
         vm.expectRevert(IStakeVaultV2.ZeroAmount.selector);
-        vm.prank(controller);
-        vault.payOutStake(safeA, 0);
-
-        vm.expectRevert(IStakeVaultV2.ZeroAddress.selector);
-        vm.prank(controller);
-        vault.payOutStake(address(0), 1);
+        vm.prank(safeA);
+        vault.withdrawStakeTo(makeAddr("recipient"), 0);
     }
 
-    function test_PayOutStakeFromFundedLockAfterUnlock() public {
+    function test_WithdrawFundedLockAfterUnlock() public {
         bytes32 lockId = keccak256("funded-payout");
         uint256 balanceBefore = token.balanceOf(safeA);
         token.transfer(controller, 50e6);
@@ -689,8 +678,9 @@ contract StakeVaultV2Test is Test {
         token.transfer(address(vault), 50e6);
         vault.fundLock(safeA, lockId, 50e6, NEVER_MATURES);
         vault.unlockStake(lockId);
-        vault.payOutStake(safeA, 50e6);
         vm.stopPrank();
+        vm.prank(safeA);
+        vault.withdrawStake(50e6);
 
         assertEq(token.balanceOf(safeA), balanceBefore + 50e6);
         assertEq(vault.stakeBalance(safeA), 0);
@@ -800,27 +790,12 @@ contract StakeVaultV2Test is Test {
         vm.expectRevert(reason);
         vm.prank(controller);
         vault.fundLock(safeA, keccak256("funded"), 1, NEVER_MATURES);
-        vm.expectRevert(reason);
-        vm.prank(controller);
-        vault.payOutStake(safeA, 1);
         assertEq(vault.lockController(id), controller);
         vault.setController(controller, true);
         vm.prank(controller);
         vault.unlockStake(id);
         assertEq(vault.freeStake(safeA), 100e6);
         assertEq(vault.lockController(id), address(0));
-    }
-
-    function test_AnyAuthorizedControllerPaysFreeStakeOnlyToItsOwner() public {
-        _deposit(safeA, 100e6);
-        vault.setController(nextController, true);
-        uint256 ownerBefore = token.balanceOf(safeA);
-        uint256 controllerBefore = token.balanceOf(nextController);
-        vm.prank(nextController);
-        vault.payOutStake(safeA, 100e6);
-        assertEq(token.balanceOf(safeA), ownerBefore + 100e6);
-        assertEq(token.balanceOf(nextController), controllerBefore);
-        assertEq(vault.totalAccounted(), 0);
     }
 
     function test_ReusedLockIdRecordsNewCreator() public {

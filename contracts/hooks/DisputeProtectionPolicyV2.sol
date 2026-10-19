@@ -22,7 +22,7 @@ import {IStakeVaultV2} from "../interfaces/IStakeVaultV2.sol";
  * Intent hashes must embed the originating orchestrator so identities cannot collide. Authorize a successor
  * policy alongside its predecessor in StakeVaultV2 and select it on O4; every later settlement uses it. The
  * predecessor keeps serving its own locks; de-authorize it only after its locks drain. Any authorized vault
- * controller can lock any owner's free stake and pay out that free stake only to its owner.
+ * controller can lock any owner's free stake.
  * Protection applies only to stake-token deposits with a nonzero window in the signed settlement data.
  * There are no per-method windows or paused admissions. O4 never calls the policy for manual releases or for
  * takers whitelisted at signal. Zero windows and non-stake tokens return without a record or event. Protected

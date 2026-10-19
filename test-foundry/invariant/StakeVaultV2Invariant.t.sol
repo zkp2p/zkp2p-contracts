@@ -97,11 +97,11 @@ contract StakeVaultV2InvariantHandler is Test {
         vault.withdrawStake(bound(_rawAmount, 1, available));
     }
 
-    /// @notice Pays the actor's free stake to itself as the vault controller.
-    function payOutStake(uint256 amount) external {
+    /// @notice Withdraws the actor's free stake to another address.
+    function withdrawTo(uint256 amount) external {
         uint256 available = vault.freeStake(address(this));
         if (available == 0) return;
-        vault.payOutStake(address(this), bound(amount, 1, available));
+        vault.withdrawStakeTo(address(0xBEEF), bound(amount, 1, available));
     }
 
     function withdrawClaim() external {
