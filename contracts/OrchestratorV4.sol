@@ -106,8 +106,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      * @notice Signals intent to pay the depositor defined in the _depositId the _amount * deposit conversionRate off-chain at 
      * their given _payeeId in order to unlock _amount of funds on-chain. Caller must provide a signature from the deposit's gating
      * service to prove their eligibility to take liquidity. This function captures and stores all values required for fullfilling
-     * the intent to give strong guarantees to the buyer. Checks whitelist
-     * admission before locking liquidity for the corresponding deposit on the escrow contract.
+     * the intent to give strong guarantees to the buyer. Checks whitelist admission and records whether the taker was
+     * whitelisted before locking liquidity for the corresponding deposit on the escrow contract.
      *
      * @param _params                   Struct containing all the intent parameters
      */
@@ -205,7 +205,6 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      * Settlement unlocks escrow funds, transfers fees, notifies the current settlement policy (fail-closed),
      * and transfers the net payout to intent.to or the deferral vault.
      * @dev Signed settlement data is forwarded opaquely to the current policy.
-     * @dev Guarded against reentrancy through verifiers, tokens and settlement policies.
      *
      * @param _params               Struct containing all the fulfill intent parameters
      */

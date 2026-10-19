@@ -11,54 +11,9 @@ import {IStakeVaultV2} from "./interfaces/IStakeVaultV2.sol";
 
 /**
  * @title StakeVaultV2
- * @notice Policy-agnostic custody, delegation, lock, and immediately claimable token accounting.
- *
- * @dev ACCOUNTING MODEL
- *      Stake principal belongs to a `stakeOwner` and is split into locked and free amounts:
- *
- *        freeStake(owner) = stakeBalance(owner) - lockedStake(owner)
- *        totalAccounted() = totalStaked + totalClaimable
- *
- *      Creating or unlocking a lock only moves principal between locked and free accounting.
- *      Resolving a lock may move some principal from `totalStaked` into beneficiary `claimable` balances; every
- *      unallocated unit becomes free stake of the original owner. Claims are immediately withdrawable and are never
- *      stake. `fundLock` is the sole path that adopts tokens already transferred into the vault as new locked stake.
- *
- * @dev DELEGATION MODEL
- *      A stake owner may authorize any number of takers, and each taker explicitly selects at most one authorized owner.
- *      Authorizations are additive: one owner's authorization never overwrites another's, and a taker can always fall
- *      back to its own stake. Delegation never transfers ownership, custody rights, or withdrawal rights. Revocation
- *      clears an active selection for future policy reads but cannot alter locks already created for that owner.
- *
- * @dev LOCK AND CONTROLLER MODEL
- *      The vault deliberately knows nothing about intents, fees, disputes, or lock purpose. Lock IDs and beneficiary
- *      allocations are opaque controller inputs. A lock's maturity is recorded for the controller; it never resolves
- *      the lock, and the controller chooses whether and how every lock is unlocked or converted into claims.
- *
- *      Every authorized controller is governance-trusted: it can lock any owner's free stake. Each lock records its
- *      creating controller; only that controller, while still authorized, can unlock or resolve it. Governance can authorize a
- *      successor immediately alongside its predecessor. De-authorize a controller only after its locks drain;
- *      revocation freezes its locks until it is re-authorized. The owner cannot renounce ownership, preserving recovery.
- *
- * @dev TOKEN ASSUMPTION
- *      ZKP2P deployments configure the vault only with canonical USDC. USDC administration, upgrades, pauses, and
- *      blocklisting remain accepted external operational risks. Tokens with transfer fees, rebasing, or other balance
- *      transformations are unsupported; the exact inbound balance-delta check is defense in depth, not generic-token
- *      compatibility.
- *
- * @dev SECURITY INVARIANTS AND RATIONALE
- *      1. Only free stake may be withdrawn or newly locked. Existing locks remain fully backed in aggregate accounting.
- *      2. Lock IDs are globally unique while active, preventing one owner's lock from colliding with another's.
- *      3. Only authorized controllers can create or fund locks; only their still-authorized creator can service them.
- *         Each controller must enforce all policy,
- *         including whether a named stake owner authorized the economic action; the vault enforces accounting only.
- *      4. Resolution conserves liabilities: claim allocations cannot exceed the lock, and unclaimed remainder stays with
- *         the stake owner rather than being transferred to the controller.
- *      5. Deposits require an exact token balance delta. Funded locks can adopt only balance already held above existing
- *         liabilities, while the controller remains responsible for transfer-specific delta checks. The controller never
- *         takes custody.
- *      6. User withdrawals and claims apply accounting effects before token interactions and are reentrancy guarded.
- *      7. Controller authorization changes immediately; existing locks retain their creator until removed.
+ * @notice Holds stake, locks it for governance-authorized controllers and pays out dispute claims.
+ * @dev Only free stake (balance minus locks) can be withdrawn or locked. Only the controller that created a lock can
+ *      unlock or resolve it, and only while still authorized. Canonical USDC only.
  */
 contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -106,9 +61,6 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
 
     /* ============ Modifiers ============ */
 
-    /**
-     * @dev Restricts controller operations to governance-authorized callers.
-     */
     modifier onlyController() {
         if (!isController[msg.sender]) revert UnauthorizedController(msg.sender);
         _;
@@ -169,9 +121,6 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
 
     /**
      * @notice Withdraws the caller's complete immediately claimable balance.
-     * @dev Claims are separate from stake principal and cannot be delegated or used for locks. The claim balance and
-     *      aggregate claim liability are cleared before the token transfer. Partial claim withdrawal is intentionally
-     *      unsupported, keeping claim settlement to one state transition per beneficiary withdrawal.
      */
     function claim() external override nonReentrant {
         uint256 amount = claimable[msg.sender];
@@ -187,10 +136,6 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
 
     /**
      * @notice Authorizes or revokes a taker's ability to select the caller's stake for future policy reads.
-     * @dev The caller remains the stake owner and retains all deposit and withdrawal rights. Revoking the authorization
-     *      automatically clears the taker's selection if it currently points to the caller. Existing locks remain owned
-     *      by and charged against the original stake owner. Self-authorization is unnecessary because every taker falls
-     *      back to its own stake when it has no valid selection.
      * @param _taker Taker whose authorization is being changed.
      * @param _authorized True to authorize selection of the caller's stake; false to revoke it.
      */
@@ -208,9 +153,6 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
 
     /**
      * @notice Selects an authorizing third-party stake owner for the caller's future policy reads.
-     * @dev Selection does not lock or transfer funds and overwrites only the caller's previous selection. The named owner
-     *      must currently authorize the caller. Selecting oneself or zero is unsupported; use `clearStakeOwner` to return
-     *      to the implicit self-staking fallback.
      * @param _stakeOwner Authorized third party whose stake the caller wants future policy to resolve.
      */
     function selectStakeOwner(address _stakeOwner) external override {
@@ -226,8 +168,6 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
 
     /**
      * @notice Clears the caller's selected third-party stake owner and restores the self-staking fallback.
-     * @dev Does not change any owner's authorization mapping and cannot alter existing locks. Emits an event even when no
-     *      selection was active, allowing indexers to treat the call as an explicit preference reset.
      */
     function clearStakeOwner() external override {
         address previousStakeOwner = selectedStakeOwner[msg.sender];
@@ -239,9 +179,6 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
 
     /**
      * @notice CONTROLLER ONLY: Creates a new lock backed by an owner's existing free stake.
-     * @dev The lock ID must be non-zero and globally unused, the owner and amount must be non-zero, and maturity must be
-     *      strictly in the future. This function does not consult delegation state; authorization and lock purpose are
-     *      controller policy. Principal remains in `stakeBalance` while `lockedStake` increases by the lock amount.
      * @param _stakeOwner Owner whose free stake backs the new lock.
      * @param _lockId Controller-defined globally unique identifier for the active lock.
      * @param _amount Amount of existing free stake to commit.
@@ -260,10 +197,6 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
 
     /**
      * @notice CONTROLLER ONLY: Adopts unaccounted vault tokens as new stake and immediately locks them.
-     * @dev Intended for atomic flows that transfer tokens directly to StakeVault before calling this function. The vault
-     *      must hold at least `_amount` above existing stake and claim liabilities. Funding increases the named owner's
-     *      stake balance and aggregate stake, then commits the complete amount under a validated new lock. Any excess
-     *      unaccounted tokens remain available for a later funding operation.
      * @param _stakeOwner Owner credited with the newly accounted stake.
      * @param _lockId Controller-defined globally unique identifier for the active lock.
      * @param _amount Amount of unaccounted token balance to adopt and lock.
@@ -286,8 +219,6 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
 
     /**
      * @notice CONTROLLER ONLY: Deletes an active lock and returns its complete amount to owner free stake.
-     * @dev Unlocking is permitted before or after maturity because business policy belongs to the controller. No stake or
-     *      aggregate liability changes; only the lock record and owner's locked subtotal are reduced.
      * @param _lockId Identifier of the active lock to delete.
      */
     function unlockStake(bytes32 _lockId) external override onlyController onlyLockController(_lockId) {
@@ -297,10 +228,6 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
 
     /**
      * @notice CONTROLLER ONLY: Deletes an active lock and converts selected principal into beneficiary claims.
-     * @dev Resolution is permitted before or after maturity. Every allocation requires a non-zero beneficiary and amount,
-     *      and their sum cannot exceed the lock. Allocated principal moves atomically from the owner's stake liability to
-     *      immediately withdrawable claim liabilities; duplicate beneficiaries accumulate. The unallocated remainder
-     *      becomes owner free stake. An empty claim array is equivalent in accounting effect to an unlock.
      * @param _lockId Identifier of the active lock to resolve.
      * @param _claims Beneficiary allocations to create from the locked principal.
      */
@@ -351,8 +278,6 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
 
     /**
      * @notice GOVERNANCE ONLY: Immediately authorizes or de-authorizes a controller.
-     * @dev Every authorized controller can lock any owner's free stake.
-     *      De-authorize a controller only after its locks drain; only an authorized creator can service its locks.
      * @param _controller Non-zero controller address.
      * @param _authorized Whether the controller may act.
      */
@@ -364,7 +289,6 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
 
     /**
      * @notice Ownership renunciation is disabled so governance always retains a controller recovery path.
-     * @dev Always reverts for the owner; non-owners revert through the inherited ownership check first.
      */
     function renounceOwnership() public view override onlyOwner {
         revert OwnershipRenunciationDisabled();
@@ -374,8 +298,6 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
 
     /**
      * @notice Resolves the stake owner used for a taker's future controller policy reads.
-     * @dev Returns the selected owner only while its authorization remains live; otherwise returns the taker itself.
-     *      Existing locks are independent of this live lookup and retain the owner stored in each lock.
      * @param _taker Taker whose effective stake owner should be resolved.
      * @return Effective stake owner for future policy decisions.
      */
@@ -387,8 +309,6 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
 
     /**
      * @notice Returns a taker's currently selected stake owner and that owner's aggregate stake balances.
-     * @dev Delegation is resolved live. If a previous authorization was revoked, the taker falls back to its own
-     *      stake and the returned balances describe the taker's account.
      * @param _taker Taker whose effective stake owner and balances are queried.
      * @return stakeOwner Effective owner supplying stake for the taker.
      * @return totalStake Total principal owned by `stakeOwner`, including free and locked stake.
@@ -409,7 +329,6 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
 
     /**
      * @notice Returns principal the owner may immediately withdraw or commit to another lock.
-     * @dev Derived from aggregate owner balances; lock creation and release maintain `lockedStake <= stakeBalance`.
      * @param _stakeOwner Owner whose free principal should be calculated.
      * @return Stake balance not committed to any active lock.
      */
@@ -427,8 +346,6 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
 
     /**
      * @notice Returns vault token balance available to be adopted through `fundLock`.
-     * @dev Direct transfers and settlement transfers are unaccounted until funded. The subtraction saturates at zero, so
-     *      an external token-balance deficit is not represented as a negative value and remains an insolvency condition.
      * @return Token balance held above aggregate stake and claim liabilities.
      */
     function unaccountedBalance() public view override returns (uint256) {
@@ -454,8 +371,6 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
     /* ============ Internal Lock Helpers ============ */
 
     /**
-     * @dev Validates common creation requirements without changing accounting. A lock ID may be reused only after its
-     *      previous lock has been deleted by unlock or resolution.
      * @param _stakeOwner Non-zero owner to record on the lock.
      * @param _lockId Non-zero globally unused active lock identifier.
      * @param _amount Non-zero amount to lock.
@@ -470,7 +385,6 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
     }
 
     /**
-     * @dev Writes a previously validated new lock and increases the owner's aggregate locked principal.
      * @param _stakeOwner Owner recorded on the lock.
      * @param _lockId Globally unused active lock identifier.
      * @param _amount Amount of owner principal being committed.
@@ -484,8 +398,6 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
     }
 
     /**
-     * @dev Loads and deletes one active lock, returning its complete principal to the owner's free subtotal. Callers may
-     *      subsequently move some of that principal into claims as part of the same transaction.
      * @param _lockId Identifier of the active lock to remove.
      * @return stakeLock Deleted lock snapshot used by the caller's terminal accounting.
      */

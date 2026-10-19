@@ -46,7 +46,7 @@ contract UnifiedPaymentVerifierV4V4CallerHarness is ERC165 {
         return verifier.verifyPayment(data);
     }
 
-    // O4 also exposes this selector: the verifier must test its ERC-165 interface first.
+    // An O4 that also answered this V2 probe must still be read as O4: the verifier checks ERC-165 first.
     function getDepositPreIntentHook(address, uint256) external pure returns (address) {
         return address(0);
     }

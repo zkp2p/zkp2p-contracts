@@ -20,11 +20,8 @@ import { IPaymentVerifierV2 } from "../interfaces/IPaymentVerifierV2.sol";
  * - Uses AttestationVerifier to validate offchain payment attestations
  * - Ensures trust anchor integrity for off-chain verification processes
  * - Verifies standardized payment details against provided data
- * @dev Payment attestations use this deployment's EIP-712 domain. Governance must reuse the payment-nullifier
- * registry, route payment methods to this verifier, and retire V3's registry write permission during activation.
- * attestation.data is `abi.encode(PaymentDetails, IntentSnapshot, bytes settlementData)` and is signed through
- * dataHash; unsigned attestation.metadata is never returned. settlementData is opaque here and to OrchestratorV4;
- * only the settlement policy decodes it.
+ * @dev attestation.data is `abi.encode(PaymentDetails, IntentSnapshot, bytes settlementData)`, signed under this
+ * deployment's EIP-712 domain. settlementData is opaque here and to OrchestratorV4; the settlement policy decodes it.
  */
 contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerifierV3 {
 

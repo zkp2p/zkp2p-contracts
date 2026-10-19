@@ -29,9 +29,7 @@ interface IPaymentVerifierV2 {
         bytes32 payerCommitmentHash;  // keccak256 of the O4 intent's payer commitment, zero if empty; the attestor checked the payer
     }
 
-    /// @dev Must stay fully static and preserve the V1 three-field prefix: OrchestratorV3 calls
-    /// through IPaymentVerifier and reads only the first three words. Dynamic data must be a
-    /// separate trailing return value, never a field inside this struct, so the V1 prefix remains unchanged.
+    /// @dev Fully static so OrchestratorV3 can keep reading the V1 three-word prefix.
     struct PaymentVerificationResultV2 {
         bool success;
         bytes32 intentHash;
@@ -41,8 +39,7 @@ interface IPaymentVerifierV2 {
         IntentSnapshot intent;
     }
 
-    /// @notice Verifies a payment and returns all verified fields plus the signed settlement data.
-    /// @dev The verifier returns settlementData uninterpreted; the settlement policy decodes and validates it.
+    /// @notice Verifies a payment and returns all verified fields plus the signed, uninterpreted settlement data.
     function verifyPayment(VerifyPaymentData calldata _verifyPaymentData)
         external
         returns (PaymentVerificationResultV2 memory result, bytes memory settlementData);

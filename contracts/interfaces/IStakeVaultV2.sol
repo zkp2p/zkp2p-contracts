@@ -6,11 +6,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title IStakeVaultV2
- * @notice Custody, delegation, locking, and immediately claimable token accounting.
- * @dev Every authorized controller is governance-trusted: it can lock any owner's free stake.
- * Only a lock's still-authorized creator can service it. De-authorize controllers only after their locks drain.
- * Controllers supply all risk policy; lock identifiers and claim allocations are opaque to the vault.
- * ZKP2P deployments support canonical USDC only; fee-on-transfer and rebasing tokens are unsupported.
+ * @notice Stake custody, delegation, controller locks and dispute claims. Canonical USDC only.
  */
 interface IStakeVaultV2 {
     struct StakeLock {

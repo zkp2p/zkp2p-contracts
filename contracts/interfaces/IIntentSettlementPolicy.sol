@@ -17,12 +17,8 @@ interface IIntentSettlementPolicy {
         bytes settlementData; // Signed by the attestor; opaque to O4
     }
 
-    /// @notice Selects immediate or deferred settlement.
-    /// @dev O4 calls this only for verified fulfilments by takers that were not whitelisted at signal.
-    /// DisputeProtectionPolicyV2 reads settlementData as abi.encode(uint256 disputeWindow), at most 180 days.
-    /// The current policy pays zero windows and non-stake tokens now.
-    /// @return deferralVault Zero to pay intent.to now; otherwise the vault that must receive
-    /// netAmount before onDeferredPayoutFunded is called in the same transaction.
+    /// @notice Selects immediate or deferred settlement for a verified fulfilment by a non-whitelisted taker.
+    /// @return deferralVault Zero to pay intent.to now; otherwise the vault that receives netAmount.
     function settleIntent(SettlementContext calldata context) external returns (address deferralVault);
 
     /// @notice Locks the net payout O4 just transferred to the deferral vault.
