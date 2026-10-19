@@ -83,10 +83,6 @@ contract DisputeProtectionPolicyV2Test is Test {
     function _mature() internal {
         vm.warp(_record().releaseEligibleAt);
     }
-    function _claim(address caller) internal {
-        vm.prank(caller);
-        policy.claimFor(ID);
-    }
     function _settleStake() internal {
         _stake(TAKER, GROSS);
 
@@ -323,81 +319,9 @@ contract DisputeProtectionPolicyV2Test is Test {
         policy.releaseMaturedDisputeProtectionIntent(ID);
         assertEq(vault.freeStake(RECIPIENT), NET);
         _status(P.DisputeProtectionIntentStatus.RELEASED);
-    }
-    function test_ClaimForByTakerPaysRecipient() public {
-        _fund();
-        _mature();
-        _claim(TAKER);
-        assertEq(usdc.balanceOf(RECIPIENT), NET);
-        assertEq(usdc.balanceOf(TAKER), 0);
-        assertEq(_record().claimedAmount, NET);
-    }
-    function test_ClaimForByRecipient() public {
-        _fund();
-        _mature();
-        _claim(RECIPIENT);
-        assertEq(usdc.balanceOf(RECIPIENT), NET);
-    }
-    function test_ClaimForStrangerReverts() public {
-        _fund();
-        vm.expectRevert(abi.encodeWithSelector(P.UnauthorizedClaimer.selector, STRANGER));
-        _claim(STRANGER);
-    }
-    function test_ClaimForReleasesMaturedLockFirst() public {
-        _fund();
-        _mature();
-        _claim(TAKER);
-        _status(P.DisputeProtectionIntentStatus.RELEASED);
-        assertEq(vault.lockedStake(RECIPIENT), 0);
-    }
-    function test_ClaimForBeforeMaturityReverts() public {
-        _fund();
-        vm.expectRevert(abi.encodeWithSelector(P.DisputeProtectionIntentNotReleaseEligible.selector, _record().releaseEligibleAt, uint64(block.timestamp)));
-        _claim(TAKER);
-    }
-    function test_ClaimForStakeSourceReverts() public {
-        _settleStake();
-        vm.expectRevert(abi.encodeWithSelector(P.NotDeferredPayout.selector, ID));
-        _claim(TAKER);
-    }
-    function test_ClaimForCapsAtLockedAmount() public {
-        _stake(RECIPIENT, 500e6);
-        _fund();
-        _mature();
-        _claim(TAKER);
-        assertEq(usdc.balanceOf(RECIPIENT), NET);
-        assertEq(vault.freeStake(RECIPIENT), 500e6);
-        vm.expectRevert(abi.encodeWithSelector(P.NothingToClaim.selector, ID));
-        _claim(TAKER);
-    }
-    function test_ClaimForPartialWhenRecipientStakeRelocked() public {
-        _fund();
-        _mature();
-        policy.releaseMaturedDisputeProtectionIntent(ID);
-        assertFalse((policy.settleIntent(S.SettlementContext(ID2, address(usdc), RECIPIENT, STRANGER, DEPOSITOR, METHOD, 60e6, 59e6, abi.encode(uint256(WINDOW)))) != address(0)));
-        _claim(TAKER);
-        assertEq(usdc.balanceOf(RECIPIENT), 39.05e6);
-        assertEq(_record().claimedAmount, 39.05e6);
-        vm.warp(block.timestamp + WINDOW);
-        policy.releaseMaturedDisputeProtectionIntent(ID2);
-        _claim(TAKER);
-        assertEq(usdc.balanceOf(RECIPIENT), NET);
-        assertEq(_record().claimedAmount, NET);
-    }
-    function test_ClaimForAfterRecipientWithdrewReverts() public {
-        _fund();
-        _mature();
-        policy.releaseMaturedDisputeProtectionIntent(ID);
         vm.prank(RECIPIENT);
         vault.withdrawStake(NET);
-        vm.expectRevert(abi.encodeWithSelector(P.NothingToClaim.selector, ID));
-        _claim(TAKER);
-    }
-    function test_ClaimForDisputedReverts() public {
-        _fund();
-        policy.submitDispute(_attestation());
-        _unexpected(P.DisputeProtectionIntentStatus.DISPUTED);
-        _claim(TAKER);
+        assertEq(usdc.balanceOf(RECIPIENT), NET);
     }
     function test_LifecycleEntrypointsRequireAuthorizedOrchestrator() public {
         vm.startPrank(STRANGER);

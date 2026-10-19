@@ -258,18 +258,6 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         assertEq(token.balanceOf(address(vault)), 0);
     }
 
-    function test_DeferredReleaseThenTakerClaimFor() public {
-        bytes32 id = _signalDefault();
-        _settle(id, INTENT_AMOUNT, RISK_WINDOW);
-        _release(id);
-        vm.prank(taker);
-        protection.claimFor(id);
-        assertEq(token.balanceOf(other), NET);
-        assertEq(token.balanceOf(taker), 0);
-        assertEq(protection.getDisputeProtectionIntent(id).claimedAmount, NET);
-        assertEq(vault.totalAccounted(), 0);
-    }
-
     function test_DeferredRecipientCanWithdrawStakeDirectly() public {
         bytes32 id = _signalDefault();
         _settle(id, INTENT_AMOUNT, RISK_WINDOW);

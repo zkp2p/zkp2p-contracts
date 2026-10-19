@@ -62,8 +62,8 @@ contract DeferredPayoutCascadeFuzzTest is Test {
         policy.releaseMaturedDisputeProtectionIntent(ID);
         _accounting();
         if (record.collateralSource == P.CollateralSource.DEFERRED_PAYOUT) {
-            vm.prank(TAKER);
-            policy.claimFor(ID);
+            vm.prank(RECIPIENT);
+            vault.withdrawStake(record.lockedAmount);
         } else {
             vm.prank(TAKER);
             vault.withdrawStake(freeStake);
@@ -80,41 +80,6 @@ contract DeferredPayoutCascadeFuzzTest is Test {
         assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.SETTLED));
         assertEq(record.releaseEligibleAt, block.timestamp + window);
         assertEq(uint256(record.collateralSource), uint256(staked ? P.CollateralSource.STAKE : P.CollateralSource.DEFERRED_PAYOUT));
-    }
-
-    function testFuzz_ClaimForNeverExceedsLocked(uint256 releaseAmount, uint256 freeStake, uint256 protocolBps, uint256 referralBps, uint256 seed) public {
-        releaseAmount = bound(releaseAmount, 1, 1e12);
-        freeStake = bound(freeStake, 0, releaseAmount - 1);
-        uint256 net = _settle(releaseAmount, freeStake, protocolBps, referralBps);
-        vm.warp(policy.getDisputeProtectionIntent(ID).releaseEligibleAt);
-        policy.releaseMaturedDisputeProtectionIntent(ID);
-        _accounting();
-        uint256 paid;
-        for (uint256 step; step < 8; ++step) {
-            seed = uint256(keccak256(abi.encode(seed, step)));
-            uint256 available = vault.freeStake(RECIPIENT);
-            uint256 relocked = bound(seed, 0, available);
-            bytes32 lockId = keccak256(abi.encode("relock", step));
-            if (relocked != 0) {
-                assertFalse((policy.settleIntent(S.SettlementContext(lockId, address(token), RECIPIENT, TAKER, DEPOSITOR, METHOD, relocked, relocked, abi.encode(uint256(WINDOW)))) != address(0)));
-                _accounting();
-            }
-            paid += _claim(net - paid, step % 2 == 0 ? TAKER : RECIPIENT);
-            assertLe(paid, net);
-            assertEq(policy.getDisputeProtectionIntent(ID).claimedAmount, paid);
-            if (relocked != 0) {
-                vm.warp(policy.getDisputeProtectionIntent(lockId).releaseEligibleAt);
-                policy.releaseMaturedDisputeProtectionIntent(lockId);
-                _accounting();
-            }
-        }
-        paid += _claim(net - paid, TAKER);
-        assertEq(paid, net);
-        assertEq(token.balanceOf(RECIPIENT), net);
-        _deposit(RECIPIENT, releaseAmount);
-        _claim(0, TAKER);
-        assertEq(token.balanceOf(RECIPIENT), net);
-        assertEq(vault.freeStake(RECIPIENT), releaseAmount);
     }
 
     function _settle(uint256 gross, uint256 freeStake, uint256 protocolBps, uint256 referralBps) internal returns (uint256 net) {
@@ -143,18 +108,6 @@ contract DeferredPayoutCascadeFuzzTest is Test {
         token.approve(address(vault), amount);
         vault.depositStake(amount);
         vm.stopPrank();
-        _accounting();
-    }
-
-    function _claim(uint256 remaining, address caller) internal returns (uint256 paid) {
-        uint256 available = vault.freeStake(RECIPIENT);
-        uint256 expected = remaining < available ? remaining : available;
-        uint256 beforeBalance = token.balanceOf(RECIPIENT);
-        if (expected == 0) vm.expectRevert(abi.encodeWithSelector(P.NothingToClaim.selector, ID));
-        vm.prank(caller);
-        policy.claimFor(ID);
-        paid = token.balanceOf(RECIPIENT) - beforeBalance;
-        assertEq(paid, expected);
         _accounting();
     }
 

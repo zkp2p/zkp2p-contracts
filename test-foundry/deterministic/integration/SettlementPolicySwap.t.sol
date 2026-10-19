@@ -6,7 +6,7 @@ import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicy
 import {IDisputeProtectionPolicyV2 as P} from "contracts/interfaces/IDisputeProtectionPolicyV2.sol";
 
 contract SettlementPolicySwapTest is DisputeProtectionStackV2Fixture {
-    function test_SuccessorSettlesWhilePredecessorReleasesAndClaimsOwnLock() public {
+    function test_SuccessorSettlesWhilePredecessorReleasesOwnLock() public {
         bytes32 first = _signalDefault();
         _settle(first, INTENT_AMOUNT, RISK_WINDOW);
         P.DisputeProtectionIntent memory firstIntent = protection.getDisputeProtectionIntent(first);
@@ -43,18 +43,18 @@ contract SettlementPolicySwapTest is DisputeProtectionStackV2Fixture {
         assertEq(vault.lockController(first), address(0));
         assertEq(vault.lockedStake(other), NET);
         assertEq(vault.freeStake(other), NET);
-        vm.prank(taker);
-        protection.claimFor(first);
+        vm.prank(other);
+        vault.withdrawStake(NET);
         assertEq(token.balanceOf(other), NET);
-        assertEq(protection.getDisputeProtectionIntent(first).claimedAmount, NET);
         assertEq(vault.lockController(second), address(successor));
         assertEq(vault.freeStake(other), 0);
 
         vault.setController(address(protection), false);
         assertFalse(vault.isController(address(protection)));
         vm.warp(successor.getDisputeProtectionIntent(second).releaseEligibleAt);
+        successor.releaseMaturedDisputeProtectionIntent(second);
         vm.prank(other);
-        successor.claimFor(second);
+        vault.withdrawStake(NET);
         assertEq(token.balanceOf(other), 2 * NET);
         assertEq(vault.lockController(second), address(0));
         assertEq(vault.totalStaked(), 0);

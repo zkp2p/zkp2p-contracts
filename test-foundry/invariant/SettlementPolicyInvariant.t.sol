@@ -57,8 +57,8 @@ contract SettlementPolicyHandler is DisputeProtectionStackV2Fixture {
         if (block.timestamp < record.releaseEligibleAt) vm.warp(record.releaseEligibleAt);
         protection.releaseMaturedDisputeProtectionIntent(id);
         if (record.collateralSource == P.CollateralSource.DEFERRED_PAYOUT) {
-            vm.prank(taker);
-            protection.claimFor(id);
+            vm.prank(other);
+            vault.withdrawStake(record.lockedAmount);
         }
     }
 
@@ -77,7 +77,6 @@ contract SettlementPolicyHandler is DisputeProtectionStackV2Fixture {
             } else {
                 assertEq(amount, 0);
             }
-            assertLe(record.claimedAmount, record.lockedAmount);
         }
         assertEq(totalLocked, vault.lockedStake(taker) + vault.lockedStake(other));
     }

@@ -145,29 +145,6 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
         stakeVault.fundLock(intent.recipient, _intentHash, intent.lockedAmount, intent.releaseEligibleAt);
     }
 
-    /// @notice Pushes a matured deferred payout's available, unclaimed stake only to its recipient.
-    /// @dev Only the taker or recipient may call. A partial payout leaves the remainder claimable later.
-    ///     The record tracks claimed amounts, not which stake units came from the payout. The released payout
-    ///     is ordinary free stake of the recipient.
-    ///     If the recipient withdraws that stake directly first, a later claimFor (including one by the taker)
-    ///     pays the unclaimed amount, capped at the recipient's free stake, out of the recipient's other free stake.
-    ///     Funds only ever reach the recipient, so this is accepted. Per-payout accounting in the vault would
-    ///     be needed to prevent it.
-    function claimFor(bytes32 _intentHash) external nonReentrant {
-        DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_intentHash];
-        if (intent.collateralSource != CollateralSource.DEFERRED_PAYOUT) revert NotDeferredPayout(_intentHash);
-        if (msg.sender != intent.taker && msg.sender != intent.recipient) revert UnauthorizedClaimer(msg.sender);
-        if (intent.status == DisputeProtectionIntentStatus.SETTLED) _releaseMaturedDisputeProtectionIntent(_intentHash);
-        if (intent.status != DisputeProtectionIntentStatus.RELEASED) revert UnexpectedStatus(_intentHash, intent.status);
-        uint256 amount = intent.lockedAmount - intent.claimedAmount;
-        uint256 freeStake = stakeVault.freeStake(intent.recipient);
-        if (amount > freeStake) amount = freeStake;
-        if (amount == 0) revert NothingToClaim(_intentHash);
-        intent.claimedAmount += amount;
-        stakeVault.payOutStake(intent.recipient, amount);
-        emit DeferredPayoutClaimed(_intentHash, intent.recipient, msg.sender, amount, intent.claimedAmount);
-    }
-
     /* ============ Permissionless Functions ============ */
 
     /**
