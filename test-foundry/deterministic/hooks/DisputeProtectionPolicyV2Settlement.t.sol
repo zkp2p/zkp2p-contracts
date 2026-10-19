@@ -20,7 +20,7 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
 
     function setUp() public override {
         super.setUp();
-        vault = new StakeVaultV2(address(this), token, address(0));
+        vault = new StakeVaultV2(address(this), token);
         policy = new DisputeProtectionPolicyV2(
             address(this), vault,
             new DisputeVerifier(address(this), new NullifierRegistryV2(new NullifierRegistry()), new AttestationVerifierMock()),

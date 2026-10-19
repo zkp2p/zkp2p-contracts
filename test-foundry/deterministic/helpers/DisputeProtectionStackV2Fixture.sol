@@ -44,7 +44,7 @@ abstract contract DisputeProtectionStackV2Fixture is OrchestratorV4Fixture {
         bytes32[] memory currencies = new bytes32[](1);
         currencies[0] = USD;
         paymentVerifierRegistry.addPaymentMethod(METHOD, address(upv), currencies);
-        vault = new StakeVaultV2(address(this), token, address(0));
+        vault = new StakeVaultV2(address(this), token);
         disputeNullifiers = new NullifierRegistry();
         disputeVerifier = new DisputeVerifier(address(this), nullifiers, witnesses);
         protection = new DisputeProtectionPolicyV2(address(this), vault, disputeVerifier, disputeNullifiers);

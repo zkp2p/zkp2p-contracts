@@ -111,7 +111,7 @@ contract StakeVaultV2InvariantTest is StdInvariant, Test {
 
     function setUp() public {
         token = new USDCMock(10_000_000e6, "USD Coin", "USDC");
-        vault = new StakeVaultV2(address(this), token, address(0));
+        vault = new StakeVaultV2(address(this), token);
         handler = new StakeVaultV2InvariantHandler(vault, token);
         vault.setController(address(handler), true);
         token.transfer(address(handler), 5_000_000e6);

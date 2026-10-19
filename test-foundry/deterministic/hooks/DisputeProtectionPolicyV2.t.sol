@@ -40,7 +40,7 @@ contract DisputeProtectionPolicyV2Test is Test {
     function setUp() public {
         vm.warp(1000);
         usdc = new USDCMock(100000e6, "USDC", "USDC");
-        vault = new StakeVaultV2(address(this), usdc, address(0));
+        vault = new StakeVaultV2(address(this), usdc);
         payments = new NullifierRegistryV2(new NullifierRegistry());
         disputes = new NullifierRegistry();
         verifier = new DisputeVerifier(address(this), payments, new AttestationVerifierMock());

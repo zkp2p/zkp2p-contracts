@@ -33,7 +33,8 @@ contract StakeVaultV2FuzzTest is Test {
         alternateOwner = makeAddr("alternateOwner");
 
         token = new USDCMock(MAX_AMOUNT * 4, "USD Coin", "USDC");
-        vault = new StakeVaultV2(address(this), token, controller);
+        vault = new StakeVaultV2(address(this), token);
+        vault.setController(controller, true);
         vault.setController(secondController, true);
         token.transfer(stakeOwner, MAX_AMOUNT);
         token.transfer(alternateOwner, MAX_AMOUNT);

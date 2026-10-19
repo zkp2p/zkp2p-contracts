@@ -78,7 +78,8 @@ contract StakeVaultV2Test is Test {
         feeRecipient = makeAddr("feeRecipient");
 
         token = new USDCMock(1_000_000e6, "USD Coin", "USDC");
-        vault = new StakeVaultV2(address(this), token, controller);
+        vault = new StakeVaultV2(address(this), token);
+        vault.setController(controller, true);
 
         token.transfer(safeA, 10_000e6);
         token.transfer(safeB, 10_000e6);
@@ -90,10 +91,10 @@ contract StakeVaultV2Test is Test {
 
     function test_ConstructorRejectsInvalidConfiguration() public {
         vm.expectRevert(IStakeVaultV2.ZeroAddress.selector);
-        new StakeVaultV2(address(0), token, controller);
+        new StakeVaultV2(address(0), token);
 
         vm.expectRevert(IStakeVaultV2.ZeroAddress.selector);
-        new StakeVaultV2(address(this), IERC20(address(0)), controller);
+        new StakeVaultV2(address(this), IERC20(address(0)));
     }
 
     function test_OwnershipTransferIsTwoStepAndOwnershipCannotBeRenounced() public {
@@ -131,7 +132,7 @@ contract StakeVaultV2Test is Test {
 
     function test_DepositRejectsFeeOnTransferTokenV2() public {
         FeeOnTransferTokenV2 feeToken = new FeeOnTransferTokenV2(address(this));
-        StakeVaultV2 feeVault = new StakeVaultV2(address(this), feeToken, controller);
+        StakeVaultV2 feeVault = new StakeVaultV2(address(this), feeToken);
         feeToken.approve(address(feeVault), type(uint256).max);
 
         vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.InvalidReceivedAmount.selector, 100e6, 99e6));
@@ -141,7 +142,7 @@ contract StakeVaultV2Test is Test {
 
     function test_DepositBlocksTokenCallbackReentrancy() public {
         ReentrantTokenV2 reentrantToken = new ReentrantTokenV2(address(this));
-        StakeVaultV2 reentrantVault = new StakeVaultV2(address(this), reentrantToken, controller);
+        StakeVaultV2 reentrantVault = new StakeVaultV2(address(this), reentrantToken);
         reentrantToken.setVault(reentrantVault);
         reentrantToken.approve(address(reentrantVault), type(uint256).max);
 
@@ -605,7 +606,7 @@ contract StakeVaultV2Test is Test {
     }
 
     function test_ControllerAuthorizationChecksAndEvents() public {
-        StakeVaultV2 emptyVault = new StakeVaultV2(address(this), token, address(0));
+        StakeVaultV2 emptyVault = new StakeVaultV2(address(this), token);
         assertFalse(emptyVault.isController(controller));
         vm.expectEmit(true, false, false, true, address(emptyVault));
         emit ControllerUpdated(controller, true);
@@ -626,8 +627,6 @@ contract StakeVaultV2Test is Test {
         vault.setController(address(0), true);
         vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.InvalidController.selector, attacker));
         vault.setController(attacker, true);
-        vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.InvalidController.selector, attacker));
-        new StakeVaultV2(address(this), token, attacker);
         // Removing permission remains possible if a controller no longer has code.
         vm.etch(controller, hex"");
         vault.setController(controller, false);

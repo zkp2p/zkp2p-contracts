@@ -125,18 +125,14 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
     /* ============ Constructor ============ */
 
     /**
-     * @notice Creates a token vault with an optional initial controller.
-     * @dev A zero controller permits deployment before the policy. Non-zero controllers must have code.
-     *      Future ownership transfers use Ownable2Step.
+     * @notice Creates a token vault; governance authorizes controllers with setController.
      * @param _owner Governance owner responsible for controller authorization and recovery.
      * @param _stakeToken Canonical USDC token held and accounted by the vault.
-     * @param _controller Initial governance-trusted controller, or zero to authorize one later.
      */
-    constructor(address _owner, IERC20 _stakeToken, address _controller) {
+    constructor(address _owner, IERC20 _stakeToken) {
         if (_owner == address(0) || address(_stakeToken) == address(0)) revert ZeroAddress();
         stakeToken = _stakeToken;
         _transferOwnership(_owner);
-        if (_controller != address(0)) _setController(_controller, true);
     }
 
     /* ============ User Stake and Claim Accounting ============ */
@@ -369,10 +365,6 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
      * @param _authorized Whether the controller may act.
      */
     function setController(address _controller, bool _authorized) external override onlyOwner {
-        _setController(_controller, _authorized);
-    }
-
-    function _setController(address _controller, bool _authorized) internal {
         if (_controller == address(0)) revert ZeroAddress();
         if (_authorized && _controller.code.length == 0) revert InvalidController(_controller);
         isController[_controller] = _authorized;

@@ -27,7 +27,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
 
     function setUp() public {
         token = new USDCMock(1e18, "USDC", "USDC");
-        vault = new StakeVaultV2(address(this), token, address(0));
+        vault = new StakeVaultV2(address(this), token);
         address[] memory signers = new address[](1);
         signers[0] = vm.addr(0xA11CE);
         DisputeVerifier verifier = new DisputeVerifier(address(this), new NullifierRegistryV2(new NullifierRegistry()), new MultiAttestationVerifier(signers, 1));
