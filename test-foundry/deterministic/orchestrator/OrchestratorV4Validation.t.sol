@@ -145,7 +145,7 @@ contract OrchestratorV4ValidationTest is OrchestratorV4Fixture {
         bytes32 intentHash = _signalDefault();
         vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.UnauthorizedCaller.selector, other, depositor));
         vm.prank(other);
-        orchestrator.releaseFundsToPayer(intentHash);
+        orchestrator.releaseFundsToPayer(intentHash, INTENT_AMOUNT);
     }
 
     function test_CancelIntentRejectsMissingIntent() public {
@@ -159,7 +159,7 @@ contract OrchestratorV4ValidationTest is OrchestratorV4Fixture {
         bytes32 missing = bytes32("missing");
         vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.IntentNotFound.selector, missing));
         vm.prank(depositor);
-        orchestrator.releaseFundsToPayer(missing);
+        orchestrator.releaseFundsToPayer(missing, INTENT_AMOUNT);
     }
     function test_SignalRejectsRateBelowMinimum() public {
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();

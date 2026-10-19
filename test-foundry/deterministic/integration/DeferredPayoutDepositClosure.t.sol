@@ -93,7 +93,7 @@ contract DeferredPayoutDepositClosureTest is DisputeProtectionStackV2Fixture {
         bytes32 id = _signalFinalDeposit(dust);
         uint256 dustRecipientBalance = token.balanceOf(address(this));
         vm.prank(depositor);
-        orchestrator.releaseFundsToPayer(id);
+        orchestrator.releaseFundsToPayer(id, INTENT_AMOUNT);
 
         _assertClosedDeposit(id);
         assertEq(protection.getProtection(id).depositor, address(0));

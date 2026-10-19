@@ -80,7 +80,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         relayerRegistry.addRelayer(taker);
         bytes32 id = _signalDefault();
         vm.prank(depositor);
-        orchestrator.releaseFundsToPayer(id);
+        orchestrator.releaseFundsToPayer(id, INTENT_AMOUNT);
         assertEq(token.balanceOf(other), NET);
         assertFalse(_isOpen(id));
     }
@@ -186,7 +186,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         _whitelistTaker();
         bytes32 id = _signalDefault();
         vm.prank(depositor);
-        orchestrator.releaseFundsToPayer(id);
+        orchestrator.releaseFundsToPayer(id, INTENT_AMOUNT);
         assertEq(token.balanceOf(other), NET);
         _assertLock(id, address(0), 0);
         assertFalse(_isOpen(id));
@@ -311,7 +311,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         bytes32 id = _signalDefault();
         uint256 vaultBefore = token.balanceOf(address(vault));
         vm.prank(depositor);
-        orchestrator.releaseFundsToPayer(id);
+        orchestrator.releaseFundsToPayer(id, INTENT_AMOUNT);
         assertEq(token.balanceOf(other), NET);
         _assertLock(id, address(0), 0);
         assertEq(token.balanceOf(address(vault)), vaultBefore);

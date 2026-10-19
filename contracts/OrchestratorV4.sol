@@ -263,15 +263,19 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      * directly without calling the settlement policy.
      *
      * @param _intentHash        Hash of intent to resolve by releasing the funds
+     * @param _releaseAmount     Amount to release; the depositor must release the full intent amount, the arbitrator
+     *                           may release less and the rest returns to the deposit
      */
-    function releaseFundsToPayer(bytes32 _intentHash) external nonReentrant {
+    function releaseFundsToPayer(bytes32 _intentHash, uint256 _releaseAmount) external nonReentrant {
         // Checks
         Intent memory intent = intents[_intentHash];
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
 
         IEscrow.Deposit memory deposit = IEscrow(intent.escrow).getDeposit(intent.depositId);
-        if (deposit.depositor != msg.sender && intent.arbitrator != msg.sender) {
-            revert UnauthorizedCaller(msg.sender, deposit.depositor);
+        if (msg.sender != intent.arbitrator) {
+            if (msg.sender != deposit.depositor) revert UnauthorizedCaller(msg.sender, deposit.depositor);
+            // Releasing less would end the intent early and cut off the taker's proof.
+            if (_releaseAmount < intent.amount) revert PartialReleaseRequiresArbitrator(_releaseAmount, intent.amount);
         }
 
         // Snapshot manager fee terms before pruning (pruning deletes the mappings).
@@ -282,13 +286,13 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         _pruneIntent(_intentHash);
 
         // Interactions
-        IEscrow(intent.escrow).unlockAndTransferFunds(intent.depositId, _intentHash, intent.amount, address(this));
+        IEscrow(intent.escrow).unlockAndTransferFunds(intent.depositId, _intentHash, _releaseAmount, address(this));
 
         _collectFeesTransferFundsAndExecuteAction(
             deposit.token,
             _intentHash,
             intent,
-            intent.amount,
+            _releaseAmount,
             "",
             managerFeeRecipient,
             managerFee,

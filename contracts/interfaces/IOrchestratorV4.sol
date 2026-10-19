@@ -124,6 +124,7 @@ interface IOrchestratorV4 {
     error AmountExceedsLimit(uint256 amount, uint256 limit);
     error FeeExceedsMaximum(uint256 fee, uint256 maximum);
     error RateBelowMinimum(uint256 rate, uint256 minRate);
+    error PartialReleaseRequiresArbitrator(uint256 releaseAmount, uint256 intentAmount);
 
     // Validation errors
     error AccountHasActiveIntent(address account, bytes32 existingIntent);
@@ -160,8 +161,8 @@ interface IOrchestratorV4 {
     /// @dev Forwards the signed settlement data to the current settlement policy.
     function fulfillIntent(FulfillIntentParams calldata params) external;
 
-    /// @notice Manually settles an intent as its depositor or arbitrator.
-    function releaseFundsToPayer(bytes32 intentHash) external;
+    /// @notice Manually settles an intent: in full as its depositor, or any part as its arbitrator.
+    function releaseFundsToPayer(bytes32 intentHash, uint256 releaseAmount) external;
 
     /* ============ External Functions for Escrow ============ */
 
