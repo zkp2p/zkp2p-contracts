@@ -14,6 +14,7 @@ contract OrchestratorV4ArbitratorTest is OrchestratorV4Fixture {
     address internal curator;
     address internal arbitrator;
     bytes32 internal groupId;
+    uint256 internal guardedDepositId;
     SettlementPolicyMock internal policyMock;
 
     function setUp() public override {
@@ -203,6 +204,68 @@ contract OrchestratorV4ArbitratorTest is OrchestratorV4Fixture {
         orchestrator.releaseFundsToPayer(intentHash, INTENT_AMOUNT);
 
         assertEq(token.balanceOf(taker), INTENT_AMOUNT);
+    }
+
+    function test_ArbitratorExtendsIntentForFreeWhenOrchestratorIsGuardian() public {
+        bytes32 intentHash = _signalOnGuardedDeposit();
+        uint256 expiryBefore = escrow.getDepositIntent(guardedDepositId, intentHash).expiryTime;
+        uint256 depositorBalance = token.balanceOf(depositor);
+
+        vm.prank(arbitrator);
+        orchestrator.extendIntent(intentHash, 1 days);
+
+        assertEq(escrow.getDepositIntent(guardedDepositId, intentHash).expiryTime, expiryBefore + 1 days);
+        assertEq(token.balanceOf(depositor), depositorBalance);
+        assertEq(token.balanceOf(arbitrator), 0);
+
+        vm.warp(expiryBefore + 1);
+        escrow.pruneExpiredIntents(guardedDepositId);
+        vm.prank(arbitrator);
+        orchestrator.releaseFundsToPayer(intentHash, INTENT_AMOUNT);
+        assertEq(token.balanceOf(taker), INTENT_AMOUNT);
+    }
+
+    function test_ExtendIntentRejectsCallersOtherThanArbitrator() public {
+        bytes32 intentHash = _signalOnGuardedDeposit();
+
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.UnauthorizedCaller.selector, depositor, arbitrator));
+        vm.prank(depositor);
+        orchestrator.extendIntent(intentHash, 1 days);
+
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.UnauthorizedCaller.selector, taker, arbitrator));
+        vm.prank(taker);
+        orchestrator.extendIntent(intentHash, 1 days);
+    }
+
+    function test_ExtendIntentRevertsWhenOrchestratorIsNotGuardian() public {
+        _setArbitrator(arbitrator);
+        bytes32 intentHash = _signalDefault();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(IEscrowV2.UnauthorizedCaller.selector, address(orchestrator), address(0))
+        );
+        vm.prank(arbitrator);
+        orchestrator.extendIntent(intentHash, 1 days);
+    }
+
+    function test_EscrowCapsArbitratorExtension() public {
+        bytes32 intentHash = _signalOnGuardedDeposit();
+
+        vm.expectRevert(abi.encodeWithSelector(IEscrowV2.AmountAboveMax.selector, 5 days, 5 days));
+        vm.prank(arbitrator);
+        orchestrator.extendIntent(intentHash, 5 days);
+    }
+
+    function _signalOnGuardedDeposit() internal returns (bytes32) {
+        vm.startPrank(depositor);
+        guardedDepositId = _createDeposit(address(0), address(0), address(orchestrator));
+        vm.stopPrank();
+        _allowGroup(guardedDepositId, groupId);
+        _setArbitrator(arbitrator);
+        IOrchestratorV4.SignalIntentParams memory params =
+            _params(guardedDepositId, taker, INTENT_AMOUNT, CONVERSION_RATE, _emptyReferralFees());
+        params.groupId = groupId;
+        return _signal(taker, params);
     }
 
     /// @dev Signals through the arbitrated group unless a test opts out with the fixture's default params.

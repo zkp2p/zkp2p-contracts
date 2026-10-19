@@ -164,6 +164,9 @@ interface IOrchestratorV4 {
     /// @notice Manually settles an intent: in full as its depositor, or any part as its arbitrator.
     function releaseFundsToPayer(bytes32 intentHash, uint256 releaseAmount) external;
 
+    /// @notice Extends an intent's expiry for free as its arbitrator; the escrow must let this orchestrator extend.
+    function extendIntent(bytes32 intentHash, uint256 additionalTime) external;
+
     /* ============ External Functions for Escrow ============ */
 
     /// @notice Prunes intents belonging to the calling escrow.

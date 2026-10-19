@@ -301,6 +301,21 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         );
     }
 
+    /**
+     * @notice Only callable by the intent's arbitrator. Extends the intent's expiry for free, e.g. while a dispute is
+     * reviewed. The escrow must let this orchestrator extend (on EscrowV2, as the deposit's intent guardian) and caps
+     * the intent's total lifetime.
+     *
+     * @param _intentHash        Hash of intent to extend
+     * @param _additionalTime    Seconds to add to the intent's expiry
+     */
+    function extendIntent(bytes32 _intentHash, uint256 _additionalTime) external {
+        Intent storage intent = intents[_intentHash];
+        if (intent.arbitrator != msg.sender) revert UnauthorizedCaller(msg.sender, intent.arbitrator);
+
+        IEscrow(intent.escrow).extendIntentExpiry(intent.depositId, _intentHash, _additionalTime);
+    }
+
     /* ============ Escrow Functions ============ */
 
     /**
@@ -438,6 +453,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      * Functionalities that remain unpaused to allow users to recover funds:
      * - Intent cancellation (cancelIntent)
      * - Manual fund release by depositor or arbitrator (releaseFundsToPayer)
+     * - Intent extension by arbitrator (extendIntent)
      * - Intent pruning by escrow (pruneIntents)
      * - All governance functions
      * - All view functions
