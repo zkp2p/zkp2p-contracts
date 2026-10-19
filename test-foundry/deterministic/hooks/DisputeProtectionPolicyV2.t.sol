@@ -12,13 +12,13 @@ import {StakeVaultV2} from "contracts/StakeVaultV2.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
+import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
 import {AttestationVerifierMock} from "../../mocks/AttestationVerifierMock.sol";
 
 contract DisputeProtectionPolicyV2Test is Test {
     event ProtectionOpened(bytes32 indexed intentHash, address indexed depositor);
     event ProtectionReleased(bytes32 indexed intentHash);
-    event OrchestratorAuthorizationUpdated(address indexed orchestrator, bool isAuthorized);
     event DisputeVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
     uint64 internal constant WINDOW = 14 days;
     uint256 internal constant GROSS = 100e6;
@@ -36,6 +36,7 @@ contract DisputeProtectionPolicyV2Test is Test {
     DisputeVerifier internal verifier;
     NullifierRegistry internal disputes;
     NullifierRegistryV2 internal payments;
+    OrchestratorRegistry internal orchestrators;
 
     function setUp() public {
         vm.warp(1000);
@@ -44,13 +45,14 @@ contract DisputeProtectionPolicyV2Test is Test {
         payments = new NullifierRegistryV2(new NullifierRegistry());
         disputes = new NullifierRegistry();
         verifier = new DisputeVerifier(address(this), payments, new AttestationVerifierMock());
+        orchestrators = new OrchestratorRegistry();
+        orchestrators.addOrchestrator(address(this));
         _newPolicy();
         vault.setController(address(policy), true);
     }
 
     function _newPolicy() internal {
-        policy = new DisputeProtectionPolicyV2(address(this), vault, verifier, disputes);
-        policy.setOrchestratorAuthorization(address(this), true);
+        policy = new DisputeProtectionPolicyV2(address(this), vault, verifier, disputes, orchestrators);
         disputes.addWritePermission(address(policy));
     }
     function _context(bytes32 id, uint256 gross, uint256 net, uint256 window) internal pure returns (S.SettlementContext memory) {
@@ -297,18 +299,10 @@ contract DisputeProtectionPolicyV2Test is Test {
         vm.stopPrank();
     }
 
-    function test_OrchestratorAuthorizationIsOwnerOnly() public {
-        vm.expectRevert("Ownable: caller is not the owner");
-        vm.prank(STRANGER);
-        policy.setOrchestratorAuthorization(address(this), false);
-        vm.expectEmit(true, false, false, true, address(policy));
-        emit OrchestratorAuthorizationUpdated(address(this), false);
-        policy.setOrchestratorAuthorization(address(this), false);
-        assertFalse(policy.isOrchestratorAuthorized(address(this)));
+    function test_RemovingOrchestratorFromRegistryRevokesCallbacks() public {
+        orchestrators.removeOrchestrator(address(this));
         vm.expectRevert(abi.encodeWithSelector(P.UnauthorizedOrchestrator.selector, address(this)));
         _settle(ID, GROSS, NET);
-        policy.setOrchestratorAuthorization(address(this), true);
-        assertTrue(policy.isOrchestratorAuthorized(address(this)));
     }
     function test_RenounceDisabled() public {
         vm.expectRevert(P.OwnershipRenunciationDisabled.selector);
@@ -316,7 +310,7 @@ contract DisputeProtectionPolicyV2Test is Test {
     }
     function test_ConstructorRejectsZeroOwner() public {
         vm.expectRevert(P.ZeroAddress.selector);
-        new DisputeProtectionPolicyV2(address(0), vault, verifier, disputes);
+        new DisputeProtectionPolicyV2(address(0), vault, verifier, disputes, orchestrators);
     }
     function test_SetDisputeVerifier() public {
         DisputeVerifier next = new DisputeVerifier(address(this), payments, new AttestationVerifierMock());
@@ -365,8 +359,7 @@ contract DisputeProtectionPolicyV2Test is Test {
         P.Protection memory r = _record();
         assertEq(r.depositor, DEPOSITOR);
         assertEq(r.paymentMethod, METHOD);
-        assertTrue(policy.isOrchestratorAuthorized(address(this)));
-        assertFalse(policy.isOrchestratorAuthorized(STRANGER));
+        assertEq(address(policy.orchestratorRegistry()), address(orchestrators));
         assertEq(address(policy.stakeVault()), address(vault));
         assertEq(address(policy.disputeNullifierRegistry()), address(disputes));
     }

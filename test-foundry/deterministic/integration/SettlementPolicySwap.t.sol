@@ -13,10 +13,9 @@ contract SettlementPolicySwapTest is DisputeProtectionStackV2Fixture {
         assertEq(vault.lockController(first), address(protection));
 
         DisputeProtectionPolicyV2 successor =
-            new DisputeProtectionPolicyV2(address(this), vault, disputeVerifier, disputeNullifiers);
+            new DisputeProtectionPolicyV2(address(this), vault, disputeVerifier, disputeNullifiers, orchestratorRegistry);
         vault.setController(address(successor), true);
         disputeNullifiers.addWritePermission(address(successor));
-        successor.setOrchestratorAuthorization(address(orchestrator), true);
         orchestrator.setSettlementPolicy(successor);
         assertTrue(vault.isController(address(protection)));
         assertTrue(vault.isController(address(successor)));

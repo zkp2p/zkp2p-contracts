@@ -12,6 +12,7 @@ import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
 import {MultiAttestationVerifier} from "contracts/unifiedVerifier/MultiAttestationVerifier.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
+import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 
 contract DeferredPayoutCascadeFuzzTest is Test {
     bytes32 internal constant METHOD = keccak256("venmo");
@@ -31,9 +32,10 @@ contract DeferredPayoutCascadeFuzzTest is Test {
         signers[0] = vm.addr(0xA11CE);
         DisputeVerifier verifier = new DisputeVerifier(address(this), new NullifierRegistryV2(new NullifierRegistry()), new MultiAttestationVerifier(signers, 1));
         NullifierRegistry disputes = new NullifierRegistry();
-        policy = new DisputeProtectionPolicyV2(address(this), vault, verifier, disputes);
+        OrchestratorRegistry orchestrators = new OrchestratorRegistry();
+        orchestrators.addOrchestrator(address(this));
+        policy = new DisputeProtectionPolicyV2(address(this), vault, verifier, disputes, orchestrators);
         vault.setController(address(policy), true);
-        policy.setOrchestratorAuthorization(address(this), true);
         disputes.addWritePermission(address(policy));
     }
 

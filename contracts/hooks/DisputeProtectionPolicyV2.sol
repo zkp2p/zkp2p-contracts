@@ -9,6 +9,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.
 import {IDisputeProtectionPolicyV2} from "../interfaces/IDisputeProtectionPolicyV2.sol";
 import {IDisputeVerifier} from "../interfaces/IDisputeVerifier.sol";
 import {INullifierRegistry} from "../interfaces/INullifierRegistry.sol";
+import {IOrchestratorRegistry} from "../interfaces/IOrchestratorRegistry.sol";
 import {IStakeVaultV2} from "../interfaces/IStakeVaultV2.sol";
 
 /**
@@ -30,11 +31,11 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
     /// @notice Dedicated replay registry for payment-method-scoped dispute nullifiers.
     INullifierRegistry public immutable disputeNullifierRegistry;
 
+    /// @notice Orchestrators allowed to call the settlement callbacks.
+    IOrchestratorRegistry public immutable orchestratorRegistry;
+
     /// @notice Verifier used to validate signed dispute evidence.
     IDisputeVerifier public disputeVerifier;
-
-    /// @notice Orchestrators allowed to call the settlement callbacks.
-    mapping(address => bool) public override isOrchestratorAuthorized;
 
     /// @dev Open protections keyed by globally unique intent hash; deleted on release or dispute.
     mapping(bytes32 => Protection) internal protections;
@@ -47,26 +48,27 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
      * @param _stakeVault Vault holding and locking taker collateral.
      * @param _disputeVerifier Verifier for signed dispute evidence.
      * @param _disputeNullifierRegistry Dedicated registry that rejects reused dispute nullifiers.
+     * @param _orchestratorRegistry Registry of orchestrators allowed to call the settlement callbacks.
      */
     constructor(
         address _owner,
         IStakeVaultV2 _stakeVault,
         IDisputeVerifier _disputeVerifier,
-        INullifierRegistry _disputeNullifierRegistry
+        INullifierRegistry _disputeNullifierRegistry,
+        IOrchestratorRegistry _orchestratorRegistry
     ) {
         if (_owner == address(0)) revert ZeroAddress();
         stakeVault = _stakeVault;
         disputeVerifier = _disputeVerifier;
         disputeNullifierRegistry = _disputeNullifierRegistry;
+        orchestratorRegistry = _orchestratorRegistry;
         _transferOwnership(_owner);
     }
 
     /* ============ Modifiers ============ */
 
-    modifier onlyAuthorizedOrchestrator() {
-        if (!isOrchestratorAuthorized[msg.sender]) {
-            revert UnauthorizedOrchestrator(msg.sender);
-        }
+    modifier onlyOrchestrator() {
+        if (!orchestratorRegistry.isOrchestrator(msg.sender)) revert UnauthorizedOrchestrator(msg.sender);
         _;
     }
 
@@ -75,7 +77,7 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
     /// @inheritdoc IIntentSettlementPolicy
     /// @dev settlementData is abi.encode(uint256 disputeWindow). Zero windows and non-stake tokens pay now.
     function settleIntent(SettlementContext calldata _context)
-        external override onlyAuthorizedOrchestrator returns (address deferralVault)
+        external override onlyOrchestrator returns (address deferralVault)
     {
         uint256 window = abi.decode(_context.settlementData, (uint256));
         if (window > MAX_DISPUTE_WINDOW) revert InvalidDisputeWindow(window);
@@ -96,7 +98,7 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
     }
 
     /// @inheritdoc IIntentSettlementPolicy
-    function onDeferredPayoutFunded(SettlementContext calldata _context) external override onlyAuthorizedOrchestrator nonReentrant {
+    function onDeferredPayoutFunded(SettlementContext calldata _context) external override onlyOrchestrator nonReentrant {
         uint64 window = uint64(abi.decode(_context.settlementData, (uint256)));
         stakeVault.fundLock(_context.recipient, _context.intentHash, _context.netAmount, _maturity(window));
     }
@@ -145,16 +147,6 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
         address previousVerifier = address(disputeVerifier);
         disputeVerifier = IDisputeVerifier(_verifier);
         emit DisputeVerifierUpdated(previousVerifier, _verifier);
-    }
-
-    /**
-     * @notice GOVERNANCE ONLY: Authorizes or revokes one orchestrator.
-     * @param _orchestrator Orchestrator whose callback authority is updated.
-     * @param _isAuthorized Whether the orchestrator may open and fund protections.
-     */
-    function setOrchestratorAuthorization(address _orchestrator, bool _isAuthorized) external override onlyOwner {
-        isOrchestratorAuthorized[_orchestrator] = _isAuthorized;
-        emit OrchestratorAuthorizationUpdated(_orchestrator, _isAuthorized);
     }
 
     /**

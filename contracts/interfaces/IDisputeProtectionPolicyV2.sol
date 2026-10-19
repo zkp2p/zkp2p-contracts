@@ -16,7 +16,6 @@ interface IDisputeProtectionPolicyV2 is IIntentSettlementPolicy {
     event ProtectionReleased(bytes32 indexed intentHash);
     event DisputeResolved(bytes32 indexed intentHash, address indexed stakeOwner, address indexed depositor, uint256 compensatedAmount, bytes32 disputeId);
     event DisputeVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
-    event OrchestratorAuthorizationUpdated(address indexed orchestrator, bool isAuthorized);
 
     error ZeroAddress();
     error UnauthorizedOrchestrator(address caller);
@@ -25,10 +24,6 @@ interface IDisputeProtectionPolicyV2 is IIntentSettlementPolicy {
     error InvalidDisputeWindow(uint256 window);
     error OwnershipRenunciationDisabled();
 
-    /// @notice Returns whether an orchestrator may create and fund settlement records.
-    function isOrchestratorAuthorized(address orchestrator) external view returns (bool);
-    /// @notice Authorizes or revokes an orchestrator's settlement callbacks.
-    function setOrchestratorAuthorization(address orchestrator, bool isAuthorized) external;
     /// @notice Returns the collateral vault.
     function stakeVault() external view returns (IStakeVaultV2);
 }

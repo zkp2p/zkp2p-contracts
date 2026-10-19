@@ -25,10 +25,11 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
         policy = new DisputeProtectionPolicyV2(
             address(this), vault,
             new DisputeVerifier(address(this), new NullifierRegistryV2(new NullifierRegistry()), new AttestationVerifierMock()),
-            new NullifierRegistry()
+            new NullifierRegistry(),
+            orchestratorRegistry
         );
         vault.setController(address(policy), true);
-        policy.setOrchestratorAuthorization(address(this), true);
+        orchestratorRegistry.addOrchestrator(address(this));
     }
 
     function _context(bytes32 id, uint256 window) internal view returns (IIntentSettlementPolicy.SettlementContext memory) {
