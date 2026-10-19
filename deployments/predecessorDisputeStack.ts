@@ -27,7 +27,7 @@ type HistoricalDisputeStack = {
   contracts: Record<string, HistoricalContractEvidence>;
 };
 
-// Predecessor of the currently selected dispute stack.
+// Predecessor of the selected August stack: Base OptIn; staging lane 32.
 export const PREDECESSOR_DISPUTE_STACKS: Record<
   string,
   HistoricalDisputeStack
@@ -125,7 +125,8 @@ export const PREDECESSOR_DISPUTE_STACKS: Record<
   },
 };
 
-// Stack replaced by lane 37. It now matches the selected-stack predecessor on Base.
+// Historical lane-37 predecessors: Base OptIn and staging lane 32.
+// Keep these pins independent of later selected-stack predecessor changes.
 export const METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS: Record<
   string,
   HistoricalDisputeStack
@@ -167,7 +168,50 @@ export const METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS: Record<
         PREDECESSOR_DISPUTE_STACKS.base.contracts.DisputeNullifierRegistry,
     },
   },
-  base_staging: PREDECESSOR_DISPUTE_STACKS.base_staging,
+  base_staging: {
+    activeLifecycleHook: {
+      address: "0x19D9F0Fcb08C60D8bd0CD061C34eae27eF8b6e65",
+      runtimeCodeHash:
+        "0xba70239e37624f5808e2f79e100e83a17daeb1558f310543187f5d8a121ec367",
+    },
+    contracts: {
+      StakeVault: {
+        address: "0xEc9f801e2a9Cc22bdc217aD3BB1E3058d0668f43",
+        deploymentBytecodeHash:
+          "0x3ceac244f2d721614975457b041e95f661feba8ef6bbfc73c23b55aaac27d3e6",
+        runtimeCodeHash:
+          "0xfd8d2a910b9ac2c55675ae06d0504f9aac43b02b7022755cf229b571156c681d",
+      },
+      DisputeProtectionPolicy: {
+        address: "0x21517b7743E727ae47A66FafF93550B689c15020",
+        deploymentBytecodeHash:
+          "0x6146f8eb152848ddfd40d67a152a44230ed783b6c1e768d023b88fc2a09cb38f",
+        runtimeCodeHash:
+          "0x4e6617a94819ad15693289b173a9a66a78cfe1dd706f6b4fdc5a5f6ad6a32971",
+      },
+      IntentLifecycleHookV1: {
+        address: "0x19D9F0Fcb08C60D8bd0CD061C34eae27eF8b6e65",
+        deploymentBytecodeHash:
+          "0xad298e1829958f431833bf1c0e53311f27e95dd29806c4d55aa75163e6dbcc21",
+        runtimeCodeHash:
+          "0xba70239e37624f5808e2f79e100e83a17daeb1558f310543187f5d8a121ec367",
+      },
+      DisputeVerifier: {
+        address: "0x973578148c5Fd49b9f68B50B26066555325AC708",
+        deploymentBytecodeHash:
+          "0x7aae03ea4bd5bc953dc87b7a272ef967dc093a71b39417f4b7bd88f46210e876",
+        runtimeCodeHash:
+          "0xb3b34734cfd162cd129d0c84285461c751321545213ec20164745b8e72f9dd6c",
+      },
+      DisputeNullifierRegistry: {
+        address: "0xE0B05a9655AF0f31E32904267baa50FbC7f217ea",
+        deploymentBytecodeHash:
+          "0x1a711749b7700142265363c9c184c195ac81a1415e2142aa84edcbf1cd88142a",
+        runtimeCodeHash:
+          "0x1a711749b7700142265363c9c184c195ac81a1415e2142aa84edcbf1cd88142a",
+      },
+    },
+  },
 };
 
 function sameAddress(left: string, right: string): boolean {
