@@ -187,14 +187,6 @@ contract StakeVaultV2Test is Test {
         vm.prank(taker);
         vault.selectStakeOwner(taker);
 
-        vm.expectRevert(IStakeVaultV2.ZeroAmount.selector);
-        vm.prank(controller);
-        vault.increaseLock(keccak256("zero-amount"), 0);
-
-        vm.expectRevert(IStakeVaultV2.ZeroAmount.selector);
-        vm.prank(controller);
-        vault.resizeLock(keccak256("zero-amount"), 0, NEVER_MATURES);
-
         vm.expectRevert(IStakeVaultV2.ZeroAddress.selector);
         vault.setController(address(0), true);
 
@@ -365,88 +357,12 @@ contract StakeVaultV2Test is Test {
 
         vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.LockNotFound.selector, missingLockId));
         vm.prank(controller);
-        vault.increaseLock(missingLockId, 1);
-
-        vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.LockNotFound.selector, missingLockId));
-        vm.prank(controller);
-        vault.resizeLock(missingLockId, 1, NEVER_MATURES);
-
-        vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.LockNotFound.selector, missingLockId));
-        vm.prank(controller);
         vault.unlockStake(missingLockId);
 
         IStakeVaultV2.Claim[] memory claims = new IStakeVaultV2.Claim[](0);
         vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.LockNotFound.selector, missingLockId));
         vm.prank(controller);
         vault.resolveLock(missingLockId, claims);
-    }
-
-    function test_IncreaseLockIsAdditiveAndRejectsMaturedLocks() public {
-        _deposit(safeA, 500e6);
-        bytes32 extensionLockId = keccak256("extension");
-        vm.prank(controller);
-        vault.lockStake(safeA, extensionLockId, 100e6, NEVER_MATURES);
-
-        vm.prank(controller);
-        vault.increaseLock(extensionLockId, 125e6);
-        (, uint256 amount,) = vault.locks(extensionLockId);
-        assertEq(amount, 225e6);
-        assertEq(vault.lockedStake(safeA), 225e6);
-        assertEq(vault.freeStake(safeA), 275e6);
-
-        bytes32 finiteLockId = keccak256("finite");
-        uint64 maturesAt = uint64(block.timestamp + 1 days);
-        vm.prank(controller);
-        vault.lockStake(safeA, finiteLockId, 10e6, maturesAt);
-        vm.warp(maturesAt);
-
-        vm.expectRevert(
-            abi.encodeWithSelector(IStakeVaultV2.LockAlreadyMatured.selector, finiteLockId, maturesAt, maturesAt)
-        );
-        vm.prank(controller);
-        vault.increaseLock(finiteLockId, 1e6);
-    }
-
-    function test_ResizeLockOnlyDecreasesAndSetsFiniteMaturity() public {
-        _deposit(safeA, 500e6);
-        bytes32 lockId = keccak256("dispute-resize");
-        vm.prank(controller);
-        vault.lockStake(safeA, lockId, 400e6, NEVER_MATURES);
-
-        uint64 coverageDeadline = uint64(block.timestamp + 30 days);
-        vm.prank(controller);
-        vault.resizeLock(lockId, 250e6, coverageDeadline);
-
-        (, uint256 amount, uint64 maturesAt) = vault.locks(lockId);
-        assertEq(amount, 250e6);
-        assertEq(maturesAt, coverageDeadline);
-        assertEq(vault.lockedStake(safeA), 250e6);
-        assertEq(vault.freeStake(safeA), 250e6);
-
-        vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.InvalidLockAmount.selector, 251e6, 250e6));
-        vm.prank(controller);
-        vault.resizeLock(lockId, 251e6, coverageDeadline);
-    }
-
-    function test_ResizeRejectsPastNewMaturityAndMaturedLock() public {
-        _deposit(safeA, 100e6);
-        bytes32 lockId = keccak256("mature-resize");
-        uint64 maturesAt = uint64(block.timestamp + 1 days);
-        vm.prank(controller);
-        vault.lockStake(safeA, lockId, 100e6, maturesAt);
-
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IStakeVaultV2.InvalidMaturity.selector, uint64(block.timestamp), uint64(block.timestamp)
-            )
-        );
-        vm.prank(controller);
-        vault.resizeLock(lockId, 50e6, uint64(block.timestamp));
-
-        vm.warp(maturesAt);
-        vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.LockAlreadyMatured.selector, lockId, maturesAt, maturesAt));
-        vm.prank(controller);
-        vault.resizeLock(lockId, 50e6, uint64(block.timestamp + 1 days));
     }
 
     function test_UnlockDeletesLockAndMakesAllStakeFreeImmediately() public {
@@ -610,9 +526,9 @@ contract StakeVaultV2Test is Test {
         vm.prank(controller);
         vault.lockStake(safeA, lockId, 100e6, maturesAt);
 
-        assertFalse(vault.isLockMature(lockId));
+        (,, uint64 recordedMaturity) = vault.locks(lockId);
+        assertEq(recordedMaturity, maturesAt);
         vm.warp(maturesAt);
-        assertTrue(vault.isLockMature(lockId));
 
         vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.UnauthorizedController.selector, safeA));
         vm.prank(safeA);
@@ -731,12 +647,8 @@ contract StakeVaultV2Test is Test {
         vault.lockStake(safeA, second, 100e6, NEVER_MATURES);
         assertEq(vault.lockController(first), controller);
         assertEq(vault.lockController(second), nextController);
-        vm.prank(controller);
-        vault.increaseLock(first, 20e6);
-        vm.prank(nextController);
-        vault.resizeLock(second, 50e6, NEVER_MATURES);
         vm.expectEmit(true, true, false, true, address(vault));
-        emit StakeUnlocked(first, safeA, 120e6, 50e6);
+        emit StakeUnlocked(first, safeA, 100e6, 100e6);
         vm.prank(controller);
         vault.unlockStake(first);
         assertEq(vault.lockController(first), address(0));
@@ -818,10 +730,6 @@ contract StakeVaultV2Test is Test {
 
     function _expectServiceReverts(bytes32 id, address caller, bytes memory reason) internal {
         vm.startPrank(caller);
-        vm.expectRevert(reason);
-        vault.increaseLock(id, 1);
-        vm.expectRevert(reason);
-        vault.resizeLock(id, 1, NEVER_MATURES);
         vm.expectRevert(reason);
         vault.unlockStake(id);
         vm.expectRevert(reason);

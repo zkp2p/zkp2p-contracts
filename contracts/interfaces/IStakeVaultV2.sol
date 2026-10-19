@@ -35,8 +35,6 @@ interface IStakeVaultV2 {
     error InvalidMaturity(uint64 maturity, uint64 currentTime);
     error LockAlreadyExists(bytes32 lockId);
     error LockNotFound(bytes32 lockId);
-    error LockAlreadyMatured(bytes32 lockId, uint64 maturesAt, uint64 currentTime);
-    error InvalidLockAmount(uint256 newAmount, uint256 currentAmount);
     error InsufficientFreeStake(address stakeOwner, uint256 available, uint256 required);
     error InsufficientUnaccountedTokens(uint256 available, uint256 required);
     error InvalidReceivedAmount(uint256 expected, uint256 received);
@@ -53,22 +51,6 @@ interface IStakeVaultV2 {
         bytes32 indexed lockId, address indexed stakeOwner, uint256 amount, uint64 maturesAt, uint256 totalLockedStake
     );
     event LockFunded(bytes32 indexed lockId, address indexed stakeOwner, uint256 amount, uint256 newStakeBalance);
-    event StakeLockIncreased(
-        bytes32 indexed lockId,
-        address indexed stakeOwner,
-        uint256 previousAmount,
-        uint256 newAmount,
-        uint256 totalLockedStake
-    );
-    event StakeLockResized(
-        bytes32 indexed lockId,
-        address indexed stakeOwner,
-        uint256 previousAmount,
-        uint256 newAmount,
-        uint64 previousMaturity,
-        uint64 newMaturity,
-        uint256 totalLockedStake
-    );
     event StakeUnlocked(bytes32 indexed lockId, address indexed stakeOwner, uint256 amount, uint256 totalLockedStake);
     event StakeLockResolved(
         bytes32 indexed lockId,
@@ -96,8 +78,6 @@ interface IStakeVaultV2 {
 
     function lockStake(address _stakeOwner, bytes32 _lockId, uint256 _amount, uint64 _maturesAt) external;
     function fundLock(address _stakeOwner, bytes32 _lockId, uint256 _amount, uint64 _maturesAt) external;
-    function increaseLock(bytes32 _lockId, uint256 _additionalAmount) external;
-    function resizeLock(bytes32 _lockId, uint256 _newAmount, uint64 _newMaturesAt) external;
     function unlockStake(bytes32 _lockId) external;
     function resolveLock(bytes32 _lockId, Claim[] calldata _claims) external;
 
@@ -127,7 +107,6 @@ interface IStakeVaultV2 {
         view
         returns (address stakeOwner, uint256 totalStake, uint256 lockedStakeAmount, uint256 freeStakeAmount);
     function freeStake(address _stakeOwner) external view returns (uint256);
-    function isLockMature(bytes32 _lockId) external view returns (bool);
     function totalAccounted() external view returns (uint256);
     function unaccountedBalance() external view returns (uint256);
 }

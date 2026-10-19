@@ -53,21 +53,6 @@ contract StakeVaultV2InvariantHandler is Test {
         token.transfer(address(vault), bound(_rawAmount, 1, available));
     }
 
-    function increase(uint256 _rawSlot, uint256 _rawAmount) external {
-        bytes32 lockId = lockIdAt(_rawSlot % LOCK_SLOTS);
-        (address stakeOwner,,) = vault.locks(lockId);
-        uint256 available = vault.freeStake(address(this));
-        if (stakeOwner == address(0) || available == 0) return;
-        vault.increaseLock(lockId, bound(_rawAmount, 1, available));
-    }
-
-    function resize(uint256 _rawSlot, uint256 _rawAmount) external {
-        bytes32 lockId = lockIdAt(_rawSlot % LOCK_SLOTS);
-        (address stakeOwner, uint256 amount,) = vault.locks(lockId);
-        if (stakeOwner == address(0) || amount <= 1) return;
-        vault.resizeLock(lockId, bound(_rawAmount, 1, amount), NEVER_MATURES);
-    }
-
     function unlock(uint256 _rawSlot) external {
         bytes32 lockId = lockIdAt(_rawSlot % LOCK_SLOTS);
         (address stakeOwner,,) = vault.locks(lockId);

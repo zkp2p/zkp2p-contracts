@@ -19,7 +19,7 @@ import {IStakeVaultV2} from "./interfaces/IStakeVaultV2.sol";
  *        freeStake(owner) = stakeBalance(owner) - lockedStake(owner)
  *        totalAccounted() = totalStaked + totalClaimable
  *
- *      Creating, increasing, resizing, or unlocking a lock only moves principal between locked and free accounting.
+ *      Creating or unlocking a lock only moves principal between locked and free accounting.
  *      Resolving a lock may move some principal from `totalStaked` into beneficiary `claimable` balances; every
  *      unallocated unit becomes free stake of the original owner. Claims are immediately withdrawable and are never
  *      stake. `fundLock` is the sole path that adopts tokens already transferred into the vault as new locked stake.
@@ -32,13 +32,11 @@ import {IStakeVaultV2} from "./interfaces/IStakeVaultV2.sol";
  *
  * @dev LOCK AND CONTROLLER MODEL
  *      The vault deliberately knows nothing about intents, fees, disputes, or lock purpose. Lock IDs and beneficiary
- *      allocations are opaque controller inputs. A lock maturity prevents further increase or resize once reached, but
- *      does not automatically resolve the lock; the controller remains responsible for choosing whether and how every
- *      lock is unlocked or converted into claims. `NEVER_MATURES` represents exposure requiring an explicit controller
- *      transition on all paths.
+ *      allocations are opaque controller inputs. A lock's maturity is recorded for the controller; it never resolves
+ *      the lock, and the controller chooses whether and how every lock is unlocked or converted into claims.
  *
  *      Every authorized controller is governance-trusted: it can lock any owner's free stake. Each lock records its
- *      creating controller; only that controller, while still authorized, can increase, resize, unlock, or resolve it. Governance can authorize a
+ *      creating controller; only that controller, while still authorized, can unlock or resolve it. Governance can authorize a
  *      successor immediately alongside its predecessor. De-authorize a controller only after its locks drain;
  *      revocation freezes its locks until it is re-authorized. The owner cannot renounce ownership, preserving recovery.
  *
@@ -64,11 +62,6 @@ import {IStakeVaultV2} from "./interfaces/IStakeVaultV2.sol";
  */
 contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
     using SafeERC20 for IERC20;
-
-    /* ============ Constants ============ */
-
-    /// @notice Sentinel maturity for locks that must never become mature through passage of practical time.
-    uint64 public constant NEVER_MATURES = type(uint64).max;
 
     /* ============ Immutable Configuration ============ */
 
@@ -264,7 +257,7 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
      * @param _stakeOwner Owner whose free stake backs the new lock.
      * @param _lockId Controller-defined globally unique identifier for the active lock.
      * @param _amount Amount of existing free stake to commit.
-     * @param _maturesAt Timestamp after which this lock can no longer be increased or resized.
+     * @param _maturesAt Maturity recorded for the controller; must be in the future.
      */
     function lockStake(address _stakeOwner, bytes32 _lockId, uint256 _amount, uint64 _maturesAt)
         external
@@ -272,7 +265,8 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
         onlyController
     {
         _validateNewLock(_stakeOwner, _lockId, _amount, _maturesAt);
-        _requireFreeStake(_stakeOwner, _amount);
+        uint256 available = freeStake(_stakeOwner);
+        if (available < _amount) revert InsufficientFreeStake(_stakeOwner, available, _amount);
         _storeLock(_stakeOwner, _lockId, _amount, _maturesAt);
     }
 
@@ -285,7 +279,7 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
      * @param _stakeOwner Owner credited with the newly accounted stake.
      * @param _lockId Controller-defined globally unique identifier for the active lock.
      * @param _amount Amount of unaccounted token balance to adopt and lock.
-     * @param _maturesAt Timestamp after which this lock can no longer be increased or resized.
+     * @param _maturesAt Maturity recorded for the controller; must be in the future.
      */
     function fundLock(address _stakeOwner, bytes32 _lockId, uint256 _amount, uint64 _maturesAt)
         external
@@ -300,74 +294,6 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
         totalStaked += _amount;
         emit LockFunded(_lockId, _stakeOwner, _amount, stakeBalance[_stakeOwner]);
         _storeLock(_stakeOwner, _lockId, _amount, _maturesAt);
-    }
-
-    /**
-     * @notice CONTROLLER ONLY: Adds owner free stake to an active lock without changing its maturity.
-     * @dev The lock must exist and remain strictly before maturity. Only the incremental amount is checked against the
-     *      owner's current free stake; principal and aggregate stake liabilities are unchanged.
-     * @param _lockId Identifier of the active lock to increase.
-     * @param _additionalAmount Non-zero amount of owner free stake to add.
-     */
-    function increaseLock(bytes32 _lockId, uint256 _additionalAmount)
-        external
-        override
-        onlyController
-        onlyLockController(_lockId)
-    {
-        if (_additionalAmount == 0) revert ZeroAmount();
-        StakeLock storage stakeLock = locks[_lockId];
-
-        uint64 currentTime = _currentTimestamp();
-        if (currentTime >= stakeLock.maturesAt) {
-            revert LockAlreadyMatured(_lockId, stakeLock.maturesAt, currentTime);
-        }
-
-        address stakeOwner = stakeLock.stakeOwner;
-        _requireFreeStake(stakeOwner, _additionalAmount);
-        uint256 previousAmount = stakeLock.amount;
-        stakeLock.amount = previousAmount + _additionalAmount;
-        lockedStake[stakeOwner] += _additionalAmount;
-
-        emit StakeLockIncreased(_lockId, stakeOwner, previousAmount, stakeLock.amount, lockedStake[stakeOwner]);
-    }
-
-    /**
-     * @notice CONTROLLER ONLY: Decreases an active lock and replaces its maturity.
-     * @dev The existing lock must not already be mature, the new maturity must be strictly in the future, and the new
-     *      non-zero amount cannot exceed the current amount. A same-amount call may retime the lock; increases must use
-     *      `increaseLock`. Any removed amount immediately becomes free stake of the original owner.
-     * @param _lockId Identifier of the active lock to resize.
-     * @param _newAmount New non-zero locked amount, less than or equal to the current amount.
-     * @param _newMaturesAt Replacement maturity timestamp.
-     */
-    function resizeLock(bytes32 _lockId, uint256 _newAmount, uint64 _newMaturesAt)
-        external
-        override
-        onlyController
-        onlyLockController(_lockId)
-    {
-        if (_newAmount == 0) revert ZeroAmount();
-        StakeLock storage stakeLock = locks[_lockId];
-
-        uint64 currentTime = _currentTimestamp();
-        if (currentTime >= stakeLock.maturesAt) {
-            revert LockAlreadyMatured(_lockId, stakeLock.maturesAt, currentTime);
-        }
-        _validateMaturity(_newMaturesAt, currentTime);
-
-        uint256 previousAmount = stakeLock.amount;
-        if (_newAmount > previousAmount) revert InvalidLockAmount(_newAmount, previousAmount);
-
-        address stakeOwner = stakeLock.stakeOwner;
-        uint64 previousMaturity = stakeLock.maturesAt;
-        lockedStake[stakeOwner] -= previousAmount - _newAmount;
-        stakeLock.amount = _newAmount;
-        stakeLock.maturesAt = _newMaturesAt;
-
-        emit StakeLockResized(
-            _lockId, stakeOwner, previousAmount, _newAmount, previousMaturity, _newMaturesAt, lockedStake[stakeOwner]
-        );
     }
 
     /**
@@ -509,18 +435,6 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
     }
 
     /**
-     * @notice Returns whether an existing lock has reached or passed its recorded maturity.
-     * @dev Returns false for an unknown lock. Maturity does not automatically unlock or resolve principal; it only blocks
-     *      later increase and resize operations and can be used by controller policy to authorize a terminal transition.
-     * @param _lockId Identifier of the lock to inspect.
-     * @return True when the lock exists and its maturity is not later than the current block timestamp.
-     */
-    function isLockMature(bytes32 _lockId) external view override returns (bool) {
-        StakeLock memory stakeLock = locks[_lockId];
-        return stakeLock.stakeOwner != address(0) && block.timestamp >= stakeLock.maturesAt;
-    }
-
-    /**
      * @notice Returns aggregate token liabilities represented by stake principal and beneficiary claims.
      * @return Sum of `totalStaked` and `totalClaimable`.
      */
@@ -569,27 +483,8 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
         if (_lockId == bytes32(0)) revert ZeroLockId();
         if (_amount == 0) revert ZeroAmount();
         if (locks[_lockId].stakeOwner != address(0)) revert LockAlreadyExists(_lockId);
-        _validateMaturity(_maturesAt, _currentTimestamp());
-    }
-
-    /**
-     * @dev Enforces a strictly future maturity; equality is already mature and therefore invalid for a new lock state.
-     * @param _maturesAt Proposed lock maturity.
-     * @param _currentTime Current checked timestamp.
-     */
-    function _validateMaturity(uint64 _maturesAt, uint64 _currentTime) internal pure {
-        if (_maturesAt <= _currentTime) revert InvalidMaturity(_maturesAt, _currentTime);
-    }
-
-    /**
-     * @dev Verifies that an owner can commit the requested principal. The subsequent lock write performs the accounting
-     *      transition by increasing `lockedStake`; this helper itself is intentionally read-only.
-     * @param _stakeOwner Owner whose free stake backs the operation.
-     * @param _amount Amount of free stake required.
-     */
-    function _requireFreeStake(address _stakeOwner, uint256 _amount) internal view {
-        uint256 available = freeStake(_stakeOwner);
-        if (available < _amount) revert InsufficientFreeStake(_stakeOwner, available, _amount);
+        uint64 currentTime = _currentTimestamp();
+        if (_maturesAt <= currentTime) revert InvalidMaturity(_maturesAt, currentTime);
     }
 
     /**
