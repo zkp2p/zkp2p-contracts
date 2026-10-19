@@ -63,11 +63,12 @@ contract SettlementPolicyMock is ERC165, IIntentSettlementPolicy {
     }
 
     /// @inheritdoc IIntentSettlementPolicy
-    function onDeferredPayoutFunded(bytes32 _intentHash) external override {
+    function onDeferredPayoutFunded(SettlementContext calldata _context) external override {
         if (revertOnFunding) revert("risk funding failed");
-        balanceAtFunding = IERC20(lastSettlementContext.token).balanceOf(deferralVault);
-        require(balanceAtFunding >= lastSettlementContext.netAmount, "payout not funded");
-        lastFundedIntentHash = _intentHash;
+        require(keccak256(abi.encode(_context)) == keccak256(abi.encode(lastSettlementContext)), "context changed");
+        balanceAtFunding = IERC20(_context.token).balanceOf(deferralVault);
+        require(balanceAtFunding >= _context.netAmount, "payout not funded");
+        lastFundedIntentHash = _context.intentHash;
         fundedCalls++;
     }
 

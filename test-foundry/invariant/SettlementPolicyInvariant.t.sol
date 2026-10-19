@@ -5,7 +5,6 @@ import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {Test} from "forge-std/Test.sol";
 import {DisputeProtectionStackV2Fixture} from "../deterministic/helpers/DisputeProtectionStackV2Fixture.sol";
 import {IIntentSettlementPolicy} from "contracts/interfaces/IIntentSettlementPolicy.sol";
-import {IDisputeProtectionPolicyV2 as P} from "contracts/interfaces/IDisputeProtectionPolicyV2.sol";
 
 /// @notice Exercises real O4/UPV4 settlement while governance selection and live exemptions change.
 contract SettlementPolicyHandler is DisputeProtectionStackV2Fixture {
@@ -36,14 +35,15 @@ contract SettlementPolicyHandler is DisputeProtectionStackV2Fixture {
         } else {
             _settle(id, INTENT_AMOUNT, zeroWindow ? 0 : RISK_WINDOW);
         }
-        P.DisputeProtectionIntent memory record = protection.getDisputeProtectionIntent(id);
+        (address owner, uint256 amount,) = vault.locks(id);
         if (!protected) {
-            assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.NONE));
+            assertEq(protection.getDisputeProtectionIntent(id).depositor, address(0));
+            assertEq(amount, 0);
             assertEq(token.balanceOf(other) - recipientBefore, NET);
         } else {
-            assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.SETTLED));
-            assertEq(uint256(record.collateralSource), uint256(hasStake ? P.CollateralSource.STAKE : P.CollateralSource.DEFERRED_PAYOUT));
-            assertEq(record.lockedAmount, hasStake ? INTENT_AMOUNT : NET);
+            assertEq(protection.getDisputeProtectionIntent(id).depositor, depositor);
+            assertEq(owner, hasStake ? taker : other);
+            assertEq(amount, hasStake ? INTENT_AMOUNT : NET);
             assertEq(token.balanceOf(other) - recipientBefore, hasStake ? NET : 0);
         }
         settled.push(id);
@@ -52,13 +52,13 @@ contract SettlementPolicyHandler is DisputeProtectionStackV2Fixture {
     function release(uint256 index) external {
         if (settled.length == 0) return;
         bytes32 id = settled[index % settled.length];
-        P.DisputeProtectionIntent memory record = protection.getDisputeProtectionIntent(id);
-        if (record.status != P.DisputeProtectionIntentStatus.SETTLED) return;
-        if (block.timestamp < record.releaseEligibleAt) vm.warp(record.releaseEligibleAt);
+        if (protection.getDisputeProtectionIntent(id).depositor == address(0)) return;
+        (address owner, uint256 amount, uint64 maturesAt) = vault.locks(id);
+        if (block.timestamp < maturesAt) vm.warp(maturesAt);
         protection.releaseMaturedDisputeProtectionIntent(id);
-        if (record.collateralSource == P.CollateralSource.DEFERRED_PAYOUT) {
+        if (owner == other) {
             vm.prank(other);
-            vault.withdrawStake(record.lockedAmount);
+            vault.withdrawStake(amount);
         }
     }
 
@@ -67,16 +67,10 @@ contract SettlementPolicyHandler is DisputeProtectionStackV2Fixture {
         uint256 totalLocked;
         for (uint256 index; index < settled.length; ++index) {
             bytes32 id = settled[index];
-            P.DisputeProtectionIntent memory record = protection.getDisputeProtectionIntent(id);
-            (address owner, uint256 amount, uint64 releaseAt) = vault.locks(id);
-            if (record.status == P.DisputeProtectionIntentStatus.SETTLED) {
-                assertEq(owner, record.stakeOwner);
-                assertEq(amount, record.lockedAmount);
-                assertEq(releaseAt, record.releaseEligibleAt);
-                totalLocked += amount;
-            } else {
-                assertEq(amount, 0);
-            }
+            (address owner, uint256 amount,) = vault.locks(id);
+            // A policy record exists exactly while its funded vault lock does.
+            assertEq(protection.getDisputeProtectionIntent(id).depositor != address(0), owner != address(0));
+            totalLocked += amount;
         }
         assertEq(totalLocked, vault.lockedStake(taker) + vault.lockedStake(other));
     }

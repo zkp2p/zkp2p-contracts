@@ -48,7 +48,7 @@ contract DeferredPayoutDepositClosureTest is DisputeProtectionStackV2Fixture {
         assertEq(token.balanceOf(address(orchestrator)), 0);
         assertEq(token.balanceOf(address(vault)), 0);
         assertEq(vault.totalAccounted(), 0);
-        assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
+        assertEq(protection.getDisputeProtectionIntent(id).depositor, address(0));
         assertEq(nullifiers.nullifierByIntentHash(id), bytes32(0));
         assertEq(nullifiers.intentHashByNullifier(keccak256(abi.encodePacked(METHOD, _paymentId(id)))), bytes32(0));
 
@@ -76,14 +76,11 @@ contract DeferredPayoutDepositClosureTest is DisputeProtectionStackV2Fixture {
         _assertClosedDeposit(id);
         P.DisputeProtectionIntent memory record = protection.getDisputeProtectionIntent(id);
         assertEq(record.depositor, depositor);
-        assertEq(record.taker, taker);
-        assertEq(record.recipient, other);
         assertEq(record.paymentMethod, METHOD);
-        assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.SETTLED));
-        assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.DEFERRED_PAYOUT));
-        assertEq(record.stakeOwner, other);
-        assertEq(record.lockedAmount, NET);
-        assertEq(record.releaseEligibleAt, block.timestamp + RISK_WINDOW);
+        (address lockOwner, uint256 lockAmount, uint64 maturesAt) = vault.locks(id);
+        assertEq(lockOwner, other);
+        assertEq(lockAmount, NET);
+        assertEq(maturesAt, block.timestamp + RISK_WINDOW);
         assertEq(vault.lockedStake(other), NET);
         assertEq(vault.totalAccounted(), NET);
         assertEq(token.balanceOf(address(vault)), NET);
@@ -99,11 +96,7 @@ contract DeferredPayoutDepositClosureTest is DisputeProtectionStackV2Fixture {
         orchestrator.releaseFundsToPayer(id);
 
         _assertClosedDeposit(id);
-        P.DisputeProtectionIntent memory record = protection.getDisputeProtectionIntent(id);
-        assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.NONE));
-        assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.NONE));
-        assertEq(record.lockedAmount, 0);
-        assertEq(record.releaseEligibleAt, 0);
+        assertEq(protection.getDisputeProtectionIntent(id).depositor, address(0));
         assertEq(vault.totalAccounted(), 0);
         assertEq(token.balanceOf(address(vault)), 0);
         assertEq(token.balanceOf(other), NET);

@@ -619,26 +619,26 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         uint256 netAmount = _releaseAmount - netFees;
 
         address vault;
+        IIntentSettlementPolicy.SettlementContext memory context;
         if (address(policy) != address(0) && !_isManualRelease && !_intent.takerWhitelisted) {
-            vault = policy.settleIntent(
-                IIntentSettlementPolicy.SettlementContext({
-                    intentHash: _intentHash,
-                    token: address(_token),
-                    depositor: _depositor,
-                    taker: _intent.owner,
-                    recipient: _intent.to,
-                    paymentMethod: _intent.paymentMethod,
-                    releaseAmount: _releaseAmount,
-                    netAmount: netAmount,
-                    settlementData: _settlementData
-                })
-            );
+            context = IIntentSettlementPolicy.SettlementContext({
+                intentHash: _intentHash,
+                token: address(_token),
+                depositor: _depositor,
+                taker: _intent.owner,
+                recipient: _intent.to,
+                paymentMethod: _intent.paymentMethod,
+                releaseAmount: _releaseAmount,
+                netAmount: netAmount,
+                settlementData: _settlementData
+            });
+            vault = policy.settleIntent(context);
         }
 
         address fundsTransferredTo = _intent.to;
         if (vault != address(0)) {
             _token.safeTransfer(vault, netAmount);
-            policy.onDeferredPayoutFunded(_intentHash);
+            policy.onDeferredPayoutFunded(context);
             emit IntentPayoutDeferred(_intentHash, _intent.to, vault, netAmount);
             fundsTransferredTo = vault;
         } else {

@@ -6,7 +6,6 @@ import {Vm} from "forge-std/Vm.sol";
 import {IPaymentVerifierV2} from "contracts/interfaces/IPaymentVerifierV2.sol";
 
 import {DisputeProtectionStackV2Fixture} from "../deterministic/helpers/DisputeProtectionStackV2Fixture.sol";
-import {IDisputeProtectionPolicyV2 as P} from "contracts/interfaces/IDisputeProtectionPolicyV2.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {UnifiedPaymentVerifierV4} from "contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol";
 
@@ -53,27 +52,24 @@ contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
                 for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].emitter != address(protection));
             }
             vm.clearMockedCalls();
-            P.DisputeProtectionIntent memory record = protection.getDisputeProtectionIntent(id);
-            (address lockOwner, uint256 lockedAmount,) = vault.locks(id);
+            bool open = protection.getDisputeProtectionIntent(id).depositor != address(0);
+            (address lockOwner, uint256 lockedAmount, uint64 maturesAt) = vault.locks(id);
             if (window == 0 || whitelisted) {
-                assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.NONE));
+                assertFalse(open);
             } else {
-                assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.SETTLED));
-                assertEq(record.releaseEligibleAt, block.timestamp + window);
+                assertTrue(open);
+                assertEq(maturesAt, block.timestamp + window);
             }
             if (index == 0 || whitelisted) {
-                assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.NONE));
                 assertEq(lockOwner, address(0));
                 assertEq(lockedAmount, 0);
                 if (!whitelisted) assertEq(token.balanceOf(address(vault)), 0);
                 paid += net;
             } else if (index == 1) {
-                assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.STAKE));
                 assertEq(lockOwner, taker);
                 assertEq(lockedAmount, INTENT_AMOUNT);
                 paid += net;
             } else {
-                assertEq(uint256(record.collateralSource), uint256(P.CollateralSource.DEFERRED_PAYOUT));
                 assertEq(lockOwner, other);
                 assertEq(lockedAmount, net);
                 assertEq(token.balanceOf(address(vault)), INTENT_AMOUNT + net);

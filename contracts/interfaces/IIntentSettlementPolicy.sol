@@ -26,8 +26,7 @@ interface IIntentSettlementPolicy {
     /// netAmount before onDeferredPayoutFunded is called in the same transaction.
     function settleIntent(SettlementContext calldata context) external returns (address deferralVault);
 
-    /// @notice Accounts for the net payout transferred to the deferral vault.
-    /// @dev O4 calls this in the same transaction immediately after transferring the net payout.
-    /// Skipping it leaves the current policy's SETTLED deferred record without a vault lock.
-    function onDeferredPayoutFunded(bytes32 intentHash) external;
+    /// @notice Locks the net payout O4 just transferred to the deferral vault.
+    /// @dev O4 passes the same context it passed to settleIntent, in the same transaction.
+    function onDeferredPayoutFunded(SettlementContext calldata context) external;
 }

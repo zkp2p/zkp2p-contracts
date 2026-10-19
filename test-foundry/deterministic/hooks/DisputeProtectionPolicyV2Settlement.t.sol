@@ -13,6 +13,8 @@ import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
 import {AttestationVerifierMock} from "../../mocks/AttestationVerifierMock.sol";
 
 contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
+    event DisputeProtectionIntentSettled(bytes32 indexed intentHash, address indexed depositor);
+
     bytes32 internal constant ID = keccak256("intent");
     uint256 internal constant NET = INTENT_AMOUNT - 1e6;
     StakeVaultV2 internal vault;
@@ -34,72 +36,24 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
         return IIntentSettlementPolicy.SettlementContext(id, address(token), taker, other, depositor, METHOD, INTENT_AMOUNT, NET, abi.encode(window));
     }
 
-    event DisputeProtectionIntentSettled(bytes32 indexed intentHash, address indexed taker, address indexed depositor, address recipient, bytes32 paymentMethod, uint64 riskWindow, P.CollateralSource collateralSource, address stakeOwner, uint256 releaseAmount, uint256 lockedAmount, uint64 releaseEligibleAt);
-
-    function _expectDeferredSettlement() internal {
-        vm.expectEmit(true, true, true, true, address(policy));
-        emit DisputeProtectionIntentSettled(
-            ID, taker, depositor, other, METHOD, 14 days, P.CollateralSource.DEFERRED_PAYOUT,
-            other, INTENT_AMOUNT, NET, uint64(block.timestamp + 14 days)
-        );
+    function _isOpen(bytes32 id) internal view returns (bool) {
+        return policy.getDisputeProtectionIntent(id).depositor != address(0);
     }
 
-    function _assertDeferred() internal {
-        _expectDeferredSettlement();
-        assertEq(policy.settleIntent(_context(ID, 14 days)), address(vault));
-        assertEq(uint256(policy.getDisputeProtectionIntent(ID).collateralSource), uint256(P.CollateralSource.DEFERRED_PAYOUT));
+    function _fund(bytes32 id, uint256 window) internal {
+        token.transfer(address(vault), NET);
+        policy.onDeferredPayoutFunded(_context(id, window));
     }
-
-    function test_UncoveredTakerDefersPayout() public {
-        assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
-        assertEq(policy.settleIntent(_context(ID, 14 days)), address(vault));
-        P.DisputeProtectionIntent memory record = policy.getDisputeProtectionIntent(ID);
-        assertEq(record.recipient, other);
-        assertEq(record.taker, taker);
-    }
-
-    function test_ZeroWindowPaysNowWithoutRecordOrEvent() public {
-        vm.recordLogs();
-        assertEq(policy.settleIntent(_context(ID, 0)), address(0));
-        assertEq(vm.getRecordedLogs().length, 0);
-        assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
-    }
-
-    function test_NonStakeTokenWithWindowPaysNowWithoutRecordOrEvent() public {
-        IIntentSettlementPolicy.SettlementContext memory context = _context(ID, 14 days);
-        context.token = other;
-        vm.recordLogs();
-        assertEq(policy.settleIntent(context), address(0));
-        assertEq(vm.getRecordedLogs().length, 0);
-        assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
-    }
-
-
 
     function test_RegisteredRelayerTakerIsProtected() public {
         relayerRegistry.addRelayer(taker);
-        _assertDeferred();
-    }
-
-    function test_ZeroWindowDoesNotWriteStorage() public {
-        vm.record();
-        policy.settleIntent(_context(ID, 0));
-        (, bytes32[] memory writes) = vm.accesses(address(policy));
-        assertEq(writes.length, 0);
-    }
-
-    function test_UnauthorizedOrchestratorRejected() public {
-        IIntentSettlementPolicy.SettlementContext memory context = _context(ID, 0);
-        vm.startPrank(other);
-        vm.expectRevert(abi.encodeWithSelector(P.UnauthorizedOrchestrator.selector, other));
-        policy.settleIntent(context);
-        vm.expectRevert(abi.encodeWithSelector(P.UnauthorizedOrchestrator.selector, other));
-        policy.onDeferredPayoutFunded(ID);
-        vm.stopPrank();
+        vm.expectEmit(true, true, false, true, address(policy));
+        emit DisputeProtectionIntentSettled(ID, depositor);
+        assertEq(policy.settleIntent(_context(ID, 14 days)), address(vault));
+        assertTrue(_isOpen(ID));
     }
 
     function test_SettleReturnsVaultOnlyWhenDeferred() public {
-
         assertEq(policy.settleIntent(_context(ID, 0)), address(0));
         token.transfer(taker, INTENT_AMOUNT);
         vm.startPrank(taker);
@@ -107,15 +61,21 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
         vault.depositStake(INTENT_AMOUNT);
         vm.stopPrank();
         bytes32 stakeId = keccak256("stake");
-
-
         assertEq(policy.settleIntent(_context(stakeId, 14 days)), address(0));
         assertEq(vault.lockedStake(taker), INTENT_AMOUNT);
         bytes32 deferredId = keccak256("deferred");
-
-
         assertEq(policy.settleIntent(_context(deferredId, 14 days)), address(vault));
-        assertEq(policy.getDisputeProtectionIntent(deferredId).lockedAmount, NET);
+        _fund(deferredId, 14 days);
+        (address owner, uint256 amount,) = vault.locks(deferredId);
+        assertEq(owner, other);
+        assertEq(amount, NET);
+    }
+
+    function test_ZeroWindowDoesNotWriteStorage() public {
+        vm.record();
+        policy.settleIntent(_context(ID, 0));
+        (, bytes32[] memory writes) = vm.accesses(address(policy));
+        assertEq(writes.length, 0);
     }
 
     function test_SettlementDataShorterThanWindowReverts() public {
@@ -134,17 +94,18 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
             vm.expectRevert(abi.encodeWithSelector(P.InvalidDisputeWindow.selector, windows[i]));
             policy.settleIntent(_context(ID, windows[i]));
         }
-        assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.NONE));
+        assertFalse(_isOpen(ID));
     }
 
-    function test_AttestedWindowsSetDeferredMaturity() public {
+    function test_SignedWindowsSetDeferredMaturity() public {
         uint256[3] memory windows = [uint256(1), uint256(7 days), uint256(180 days)];
         assertEq(policy.MAX_RISK_WINDOW(), windows[2]);
         for (uint256 i; i < windows.length; ++i) {
             bytes32 id = bytes32(i + 1);
             assertEq(policy.settleIntent(_context(id, windows[i])), address(vault));
-            P.DisputeProtectionIntent memory record = policy.getDisputeProtectionIntent(id);
-            assertEq(record.releaseEligibleAt, block.timestamp + windows[i]);
+            _fund(id, windows[i]);
+            (,, uint64 maturesAt) = vault.locks(id);
+            assertEq(maturesAt, block.timestamp + windows[i]);
         }
     }
 
@@ -152,16 +113,17 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
         IIntentSettlementPolicy.SettlementContext memory context = _context(ID, 0);
         context.settlementData = abi.encode(uint256(0), keccak256("reserved"), type(uint256).max, uint256(2));
         assertEq(policy.settleIntent(context), address(0));
-        assertEq(uint256(policy.getDisputeProtectionIntent(ID).collateralSource), uint256(P.CollateralSource.NONE));
+        assertFalse(_isOpen(ID));
     }
 
-    function test_FundingCreatesVaultLock() public {
-
-        assertEq(policy.settleIntent(_context(ID, 14 days)), address(vault));
-        token.transfer(address(vault), NET);
-        policy.onDeferredPayoutFunded(ID);
-        assertEq(vault.lockedStake(other), NET);
-        assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.SETTLED));
+    function test_UnauthorizedOrchestratorRejected() public {
+        IIntentSettlementPolicy.SettlementContext memory context = _context(ID, 0);
+        vm.startPrank(other);
+        vm.expectRevert(abi.encodeWithSelector(P.UnauthorizedOrchestrator.selector, other));
+        policy.settleIntent(context);
+        vm.expectRevert(abi.encodeWithSelector(P.UnauthorizedOrchestrator.selector, other));
+        policy.onDeferredPayoutFunded(context);
+        vm.stopPrank();
     }
 
     function test_SupportsOnlyMinimalSettlementAndERC165Interfaces() public view {
@@ -172,5 +134,4 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
         assertFalse(policy.supportsInterface(0xffffffff));
         assertFalse(policy.supportsInterface(type(IOrchestratorV4).interfaceId));
     }
-
 }
