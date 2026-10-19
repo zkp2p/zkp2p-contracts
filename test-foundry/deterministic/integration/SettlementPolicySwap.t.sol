@@ -33,20 +33,15 @@ contract SettlementPolicySwapTest is DisputeProtectionStackV2Fixture {
         protection.release(_ids(first));
         assertEq(vault.lockController(first), address(0));
         assertEq(vault.lockedStake(other), NET);
-        assertEq(vault.freeStake(other), NET);
-        vm.prank(other);
-        vault.withdrawStake(NET);
+        assertEq(vault.freeStake(other), 0);
         assertEq(token.balanceOf(other), NET);
         assertEq(vault.lockController(second), address(successor));
-        assertEq(vault.freeStake(other), 0);
 
         vault.setController(address(protection), false);
         assertFalse(vault.isController(address(protection)));
         (,, uint64 secondMaturesAt) = vault.locks(second);
         vm.warp(secondMaturesAt);
         successor.release(_ids(second));
-        vm.prank(other);
-        vault.withdrawStake(NET);
         assertEq(token.balanceOf(other), 2 * NET);
         assertEq(vault.lockController(second), address(0));
         assertEq(vault.totalStaked(), 0);

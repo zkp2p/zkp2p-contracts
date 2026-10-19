@@ -576,6 +576,48 @@ contract StakeVaultV2Test is Test {
         assertEq(vault.totalAccounted(), token.balanceOf(address(vault)));
     }
 
+    function test_PayOutLockTransfersOnlyThatLockToItsOwner() public {
+        _deposit(safeA, 100e6);
+        bytes32 otherLock = keccak256("other-lock");
+        bytes32 lockId = keccak256("funded-payout");
+        uint256 balanceBefore = token.balanceOf(safeA);
+        token.transfer(controller, 50e6);
+
+        vm.startPrank(controller);
+        vault.lockStake(safeA, otherLock, 30e6, NEVER_MATURES);
+        token.transfer(address(vault), 50e6);
+        vault.fundLock(safeA, lockId, 50e6, NEVER_MATURES);
+        vm.expectEmit(true, true, false, true, address(vault));
+        emit StakeUnlocked(lockId, safeA, 50e6, 30e6);
+        vm.expectEmit(true, true, false, true, address(vault));
+        emit StakeWithdrawn(safeA, safeA, 50e6, 100e6);
+        vault.payOutLock(lockId);
+        vm.stopPrank();
+
+        assertEq(token.balanceOf(safeA), balanceBefore + 50e6);
+        assertEq(vault.stakeBalance(safeA), 100e6);
+        assertEq(vault.lockedStake(safeA), 30e6);
+        assertEq(vault.freeStake(safeA), 70e6);
+        assertEq(vault.totalAccounted(), token.balanceOf(address(vault)));
+    }
+
+    function test_PayOutLockIsOnlyForTheLockController() public {
+        _deposit(safeA, 100e6);
+        bytes32 lockId = keccak256("controlled");
+        vm.prank(controller);
+        vault.lockStake(safeA, lockId, 40e6, NEVER_MATURES);
+
+        vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.UnauthorizedController.selector, attacker));
+        vm.prank(attacker);
+        vault.payOutLock(lockId);
+        vault.setController(nextController, true);
+        vm.expectRevert(
+            abi.encodeWithSelector(IStakeVaultV2.UnauthorizedLockController.selector, lockId, nextController, controller)
+        );
+        vm.prank(nextController);
+        vault.payOutLock(lockId);
+    }
+
     function test_ControllerAuthorizationChecksAndEvents() public {
         StakeVaultV2 emptyVault = new StakeVaultV2(address(this), token);
         assertFalse(emptyVault.isController(controller));

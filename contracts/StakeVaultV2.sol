@@ -107,7 +107,7 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
      * @param _amount Amount of free stake principal to withdraw.
      */
     function withdrawStake(uint256 _amount) external override nonReentrant {
-        _withdrawStake(msg.sender, _amount);
+        _withdrawStake(msg.sender, msg.sender, _amount);
     }
 
     /**
@@ -116,7 +116,7 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
      * @param _amount Amount of free stake principal to withdraw.
      */
     function withdrawStakeTo(address _to, uint256 _amount) external override nonReentrant {
-        _withdrawStake(_to, _amount);
+        _withdrawStake(msg.sender, _to, _amount);
     }
 
     /**
@@ -224,6 +224,17 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
     function unlockStake(bytes32 _lockId) external override onlyController onlyLockController(_lockId) {
         StakeLock memory stakeLock = _removeLock(_lockId);
         emit StakeUnlocked(_lockId, stakeLock.stakeOwner, stakeLock.amount, lockedStake[stakeLock.stakeOwner]);
+    }
+
+    /**
+     * @notice CONTROLLER ONLY: Deletes an active lock and transfers its amount to the lock's owner.
+     * @dev Spends only the lock's own amount, so the owner's other free and locked stake is untouched.
+     * @param _lockId Identifier of the active lock to pay out.
+     */
+    function payOutLock(bytes32 _lockId) external override nonReentrant onlyController onlyLockController(_lockId) {
+        StakeLock memory stakeLock = _removeLock(_lockId);
+        emit StakeUnlocked(_lockId, stakeLock.stakeOwner, stakeLock.amount, lockedStake[stakeLock.stakeOwner]);
+        _withdrawStake(stakeLock.stakeOwner, stakeLock.stakeOwner, stakeLock.amount);
     }
 
     /**
@@ -357,14 +368,14 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
     /* ============ Internal Stake Helpers ============ */
 
     /// @dev Reverts unless the complete amount is free; accounting is reduced before the token transfer.
-    function _withdrawStake(address _to, uint256 _amount) internal {
+    function _withdrawStake(address _stakeOwner, address _to, uint256 _amount) internal {
         if (_amount == 0) revert ZeroAmount();
-        uint256 available = freeStake(msg.sender);
-        if (available < _amount) revert InsufficientFreeStake(msg.sender, available, _amount);
+        uint256 available = freeStake(_stakeOwner);
+        if (available < _amount) revert InsufficientFreeStake(_stakeOwner, available, _amount);
 
-        stakeBalance[msg.sender] -= _amount;
+        stakeBalance[_stakeOwner] -= _amount;
         totalStaked -= _amount;
-        emit StakeWithdrawn(msg.sender, _to, _amount, stakeBalance[msg.sender]);
+        emit StakeWithdrawn(_stakeOwner, _to, _amount, stakeBalance[_stakeOwner]);
         stakeToken.safeTransfer(_to, _amount);
     }
 

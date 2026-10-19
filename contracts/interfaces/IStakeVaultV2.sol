@@ -72,6 +72,7 @@ interface IStakeVaultV2 {
     function lockStake(address _stakeOwner, bytes32 _lockId, uint256 _amount, uint64 _maturesAt) external;
     function fundLock(address _stakeOwner, bytes32 _lockId, uint256 _amount, uint64 _maturesAt) external;
     function unlockStake(bytes32 _lockId) external;
+    function payOutLock(bytes32 _lockId) external;
     function resolveLock(bytes32 _lockId, Claim[] calldata _claims) external;
 
     /// @notice Immediately changes controller authorization; de-authorize only after its locks drain.

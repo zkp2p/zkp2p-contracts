@@ -55,11 +55,9 @@ contract SettlementPolicyHandler is DisputeProtectionStackV2Fixture {
         if (protection.getProtection(id).depositor == address(0)) return;
         (address owner, uint256 amount, uint64 maturesAt) = vault.locks(id);
         if (block.timestamp < maturesAt) vm.warp(maturesAt);
+        uint256 recipientBefore = token.balanceOf(other);
         protection.release(_ids(id));
-        if (owner == other) {
-            vm.prank(other);
-            vault.withdrawStake(amount);
-        }
+        if (owner == other) assertEq(token.balanceOf(other) - recipientBefore, amount);
     }
 
     function assertAccounting() external view {

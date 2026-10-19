@@ -57,11 +57,11 @@ contract DeferredPayoutCascadeFuzzTest is Test {
         _settle(releaseAmount, freeStake, protocolBps, referralBps);
         (address owner, uint256 amount, uint64 maturesAt) = vault.locks(ID);
         vm.warp(maturesAt);
+        uint256 recipientBefore = token.balanceOf(RECIPIENT);
         policy.release(_ids(ID));
         _accounting();
         if (owner == RECIPIENT) {
-            vm.prank(RECIPIENT);
-            vault.withdrawStake(amount);
+            assertEq(token.balanceOf(RECIPIENT) - recipientBefore, amount);
         } else {
             vm.prank(TAKER);
             vault.withdrawStake(freeStake);

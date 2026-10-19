@@ -16,7 +16,7 @@ import {IStakeVaultV2} from "../interfaces/IStakeVaultV2.sol";
  * @title DisputeProtectionPolicyV2
  * @notice Settles OrchestratorV4 payouts against the taker's stake, or defers them, for the signed dispute window.
  * @dev The StakeVaultV2 lock under the intent hash holds owner, amount and maturity; this policy stores only the
- * depositor and payment method a dispute needs. Canonical USDC only.
+ * depositor and payment method a dispute needs, and whether the lock is a deferred payout. Canonical USDC only.
  */
 contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, ReentrancyGuard {
     /* ============ Constants ============ */
@@ -84,9 +84,12 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
         if (window == 0) return address(0);
         if (_context.token != address(stakeVault.stakeToken())) return address(0);
 
-        protections[_context.intentHash] = Protection({depositor: _context.depositor, paymentMethod: _context.paymentMethod});
         address stakeOwner = stakeVault.stakeOwnerOf(_context.taker);
-        if (stakeVault.freeStake(stakeOwner) >= _context.releaseAmount) {
+        bool staked = stakeVault.freeStake(stakeOwner) >= _context.releaseAmount;
+        protections[_context.intentHash] = Protection({
+            depositor: _context.depositor, deferredPayout: !staked, paymentMethod: _context.paymentMethod
+        });
+        if (staked) {
             stakeVault.lockStake(stakeOwner, _context.intentHash, _context.releaseAmount, _maturity(uint64(window)));
         } else {
             deferralVault = address(stakeVault);
@@ -103,8 +106,9 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
     /* ============ Permissionless Functions ============ */
 
     /**
-     * @notice Releases the collateral of every listed protection whose lock has matured.
-     * @param _intentHashes Protected intents whose collateral should be unlocked.
+     * @notice Releases every listed protection whose lock has matured. A taker's stake returns to its owner's free
+     * stake; a deferred payout is transferred to its recipient, so recipients that cannot call the vault still get paid.
+     * @param _intentHashes Protected intents to release.
      */
     function release(bytes32[] calldata _intentHashes) external nonReentrant {
         for (uint256 i = 0; i < _intentHashes.length; i++) {
@@ -166,13 +170,18 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
     /* ============ Internal Functions ============ */
 
     function _release(bytes32 _intentHash) internal {
-        if (protections[_intentHash].depositor == address(0)) revert ProtectionNotFound(_intentHash);
+        Protection memory protection = protections[_intentHash];
+        if (protection.depositor == address(0)) revert ProtectionNotFound(_intentHash);
 
         (,, uint64 maturesAt) = stakeVault.locks(_intentHash);
         if (block.timestamp < maturesAt) revert NotMatured(maturesAt, uint64(block.timestamp));
 
         delete protections[_intentHash];
-        stakeVault.unlockStake(_intentHash);
+        if (protection.deferredPayout) {
+            stakeVault.payOutLock(_intentHash);
+        } else {
+            stakeVault.unlockStake(_intentHash);
+        }
         emit ProtectionReleased(_intentHash);
     }
 

@@ -276,18 +276,19 @@ contract DisputeProtectionPolicyV2Test is Test {
         vm.expectRevert(abi.encodeWithSelector(P.ProtectionNotFound.selector, ID));
         policy.release(_ids(ID));
     }
-    function test_ReleaseDeferredBecomesRecipientFreeStake() public {
+    function test_ReleasePaysDeferredPayoutToRecipientOnly() public {
+        _stake(RECIPIENT, 10e6);
         _fund();
         _mature(ID);
         vm.expectEmit(true, false, false, true, address(policy));
         emit ProtectionReleased(ID);
+        vm.prank(STRANGER);
         policy.release(_ids(ID));
-        assertEq(vault.freeStake(RECIPIENT), NET);
+        assertEq(usdc.balanceOf(RECIPIENT), NET);
+        assertEq(vault.stakeBalance(RECIPIENT), 10e6);
+        assertEq(vault.freeStake(RECIPIENT), 10e6);
         _assertOpen(ID, false);
         _assertLock(ID, address(0), 0, 0);
-        vm.prank(RECIPIENT);
-        vault.withdrawStake(NET);
-        assertEq(usdc.balanceOf(RECIPIENT), NET);
     }
     function test_LifecycleEntrypointsRequireAuthorizedOrchestrator() public {
         S.SettlementContext memory context = _context(ID);
@@ -339,6 +340,7 @@ contract DisputeProtectionPolicyV2Test is Test {
         vm.warp(vm.getBlockTimestamp() + 1);
         policy.release(ids);
         assertEq(vault.lockedStake(TAKER), 0);
+        assertEq(vault.freeStake(TAKER), 2 * GROSS);
     }
     function test_SettlementWindowBoundedAsDefenceInDepth() public {
         uint64 max = 180 days;
@@ -358,6 +360,7 @@ contract DisputeProtectionPolicyV2Test is Test {
 
         P.Protection memory r = _record();
         assertEq(r.depositor, DEPOSITOR);
+        assertTrue(r.deferredPayout);
         assertEq(r.paymentMethod, METHOD);
         assertEq(address(policy.orchestratorRegistry()), address(orchestrators));
         assertEq(address(policy.stakeVault()), address(vault));

@@ -16,6 +16,22 @@ import {StakeVault} from "contracts/StakeVault.sol";
 import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+/// @dev A recipient that can only forward the token it holds, like a splitter or exchange deposit contract.
+contract ForwardingRecipient {
+    IERC20 internal immutable token;
+    address internal immutable beneficiary;
+
+    constructor(IERC20 _token, address _beneficiary) {
+        token = _token;
+        beneficiary = _beneficiary;
+    }
+
+    function forward() external {
+        token.transfer(beneficiary, token.balanceOf(address(this)));
+    }
+}
 
 contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
     function test_RelayerTakerUsesStakeOwnerCollateral() public {
@@ -256,14 +272,26 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         assertEq(token.balanceOf(address(vault)), 0);
     }
 
-    function test_DeferredRecipientCanWithdrawStakeDirectly() public {
-        bytes32 id = _signalDefault();
+    function test_DeferredPayoutReachesRecipientThatCannotCallTheVault() public {
+        address beneficiary = makeAddr("beneficiary");
+        ForwardingRecipient recipient = new ForwardingRecipient(token, beneficiary);
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
+        params.to = address(recipient);
+        bytes32 id = _signal(taker, params);
         _settle(id, INTENT_AMOUNT, RISK_WINDOW);
-        _release(id);
-        vm.prank(other);
-        vault.withdrawStake(NET);
-        assertEq(token.balanceOf(other), NET);
+        (address owner, uint256 amount, uint64 maturesAt) = vault.locks(id);
+        assertEq(owner, address(recipient));
+        assertEq(amount, NET);
+
+        vm.warp(maturesAt);
+        vm.prank(makeAddr("keeper"));
+        protection.release(_ids(id));
+        assertEq(token.balanceOf(address(recipient)), NET);
+        assertEq(vault.stakeBalance(address(recipient)), 0);
         assertEq(vault.totalAccounted(), 0);
+
+        recipient.forward();
+        assertEq(token.balanceOf(beneficiary), NET);
     }
 
     function test_NoPostIntentHookRunsOnPayNowOrDeferred() public {
@@ -353,7 +381,8 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         vm.warp(maturesAt);
         protection.release(_ids(id));
         assertEq(vault.lockedStake(other), 0);
-        assertEq(vault.freeStake(other), NET);
+        assertEq(vault.stakeBalance(other), 0);
+        assertEq(token.balanceOf(other), NET);
     }
 
     function _ids(bytes32 id) internal pure returns (bytes32[] memory ids) {

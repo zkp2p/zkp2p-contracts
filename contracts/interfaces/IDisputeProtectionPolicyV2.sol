@@ -9,6 +9,7 @@ interface IDisputeProtectionPolicyV2 is IIntentSettlementPolicy {
     /// @dev The StakeVaultV2 lock with id intentHash holds the owner, amount and maturity.
     struct Protection {
         address depositor;        // paid on a proven dispute
+        bool deferredPayout;      // the lock holds the recipient's net payout rather than the taker's stake
         bytes32 paymentMethod;    // selects the dispute verification rules
     }
 
