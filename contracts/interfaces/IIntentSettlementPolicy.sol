@@ -24,8 +24,7 @@ interface IIntentSettlementPolicy {
     /// @notice Selects immediate or deferred settlement.
     /// @dev Signed extension word 0 = dispute window (uint256 seconds), required for non-manual
     /// settlements and at most 180 days. Later words are reserved. The current policy exempts zero windows,
-    /// live whitelisted takers, registered relayer takers whose deposit has not opted out of relayer
-    /// bypass, and non-stake tokens. Manual release skips these checks.
+    /// live whitelisted takers and non-stake tokens. Manual release skips these checks.
     /// @return deferralVault Zero to pay intent.to now; otherwise the vault that must receive
     /// netAmount before onDeferredPayoutFunded is called in the same transaction.
     function settleIntent(SettlementContext calldata context) external returns (address deferralVault);

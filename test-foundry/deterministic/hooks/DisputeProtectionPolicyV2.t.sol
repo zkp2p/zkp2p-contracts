@@ -2,7 +2,6 @@
 pragma solidity ^0.8.18;
 
 import {IIntentSettlementPolicy as S} from "contracts/interfaces/IIntentSettlementPolicy.sol";
-import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 import {IWhitelistPolicy} from "contracts/interfaces/IWhitelistPolicy.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
@@ -40,7 +39,6 @@ contract DisputeProtectionPolicyV2Test is Test {
     StakeVaultV2 internal vault;
     DisputeProtectionPolicyV2 internal policy;
     WhitelistPolicy internal whitelist;
-    RelayerRegistry public relayerRegistry;
     DisputeVerifier internal verifier;
     NullifierRegistry internal disputes;
     NullifierRegistryV2 internal payments;
@@ -58,7 +56,6 @@ contract DisputeProtectionPolicyV2Test is Test {
 
     function _newPolicy() internal {
         if (address(whitelist) == address(0)) whitelist = new WhitelistPolicy(new AddressGroupRegistry(), new EscrowRegistry(), new OrchestratorRegistry());
-        if (address(relayerRegistry) == address(0)) relayerRegistry = new RelayerRegistry();
         policy = new DisputeProtectionPolicyV2(address(this), vault, verifier, disputes, whitelist);
         policy.setOrchestratorAuthorization(address(this), true);
         disputes.addWritePermission(address(policy));

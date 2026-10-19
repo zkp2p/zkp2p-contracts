@@ -5,9 +5,6 @@ pragma solidity ^0.8.18;
 import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 import {IIntentSettlementPolicy} from "../interfaces/IIntentSettlementPolicy.sol";
 import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
-import {IRelayerRegistry} from "../interfaces/IRelayerRegistry.sol";
-import {IRelayerRegistryProvider} from "../interfaces/IRelayerRegistryProvider.sol";
-import {IEscrowV2} from "../interfaces/IEscrowV2.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
@@ -23,17 +20,14 @@ import {IStakeVaultV2} from "../interfaces/IStakeVaultV2.sol";
  * (canonical USDC only). StakeVaultV2 owns collateral accounting; the dedicated dispute registry owns replay state.
  * TRUST: Authorized orchestrators must invoke callbacks only for their own validated intents and escrows.
  * Settlement uses the depositor and token captured before escrow unlock and never reads escrow.
- * Only the deposit opt-out setter reads escrow to authenticate its depositor.
  * Intent hashes must embed the originating orchestrator so identities cannot collide. Authorize a successor
  * policy alongside its predecessor in StakeVaultV2 and select it on O4; every later settlement uses it. The
  * predecessor keeps serving its own locks; de-authorize it only after its locks drain. Any authorized vault
  * controller can lock any owner's free stake and pay out that free stake only to its owner.
  * Protection applies only to stake-token deposits with a nonzero attested window supplied in the signed extension.
  * There are no per-method windows or paused admissions. Whitelisted takers, manual releases and zero
- * windows settle without a record or event. Relayer membership is read from the calling authorized
- * orchestrator's current registry at settlement. Registered relayer takers bypass collateral by default;
- * only the depositor can opt their deposit out of this bypass. Non-stake tokens return without a record
- * or event. Protected settlements lock gross stake or defer the net payout until now plus the attested
+ * windows settle without a record or event. Relayer takers get no exemption. Non-stake tokens return without
+ * a record or event. Protected settlements lock gross stake or defer the net payout until now plus the attested
  * window; only these STAKE and DEFERRED_PAYOUT settlements emit DisputeProtectionIntentSettled.
  */
 contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, ReentrancyGuard, ERC165 {
@@ -48,9 +42,6 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
 
     /// @notice Live deposit/payment-method whitelist used to exempt allowed takers.
     IWhitelistPolicy public immutable whitelistPolicy;
-
-    /// @dev Depositor opt-outs from relayer bypass, keyed by the escrow and deposit validated by O4.
-    mapping(address => mapping(uint256 => bool)) internal depositOptOutForRelayerBypass;
 
     /// @notice Dedicated replay registry for payment-method-scoped dispute nullifiers.
     INullifierRegistry public immutable disputeNullifierRegistry;
@@ -105,25 +96,6 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
         _;
     }
 
-    modifier onlyDepositor(address _escrow, uint256 _depositId) {
-        address depositor = IEscrowV2(_escrow).getDeposit(_depositId).depositor;
-        if (msg.sender != depositor) revert NotDepositor(_escrow, _depositId, msg.sender);
-        _;
-    }
-
-    /// @inheritdoc IDisputeProtectionPolicyV2
-    function isDepositOptedOutForRelayerBypass(address _escrow, uint256 _depositId) external view override returns (bool) {
-        return depositOptOutForRelayerBypass[_escrow][_depositId];
-    }
-
-    /// @inheritdoc IDisputeProtectionPolicyV2
-    function setDepositOptOutForRelayerBypass(address _escrow, uint256 _depositId, bool _optOut)
-        external override onlyDepositor(_escrow, _depositId)
-    {
-        depositOptOutForRelayerBypass[_escrow][_depositId] = _optOut;
-        emit DepositOptOutForRelayerBypassUpdated(_escrow, _depositId, _optOut);
-    }
-
     /* ============ Lifecycle Functions ============ */
 
     /// @inheritdoc IIntentSettlementPolicy
@@ -140,12 +112,6 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
                 && whitelistPolicy.isTakerAllowed(
                     _context.escrow, _context.depositId, _context.paymentMethod, _context.taker
                 )
-        ) return address(0);
-        IRelayerRegistry relayerRegistry = IRelayerRegistryProvider(msg.sender).relayerRegistry();
-        if (address(relayerRegistry) == address(0)) revert ZeroRelayerRegistry();
-        if (
-            relayerRegistry.isWhitelistedRelayer(_context.taker)
-                && !depositOptOutForRelayerBypass[_context.escrow][_context.depositId]
         ) return address(0);
         if (_context.token != address(stakeVault.stakeToken())) return address(0);
         if (disputeProtectionIntentByIntentHash[_context.intentHash].status != DisputeProtectionIntentStatus.NONE) {

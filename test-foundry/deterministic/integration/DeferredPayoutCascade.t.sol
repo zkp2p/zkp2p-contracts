@@ -18,77 +18,8 @@ import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 
 contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
-    function test_RelayerTakerPaysNowWithoutStakeRecordEventOrVaultCall() public {
+    function test_RelayerTakerUsesStakeOwnerCollateral() public {
         relayerRegistry.addRelayer(taker);
-        assertEq(vault.freeStake(taker), 0);
-        bytes32 id = _signalDefault();
-        vm.mockCallRevert(address(vault), bytes(""), bytes("vault called"));
-        _settleWhitelistedWithoutRecord(id);
-        assertEq(token.balanceOf(other), NET);
-        assertEq(token.balanceOf(address(vault)), 0);
-        _assertLock(id, address(0), 0);
-        _assertFees();
-    }
-
-    function test_RelayerOptInAfterSignalPaysNowAtFulfil() public {
-        relayerRegistry.addRelayer(taker);
-        assertEq(vault.freeStake(taker), 0);
-        vm.prank(depositor);
-        protection.setDepositOptOutForRelayerBypass(address(escrow), depositId, true);
-        bytes32 id = _signalDefault();
-        vm.prank(depositor);
-        protection.setDepositOptOutForRelayerBypass(address(escrow), depositId, false);
-        vm.mockCallRevert(address(vault), bytes(""), bytes("vault called"));
-        _settleWhitelistedWithoutRecord(id);
-        assertEq(token.balanceOf(other), NET);
-        assertEq(token.balanceOf(address(vault)), 0);
-        _assertLock(id, address(0), 0);
-        _assertFees();
-    }
-
-    function test_RelayerRegistryRotationRemovesOldRegistryBypass() public {
-        relayerRegistry.addRelayer(taker);
-        bytes32 id = _signalDefault();
-        RelayerRegistry replacement = new RelayerRegistry();
-        orchestrator.setRelayerRegistry(address(replacement));
-
-        assertTrue(relayerRegistry.isWhitelistedRelayer(taker));
-        assertFalse(replacement.isWhitelistedRelayer(taker));
-        _assertDeferredSettlement(id);
-        assertEq(token.balanceOf(other), 0);
-        assertEq(token.balanceOf(address(vault)), NET);
-    }
-
-    function test_RelayerRegistryRotationUsesNewRegistryBypass() public {
-        bytes32 id = _signalDefault();
-        RelayerRegistry replacement = new RelayerRegistry();
-        replacement.addRelayer(taker);
-        orchestrator.setRelayerRegistry(address(replacement));
-
-        assertFalse(relayerRegistry.isWhitelistedRelayer(taker));
-        _settleWhitelistedWithoutRecord(id);
-        assertEq(token.balanceOf(other), NET);
-        assertEq(token.balanceOf(address(vault)), 0);
-        _assertFees();
-    }
-
-    function test_RelayerRegistryRotationRespectsDepositOptOut() public {
-        vm.prank(depositor);
-        protection.setDepositOptOutForRelayerBypass(address(escrow), depositId, true);
-        bytes32 id = _signalDefault();
-        RelayerRegistry replacement = new RelayerRegistry();
-        replacement.addRelayer(taker);
-        orchestrator.setRelayerRegistry(address(replacement));
-
-        _assertDeferredSettlement(id);
-        assertEq(token.balanceOf(other), 0);
-        assertEq(token.balanceOf(address(vault)), NET);
-    }
-
-    function test_OptedOutRelayerTakerUsesStakeOwnerCollateral() public {
-        relayerRegistry.addRelayer(taker);
-        vm.prank(depositor);
-        protection.setDepositOptOutForRelayerBypass(address(escrow), depositId, true);
         assertFalse(whitelist.enabled(address(escrow), depositId, METHOD));
         _stake(vault, delegate, INTENT_AMOUNT);
         vm.prank(delegate);
@@ -106,10 +37,8 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         _assertFees();
     }
 
-    function test_OptedOutRelayerTakerDefersUncoveredPayout() public {
+    function test_RelayerTakerDefersUncoveredPayout() public {
         relayerRegistry.addRelayer(taker);
-        vm.prank(depositor);
-        protection.setDepositOptOutForRelayerBypass(address(escrow), depositId, true);
         assertFalse(whitelist.enabled(address(escrow), depositId, METHOD));
         bytes32 id = _signalDefault();
         assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
@@ -119,22 +48,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         assertEq(vault.totalAccounted(), NET);
     }
 
-    function test_RelayerOptOutAfterSignalAppliesAtFulfil() public {
-        relayerRegistry.addRelayer(taker);
-        assertFalse(whitelist.enabled(address(escrow), depositId, METHOD));
-        bytes32 id = _signalDefault();
-        vm.prank(depositor);
-        protection.setDepositOptOutForRelayerBypass(address(escrow), depositId, true);
-        assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE));
-        _assertDeferredSettlement(id);
-        assertEq(uint256(protection.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.SETTLED));
-        assertEq(token.balanceOf(address(vault)), NET);
-        assertEq(vault.totalAccounted(), NET);
-    }
-
-    function testFuzz_RelayerWhitelistBypassTakesPrecedence(bool optOut) public {
-        vm.prank(depositor);
-        protection.setDepositOptOutForRelayerBypass(address(escrow), depositId, optOut);
+    function test_WhitelistedRelayerTakerPaysNow() public {
         relayerRegistry.addRelayer(taker);
         _whitelistTaker();
         bytes32 id = _signalDefault();
@@ -146,9 +60,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         _assertFees();
     }
 
-    function testFuzz_RelayerManualReleaseCreatesNoRecord(bool optOut) public {
-        vm.prank(depositor);
-        protection.setDepositOptOutForRelayerBypass(address(escrow), depositId, optOut);
+    function test_RelayerManualReleaseCreatesNoRecord() public {
         relayerRegistry.addRelayer(taker);
         bytes32 id = _signalDefault();
         vm.prank(depositor);

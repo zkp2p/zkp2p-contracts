@@ -2,7 +2,6 @@
 pragma solidity ^0.8.18;
 
 import {IIntentSettlementPolicy as S} from "contracts/interfaces/IIntentSettlementPolicy.sol";
-import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 import {IWhitelistPolicy} from "contracts/interfaces/IWhitelistPolicy.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
@@ -31,7 +30,6 @@ contract DeferredPayoutCascadeFuzzTest is Test {
     StakeVaultV2 internal vault;
     DisputeProtectionPolicyV2 internal policy;
     WhitelistPolicy internal whitelist;
-    RelayerRegistry public relayerRegistry;
 
     function setUp() public {
         token = new USDCMock(1e18, "USDC", "USDC");
@@ -41,7 +39,6 @@ contract DeferredPayoutCascadeFuzzTest is Test {
         DisputeVerifier verifier = new DisputeVerifier(address(this), new NullifierRegistryV2(new NullifierRegistry()), new MultiAttestationVerifier(signers, 1));
         NullifierRegistry disputes = new NullifierRegistry();
         if (address(whitelist) == address(0)) whitelist = new WhitelistPolicy(new AddressGroupRegistry(), new EscrowRegistry(), new OrchestratorRegistry());
-        if (address(relayerRegistry) == address(0)) relayerRegistry = new RelayerRegistry();
         policy = new DisputeProtectionPolicyV2(address(this), vault, verifier, disputes, whitelist);
         vault.setController(address(policy), true);
         policy.setOrchestratorAuthorization(address(this), true);

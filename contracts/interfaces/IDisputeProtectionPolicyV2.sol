@@ -4,10 +4,8 @@ pragma solidity ^0.8.18;
 import {IIntentSettlementPolicy} from "./IIntentSettlementPolicy.sol";
 import {IStakeVaultV2} from "./IStakeVaultV2.sol";
 
-/// @notice Selects dispute collateral, with pay-now exemptions for whitelisted takers and for registered
-/// relayer takers on deposits that have not opted out of relayer bypass. Manual and zero-window releases
-/// and non-stake tokens also pay now without a record or event. Relayer membership uses the calling
-/// authorized orchestrator's current registry at settlement.
+/// @notice Selects dispute collateral, with a pay-now exemption for whitelisted takers. Manual and zero-window
+/// releases and non-stake tokens also pay now without a record or event.
 interface IDisputeProtectionPolicyV2 is IIntentSettlementPolicy {
     enum DisputeProtectionIntentStatus { NONE, SETTLED, RELEASED, DISPUTED }
     /// @dev Exempt takers settle without creating a record.
@@ -33,13 +31,10 @@ interface IDisputeProtectionPolicyV2 is IIntentSettlementPolicy {
     event DisputeResolved(bytes32 indexed intentHash, address indexed stakeOwner, address indexed depositor, uint256 compensatedAmount, bytes32 disputeId);
     event DisputeVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
     event OrchestratorAuthorizationUpdated(address indexed orchestrator, bool isAuthorized);
-    event DepositOptOutForRelayerBypassUpdated(address indexed escrow, uint256 indexed depositId, bool optedOut);
 
     error ZeroAddress();
-    error ZeroRelayerRegistry();
     error InvalidContract(address dependency);
     error UnauthorizedOrchestrator(address caller);
-    error NotDepositor(address escrow, uint256 depositId, address caller);
     error DisputeProtectionIntentAlreadyExists(bytes32 intentHash);
     error UnexpectedStatus(bytes32 intentHash, DisputeProtectionIntentStatus status);
     error DisputeProtectionIntentNotReleaseEligible(uint64 releaseEligibleAt, uint64 currentTime);
@@ -58,10 +53,4 @@ interface IDisputeProtectionPolicyV2 is IIntentSettlementPolicy {
     function setOrchestratorAuthorization(address orchestrator, bool isAuthorized) external;
     /// @notice Returns the collateral vault.
     function stakeVault() external view returns (IStakeVaultV2);
-    /// @notice Returns whether a deposit has opted out of the default registered-relayer collateral bypass.
-    function isDepositOptedOutForRelayerBypass(address escrow, uint256 depositId) external view returns (bool);
-    /// @notice Lets only the deposit's depositor opt out of or restore registered-relayer collateral bypass.
-    /// @dev A fake escrow can only write its own key: settlement uses the escrow validated by O4.
-    /// This does not disable whitelist or manual-release exemptions.
-    function setDepositOptOutForRelayerBypass(address escrow, uint256 depositId, bool optOut) external;
 }
