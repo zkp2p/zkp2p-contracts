@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-import {IPaymentVerifier} from "./IPaymentVerifier.sol";
-
 interface IPaymentVerifierV2 {
+    struct VerifyPaymentData {
+        bytes32 intentHash;                     // The hash of the intent being fulfilled
+        bytes paymentProof;                     // Payment proof
+        bytes data;                             // Additional data provided by the taker
+    }
+
     struct PaymentDetails {
         bytes32 method;           // Payment method hash (e.g., "venmo", "paypal", "wise")
         bytes32 payeeId;          // Payment recipient ID (hashed payee details to preserve privacy)
@@ -39,7 +43,7 @@ interface IPaymentVerifierV2 {
 
     /// @notice Verifies a payment and returns all verified fields plus the signed settlement data.
     /// @dev The verifier returns settlementData uninterpreted; the settlement policy decodes and validates it.
-    function verifyPayment(IPaymentVerifier.VerifyPaymentData calldata _verifyPaymentData)
+    function verifyPayment(VerifyPaymentData calldata _verifyPaymentData)
         external
         returns (PaymentVerificationResultV2 memory result, bytes memory settlementData);
 }

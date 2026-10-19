@@ -22,7 +22,6 @@ import { IEscrowRegistry } from "./interfaces/IEscrowRegistry.sol";
 import { IWhitelistPolicy } from "./interfaces/IWhitelistPolicy.sol";
 import { IIntentSettlementPolicy } from "./interfaces/IIntentSettlementPolicy.sol";
 import { IPaymentVerifierV2 } from "./interfaces/IPaymentVerifierV2.sol";
-import { IPaymentVerifier } from "./interfaces/IPaymentVerifier.sol";
 import { IPaymentVerifierRegistry } from "./interfaces/IPaymentVerifierRegistry.sol";
 import { IRelayerRegistry } from "./interfaces/IRelayerRegistry.sol";
 import { ReferralFeeLib } from "./lib/ReferralFeeLib.sol";
@@ -228,7 +227,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (verifier == address(0)) revert PaymentMethodDoesNotExist(intent.paymentMethod);
         
         (IPaymentVerifierV2.PaymentVerificationResultV2 memory verificationResult, bytes memory settlementData) = IPaymentVerifierV2(verifier).verifyPayment(
-            IPaymentVerifier.VerifyPaymentData({
+            IPaymentVerifierV2.VerifyPaymentData({
                 intentHash: _params.intentHash,
                 paymentProof: _params.paymentProof,
                 data: _params.verificationData

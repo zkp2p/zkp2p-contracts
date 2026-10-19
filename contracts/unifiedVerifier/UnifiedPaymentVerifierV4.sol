@@ -3,7 +3,6 @@ pragma solidity ^0.8.18;
 
 import { BaseUnifiedPaymentVerifierV3 } from "./BaseUnifiedPaymentVerifierV3.sol";
 import { INullifierRegistryV2 } from "../interfaces/INullifierRegistryV2.sol";
-import { IPaymentVerifier } from "../interfaces/IPaymentVerifier.sol";
 import { IAttestationVerifier } from "../interfaces/IAttestationVerifier.sol";
 import { IOrchestrator } from "../interfaces/IOrchestrator.sol";
 import { ERC165Checker } from "@openzeppelin/contracts/utils/introspection/ERC165Checker.sol";
@@ -115,7 +114,7 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
      * @dev Ensure the orchestrator verifies the intent exists before calling this function
      */
     function verifyPayment(
-        IPaymentVerifier.VerifyPaymentData calldata _verifyPaymentData
+        IPaymentVerifierV2.VerifyPaymentData calldata _verifyPaymentData
     )
         external
         override

@@ -36,7 +36,7 @@ contract UnifiedPaymentVerifierV4Test is UnifiedPaymentVerifierV3Test {
         caller.setIntent(V2_INTENT, intent);
         orchestratorRegistry.addOrchestrator(address(caller));
         bytes32 paymentId = keccak256("o4-intent");
-        IPaymentVerifier.VerifyPaymentData memory request = IPaymentVerifier.VerifyPaymentData(
+        IPaymentVerifierV2.VerifyPaymentData memory request = IPaymentVerifierV2.VerifyPaymentData(
             V2_INTENT, _validProof(verifier, V2_INTENT, paymentId), ""
         );
         intent.amount++;
@@ -73,8 +73,8 @@ contract UnifiedPaymentVerifierV4Test is UnifiedPaymentVerifierV3Test {
         caller.setIntent(V2_INTENT, intent);
         orchestratorRegistry.addOrchestrator(address(caller));
         bytes32 paymentId = keccak256("payer-commitment");
-        IPaymentVerifier.VerifyPaymentData memory request =
-            IPaymentVerifier.VerifyPaymentData(V2_INTENT, _validProof(verifier, V2_INTENT, paymentId), "");
+        IPaymentVerifierV2.VerifyPaymentData memory request =
+            IPaymentVerifierV2.VerifyPaymentData(V2_INTENT, _validProof(verifier, V2_INTENT, paymentId), "");
         vm.expectRevert("UPV: Snapshot payer commitment mismatch");
         caller.verifyPayment(IPaymentVerifierV2(address(verifier)), request);
         bytes memory data = abi.encode(_payment(paymentId), _snapshot(V2_INTENT), keccak256(commitment), bytes(""));
@@ -120,7 +120,7 @@ contract UnifiedPaymentVerifierV4Test is UnifiedPaymentVerifierV3Test {
         UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(proof, (UnifiedPaymentVerifierV4.PaymentAttestation));
         attestation.metadata = hex"badbad";
         (IPaymentVerifierV2.PaymentVerificationResultV2 memory result, bytes memory returned) = caller.verifyPayment(
-            IPaymentVerifierV2(address(verifier)), IPaymentVerifier.VerifyPaymentData(LEGACY_INTENT, abi.encode(attestation), "")
+            IPaymentVerifierV2(address(verifier)), IPaymentVerifierV2.VerifyPaymentData(LEGACY_INTENT, abi.encode(attestation), "")
         );
         assertTrue(result.success);
         assertEq(result.intentHash, LEGACY_INTENT);

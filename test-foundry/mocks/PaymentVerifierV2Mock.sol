@@ -2,7 +2,6 @@
 pragma solidity ^0.8.18;
 
 import { IPaymentVerifierV2 } from "contracts/interfaces/IPaymentVerifierV2.sol";
-import { IPaymentVerifier } from "contracts/interfaces/IPaymentVerifier.sol";
 import { IOrchestrator } from "contracts/interfaces/IOrchestrator.sol";
 import { ERC165Checker } from "@openzeppelin/contracts/utils/introspection/ERC165Checker.sol";
 import { IOrchestratorV4 } from "contracts/interfaces/IOrchestratorV4.sol";
@@ -67,7 +66,7 @@ contract PaymentVerifierV2Mock is IPaymentVerifierV2 {
 
     /// @notice Verifies a mock proof and returns the capped release and settlement data.
     function verifyPayment(
-        IPaymentVerifier.VerifyPaymentData calldata _verifyPaymentData
+        IPaymentVerifierV2.VerifyPaymentData calldata _verifyPaymentData
     ) external view override returns (PaymentVerificationResultV2 memory result, bytes memory settlementData) {
         MockPaymentDetails memory paymentDetails = _extractMockPaymentDetails(_verifyPaymentData.paymentProof);
 

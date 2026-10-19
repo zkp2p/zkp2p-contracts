@@ -5,7 +5,6 @@ import {IOrchestrator} from "contracts/interfaces/IOrchestrator.sol";
 import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
-import {IPaymentVerifier} from "contracts/interfaces/IPaymentVerifier.sol";
 import {IPaymentVerifierV2} from "contracts/interfaces/IPaymentVerifierV2.sol";
 
 contract UnifiedPaymentVerifierV4CallerHarness {
@@ -22,7 +21,7 @@ contract UnifiedPaymentVerifierV4CallerHarness {
     }
 
     /// @notice Calls the verifier and decodes the static result and signed settlement data bytes.
-    function verifyPayment(IPaymentVerifierV2 verifier, IPaymentVerifier.VerifyPaymentData calldata data)
+    function verifyPayment(IPaymentVerifierV2 verifier, IPaymentVerifierV2.VerifyPaymentData calldata data)
         external
         returns (IPaymentVerifierV2.PaymentVerificationResultV2 memory, bytes memory)
     {
@@ -41,7 +40,7 @@ contract UnifiedPaymentVerifierV4V4CallerHarness is ERC165 {
         return intents[intentHash];
     }
 
-    function verifyPayment(IPaymentVerifierV2 verifier, IPaymentVerifier.VerifyPaymentData calldata data)
+    function verifyPayment(IPaymentVerifierV2 verifier, IPaymentVerifierV2.VerifyPaymentData calldata data)
         external returns (IPaymentVerifierV2.PaymentVerificationResultV2 memory, bytes memory)
     {
         return verifier.verifyPayment(data);
