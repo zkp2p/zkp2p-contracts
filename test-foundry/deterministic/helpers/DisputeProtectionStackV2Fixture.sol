@@ -75,16 +75,20 @@ abstract contract DisputeProtectionStackV2Fixture is OrchestratorV4Fixture {
     }
 
     function _proof(bytes32 id, IOrchestratorV4.Intent memory intent, uint256 amount, uint256 disputeWindow) internal view returns (bytes memory) {
+        return _proofWithSettlementData(id, intent, amount, abi.encode(disputeWindow));
+    }
+
+    function _proofWithSettlementData(bytes32 id, IOrchestratorV4.Intent memory intent, uint256 amount, bytes memory settlementData)
+        internal view returns (bytes memory)
+    {
         bytes memory data = abi.encode(
             IPaymentVerifierV2.PaymentDetails(intent.paymentMethod, PAYEE, amount / 10000, USD, block.timestamp * 1000, _paymentId(id)),
             IPaymentVerifierV2.IntentSnapshot(
                 id, intent.amount, intent.paymentMethod, USD, PAYEE, CONVERSION_RATE, intent.timestamp, 0,
                 intent.payerCommitment.length == 0 ? bytes32(0) : keccak256(intent.payerCommitment)
-            )
+            ),
+            settlementData
         );
-        assertEq(data.length, 480);
-        // Explicit extension word 0; the payment/snapshot prefix stays unchanged.
-        data = bytes.concat(data, abi.encode(disputeWindow));
         return _signedProof(id, data, amount);
     }
 

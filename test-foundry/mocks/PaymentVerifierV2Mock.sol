@@ -29,11 +29,11 @@ contract PaymentVerifierV2Mock is IPaymentVerifierV2 {
 
     uint256 internal constant PRECISE_UNIT = 1e18;
 
-    bytes internal returnedExtension;
+    bytes internal returnedSettlementData;
 
-    /// @notice Configures the signed extension returned by the mock.
-    function setExtensionData(bytes calldata extensionData) external {
-        returnedExtension = extensionData;
+    /// @notice Configures the signed settlement data returned by the mock.
+    function setSettlementData(bytes calldata settlementData) external {
+        returnedSettlementData = settlementData;
     }
 
 
@@ -65,10 +65,10 @@ contract PaymentVerifierV2Mock is IPaymentVerifierV2 {
         return intentHash;
     }
 
-    /// @notice Verifies a mock proof and returns the capped release and raw extension.
+    /// @notice Verifies a mock proof and returns the capped release and settlement data.
     function verifyPayment(
         IPaymentVerifier.VerifyPaymentData calldata _verifyPaymentData
-    ) external view override returns (PaymentVerificationResultV2 memory result, bytes memory extensionData) {
+    ) external view override returns (PaymentVerificationResultV2 memory result, bytes memory settlementData) {
         MockPaymentDetails memory paymentDetails = _extractMockPaymentDetails(_verifyPaymentData.paymentProof);
 
         Snapshot memory snapshot = _fetchSnapshot(paymentDetails.intentHash);
@@ -89,7 +89,7 @@ contract PaymentVerifierV2Mock is IPaymentVerifierV2 {
         }
 
         if (shouldReturnFalse) {
-            return (result, returnedExtension);
+            return (result, returnedSettlementData);
         }
 
         uint256 releaseAmount = paymentDetails.amount;
@@ -104,7 +104,7 @@ contract PaymentVerifierV2Mock is IPaymentVerifierV2 {
         result.success = true;
         result.intentHash = paymentDetails.intentHash;
         result.releaseAmount = releaseAmount;
-        return (result, returnedExtension);
+        return (result, returnedSettlementData);
     }
 
     function _fetchSnapshot(bytes32 intentHash) internal view returns (Snapshot memory snapshot) {

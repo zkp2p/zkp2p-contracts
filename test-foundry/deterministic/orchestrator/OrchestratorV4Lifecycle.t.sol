@@ -19,7 +19,7 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
     }
 
     function test_SettlementCallsPolicyAndFundsFlowNormally() public {
-        verifier.setExtensionData(abi.encode(uint256(1)));
+        verifier.setSettlementData(abi.encode(uint256(1)));
         orchestrator.setSettlementPolicy(policyMock);
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.referralFees = _twoReferralFees();
@@ -39,7 +39,7 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         assertEq(context.paymentMethod, METHOD);
         assertEq(context.releaseAmount, INTENT_AMOUNT);
         assertEq(context.netAmount, INTENT_AMOUNT - 250_000);
-        assertEq(context.extensionData, abi.encode(uint256(1)));
+        assertEq(context.settlementData, abi.encode(uint256(1)));
         assertEq(token.balanceOf(referrer) - referrerBefore, 150_000);
         assertEq(token.balanceOf(other) - otherBefore, 100_000);
         assertEq(token.balanceOf(taker) - recipientBefore, INTENT_AMOUNT - 250_000);

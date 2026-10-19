@@ -155,7 +155,7 @@ interface IOrchestratorV4 {
     function cancelIntent(bytes32 intentHash) external;
 
     /// @notice Verifies payment and settles immediately or defers the net payout.
-    /// @dev Forwards the raw signed extension bytes to the current settlement policy.
+    /// @dev Forwards the signed settlement data to the current settlement policy.
     function fulfillIntent(FulfillIntentParams calldata params) external;
 
     /// @notice Manually settles an intent as its depositor.

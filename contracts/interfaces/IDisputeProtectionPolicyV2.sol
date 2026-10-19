@@ -42,7 +42,6 @@ interface IDisputeProtectionPolicyV2 is IIntentSettlementPolicy {
     error NothingToClaim(bytes32 intentHash);
     error InvalidSettlementAmount(uint256 releaseAmount, uint256 netAmount);
     error TimestampOverflow(uint256 timestamp);
-    error MissingDisputeWindow();
     error InvalidDisputeWindow(uint256 window);
     error OwnershipRenunciationDisabled();
 

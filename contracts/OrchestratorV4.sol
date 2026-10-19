@@ -208,7 +208,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      * offchain payment proof is verified, payment details are validated, intent is removed, and escrow state is updated.
      * Settlement unlocks escrow funds, transfers fees, notifies the current settlement policy (fail-closed),
      * and transfers the net payout to intent.to or the deferral vault.
-     * @dev Raw signed extension bytes are forwarded opaquely to the current policy.
+     * @dev Signed settlement data is forwarded opaquely to the current policy.
      * @dev Guarded against reentrancy through verifiers, tokens and settlement policies.
      *
      * @param _params               Struct containing all the fulfill intent parameters
@@ -227,7 +227,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         address verifier = paymentVerifierRegistry.getVerifier(intent.paymentMethod);
         if (verifier == address(0)) revert PaymentMethodDoesNotExist(intent.paymentMethod);
         
-        (IPaymentVerifierV2.PaymentVerificationResultV2 memory verificationResult, bytes memory extensionData) = IPaymentVerifierV2(verifier).verifyPayment(
+        (IPaymentVerifierV2.PaymentVerificationResultV2 memory verificationResult, bytes memory settlementData) = IPaymentVerifierV2(verifier).verifyPayment(
             IPaymentVerifier.VerifyPaymentData({
                 intentHash: _params.intentHash,
                 paymentProof: _params.paymentProof,
@@ -248,7 +248,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
             _params.intentHash, 
             intent, 
             verificationResult.releaseAmount,
-            extensionData,
+            settlementData,
             managerFeeRecipient,
             managerFee,
             false,
@@ -608,7 +608,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         bytes32 _intentHash,
         Intent memory _intent,
         uint256 _releaseAmount,
-        bytes memory _extensionData,
+        bytes memory _settlementData,
         address _managerFeeRecipient,
         uint256 _managerFee,
         bool _isManualRelease,
@@ -631,7 +631,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
                     paymentMethod: _intent.paymentMethod,
                     releaseAmount: _releaseAmount,
                     netAmount: netAmount,
-                    extensionData: _extensionData
+                    settlementData: _settlementData
                 })
             );
         }

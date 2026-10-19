@@ -108,15 +108,15 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
         assertEq(token.balanceOf(address(hook)), INTENT_AMOUNT - 1_750_000);
     }
 
-    function test_ExtensionWordZeroForwarded() public {
-        verifier.setExtensionData(abi.encode(uint256(1)));
+    function test_SettlementDataForwardedUnchanged() public {
+        verifier.setSettlementData(abi.encode(uint256(1)));
         _fulfill(_signalDefault(), INTENT_AMOUNT, CONVERSION_RATE);
-        (,,,,,,,, bytes memory extensionData) = hook.lastSettlementContext();
-        assertEq(extensionData, abi.encode(uint256(1)));
-        verifier.setExtensionData(abi.encode(uint256(0)));
+        (,,,,,,,, bytes memory settlementData) = hook.lastSettlementContext();
+        assertEq(settlementData, abi.encode(uint256(1)));
+        verifier.setSettlementData(hex"ff01");
         _fulfill(_signalDefault(), INTENT_AMOUNT, CONVERSION_RATE);
-        (,,,,,,,, extensionData) = hook.lastSettlementContext();
-        assertEq(extensionData, abi.encode(uint256(0)));
+        (,,,,,,,, settlementData) = hook.lastSettlementContext();
+        assertEq(settlementData, hex"ff01");
     }
 
     function test_ManualReleaseNeverDefers() public {

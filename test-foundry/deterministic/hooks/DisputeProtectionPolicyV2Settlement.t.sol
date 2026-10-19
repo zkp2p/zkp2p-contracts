@@ -118,12 +118,12 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
         assertEq(policy.getDisputeProtectionIntent(deferredId).lockedAmount, NET);
     }
 
-    function test_AttestedWindowRequired() public {
-        bytes[3] memory extensions = [bytes(""), bytes(hex"ff"), new bytes(31)];
-        for (uint256 i; i < extensions.length; ++i) {
+    function test_SettlementDataShorterThanWindowReverts() public {
+        bytes[3] memory settlementData = [bytes(""), bytes(hex"ff"), new bytes(31)];
+        for (uint256 i; i < settlementData.length; ++i) {
             IIntentSettlementPolicy.SettlementContext memory context = _context(ID, 14 days);
-            context.extensionData = extensions[i];
-            vm.expectRevert(bytes4(keccak256("MissingDisputeWindow()")));
+            context.settlementData = settlementData[i];
+            vm.expectRevert();
             policy.settleIntent(context);
         }
     }
@@ -148,9 +148,9 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
         }
     }
 
-    function test_ReservedExtensionWordsAreIgnored() public {
+    function test_TrailingSettlementWordsAreIgnored() public {
         IIntentSettlementPolicy.SettlementContext memory context = _context(ID, 0);
-        context.extensionData = abi.encode(uint256(0), keccak256("reserved"), type(uint256).max, uint256(2));
+        context.settlementData = abi.encode(uint256(0), keccak256("reserved"), type(uint256).max, uint256(2));
         assertEq(policy.settleIntent(context), address(0));
         assertEq(uint256(policy.getDisputeProtectionIntent(ID).collateralSource), uint256(P.CollateralSource.NONE));
     }

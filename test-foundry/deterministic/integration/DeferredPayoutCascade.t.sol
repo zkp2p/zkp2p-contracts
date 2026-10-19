@@ -198,13 +198,11 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         _assertFees();
     }
 
-    function test_DeferredSettlementWithSignedExtension() public {
+    function test_DeferredSettlementIgnoresTrailingSettlementWords() public {
         bytes32 id = _signalDefault();
-        UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(
-            _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, RISK_WINDOW),
-            (UnifiedPaymentVerifierV4.PaymentAttestation)
+        bytes memory proof = _proofWithSettlementData(
+            id, orchestrator.getIntent(id), INTENT_AMOUNT, abi.encode(RISK_WINDOW, bytes32(0), keccak256("reserved"))
         );
-        bytes memory proof = _signedProof(id, bytes.concat(attestation.data, abi.encode(bytes32(0), keccak256("reserved"))), INTENT_AMOUNT);
         orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, id, ""));
         assertEq(token.balanceOf(other), 0);
         _assertLock(id, other, NET);

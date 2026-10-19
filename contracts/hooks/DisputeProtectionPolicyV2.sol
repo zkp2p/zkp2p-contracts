@@ -23,7 +23,7 @@ import {IStakeVaultV2} from "../interfaces/IStakeVaultV2.sol";
  * policy alongside its predecessor in StakeVaultV2 and select it on O4; every later settlement uses it. The
  * predecessor keeps serving its own locks; de-authorize it only after its locks drain. Any authorized vault
  * controller can lock any owner's free stake and pay out that free stake only to its owner.
- * Protection applies only to stake-token deposits with a nonzero attested window supplied in the signed extension.
+ * Protection applies only to stake-token deposits with a nonzero window in the signed settlement data.
  * There are no per-method windows or paused admissions. O4 never calls the policy for manual releases or for
  * takers whitelisted at signal. Zero windows and non-stake tokens return without a record or event. Protected
  * settlements lock gross stake or defer the net payout until now plus the attested window; only these STAKE and
@@ -94,8 +94,7 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
     function settleIntent(SettlementContext calldata _context)
         external override onlyAuthorizedOrchestrator returns (address deferralVault)
     {
-        if (_context.extensionData.length < 32) revert MissingDisputeWindow();
-        uint256 window = abi.decode(_context.extensionData[:32], (uint256));
+        uint256 window = abi.decode(_context.settlementData, (uint256));
         if (window > MAX_RISK_WINDOW) revert InvalidDisputeWindow(window);
         if (window == 0) return address(0);
         if (_context.token != address(stakeVault.stakeToken())) return address(0);

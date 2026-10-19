@@ -27,9 +27,7 @@ interface IPaymentVerifierV2 {
 
     /// @dev Must stay fully static and preserve the V1 three-field prefix: OrchestratorV3 calls
     /// through IPaymentVerifier and reads only the first three words. Dynamic data must be a
-    /// separate trailing return value, never a field inside this struct. The dispute window (extension word 0)
-    /// is returned in the trailing extension bytes, not this struct,
-    /// so the V1 prefix remains unchanged.
+    /// separate trailing return value, never a field inside this struct, so the V1 prefix remains unchanged.
     struct PaymentVerificationResultV2 {
         bool success;
         bytes32 intentHash;
@@ -39,10 +37,9 @@ interface IPaymentVerifierV2 {
         IntentSnapshot intent;
     }
 
-    /// @notice Verifies a payment and returns all verified fields plus signed extension data (never unsigned metadata).
-    /// @dev Extension words: 0 = disputeWindow (uint256 seconds), 1+ = reserved.
-    /// The verifier returns these bytes untouched; the current settlement policy decodes and validates them.
+    /// @notice Verifies a payment and returns all verified fields plus the signed settlement data.
+    /// @dev The verifier returns settlementData uninterpreted; the settlement policy decodes and validates it.
     function verifyPayment(IPaymentVerifier.VerifyPaymentData calldata _verifyPaymentData)
         external
-        returns (PaymentVerificationResultV2 memory result, bytes memory extensionData);
+        returns (PaymentVerificationResultV2 memory result, bytes memory settlementData);
 }

@@ -14,7 +14,7 @@ import { IPaymentVerifierV2 } from "../interfaces/IPaymentVerifierV2.sol";
 
 /**
  * @title UnifiedPaymentVerifierV4
- * @notice Preserves V3 payment verification and returns all verified fields and signed extension data.
+ * @notice Preserves V3 payment verification and returns all verified fields and signed settlement data.
  *
  * Key features:
  * - Supports multiple payment methods, each with custom configuration
@@ -23,17 +23,13 @@ import { IPaymentVerifierV2 } from "../interfaces/IPaymentVerifierV2.sol";
  * - Verifies standardized payment details against provided data
  * @dev Payment attestations use this deployment's EIP-712 domain. Governance must reuse the payment-nullifier
  * registry, route payment methods to this verifier, and retire V3's registry write permission during activation.
- * attestation.data starts with the 480-byte `abi.encode(PaymentDetails, IntentSnapshot)`
- * payload, optionally followed by opaque extension bytes. The entire data is signed through dataHash;
- * unsigned attestation.metadata is never returned. Extension words are decoded only by O4's current settlement policy,
- * not this verifier or the non-upgradeable OrchestratorV4. The policy defines the extension layout and
- * validation rules; this verifier returns every signed byte after the prefix without interpreting it.
+ * attestation.data is `abi.encode(PaymentDetails, IntentSnapshot, bytes settlementData)` and is signed through
+ * dataHash; unsigned attestation.metadata is never returned. settlementData is opaque here and to OrchestratorV4;
+ * only the settlement policy decodes it.
  */
 contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerifierV3 {
 
     /* ============ Constants ============ */
-
-    uint256 private constant PAYMENT_PAYLOAD_LENGTH = 480;
 
     // Max timestamp buffer
     uint256 private constant MAX_TIMESTAMP_BUFFER = 48 * 60 * 60 * 1000; // 48 hours
@@ -115,7 +111,7 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
      *
      * @param _verifyPaymentData Payment proof and intent details required for verification
      * @return result Fully static verified result with the V1 three-word prefix and uncapped attested amount
-     * @return extensionData Signed bytes after the 480-byte payload, returned untouched and uninterpreted
+     * @return settlementData Signed settlement data, returned uninterpreted
      * @dev Ensure the orchestrator verifies the intent exists before calling this function
      */
     function verifyPayment(
@@ -124,18 +120,15 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
         external
         override
         onlyOrchestrator()
-        returns (IPaymentVerifierV2.PaymentVerificationResultV2 memory result, bytes memory extensionData)
+        returns (IPaymentVerifierV2.PaymentVerificationResultV2 memory result, bytes memory settlementData)
     {
         PaymentAttestation memory attestation = _decodeAttestation(_verifyPaymentData.paymentProof);
         require(attestation.intentHash == _verifyPaymentData.intentHash, "UPV: Attestation hash mismatch");
         require(attestation.releaseAmount != 0, "UPV: Invalid release amount");
 
-        require(attestation.data.length >= PAYMENT_PAYLOAD_LENGTH, "UPV: Invalid payload length");
-
-        (
-            PaymentDetails memory paymentDetails,
-            IntentSnapshot memory intentSnapshot
-        ) = _decodeAttestationPayload(attestation.data);
+        PaymentDetails memory paymentDetails;
+        IntentSnapshot memory intentSnapshot;
+        (paymentDetails, intentSnapshot, settlementData) = _decodeAttestationPayload(attestation.data);
         require(isPaymentMethod[paymentDetails.method], "UPV: Invalid payment method");
         require(paymentDetails.method == intentSnapshot.paymentMethod, "UPV: Payment method mismatch");
         require(paymentDetails.paymentId != bytes32(0), "UPV: Invalid payment ID");
@@ -161,11 +154,6 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
             payment: paymentDetails,
             intent: intentSnapshot
         });
-
-        extensionData = new bytes(attestation.data.length - PAYMENT_PAYLOAD_LENGTH);
-        for (uint256 index; index < extensionData.length; index++) {
-            extensionData[index] = attestation.data[PAYMENT_PAYLOAD_LENGTH + index];
-        }
     }
 
     /* ============ Internal Functions ============ */
@@ -177,10 +165,9 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
     function _decodeAttestationPayload(bytes memory paymentData)
         internal
         pure
-        returns (PaymentDetails memory paymentDetails, IntentSnapshot memory intentSnapshot)
+        returns (PaymentDetails memory paymentDetails, IntentSnapshot memory intentSnapshot, bytes memory settlementData)
     {
-        // Both structs are static: decoding reads exactly the first 480 bytes and ignores the extension.
-        (paymentDetails, intentSnapshot) = abi.decode(paymentData, (PaymentDetails, IntentSnapshot));
+        (paymentDetails, intentSnapshot, settlementData) = abi.decode(paymentData, (PaymentDetails, IntentSnapshot, bytes));
     }
 
     /**
