@@ -48,7 +48,7 @@ contract DeferredPayoutDepositClosureTest is DisputeProtectionStackV2Fixture {
         assertEq(token.balanceOf(address(orchestrator)), 0);
         assertEq(token.balanceOf(address(vault)), 0);
         assertEq(vault.totalAccounted(), 0);
-        assertEq(protection.getDisputeProtectionIntent(id).depositor, address(0));
+        assertEq(protection.getProtection(id).depositor, address(0));
         assertEq(nullifiers.nullifierByIntentHash(id), bytes32(0));
         assertEq(nullifiers.intentHashByNullifier(keccak256(abi.encodePacked(METHOD, _paymentId(id)))), bytes32(0));
 
@@ -74,7 +74,7 @@ contract DeferredPayoutDepositClosureTest is DisputeProtectionStackV2Fixture {
         _settle(id, INTENT_AMOUNT, RISK_WINDOW);
 
         _assertClosedDeposit(id);
-        P.DisputeProtectionIntent memory record = protection.getDisputeProtectionIntent(id);
+        P.Protection memory record = protection.getProtection(id);
         assertEq(record.depositor, depositor);
         assertEq(record.paymentMethod, METHOD);
         (address lockOwner, uint256 lockAmount, uint64 maturesAt) = vault.locks(id);
@@ -96,7 +96,7 @@ contract DeferredPayoutDepositClosureTest is DisputeProtectionStackV2Fixture {
         orchestrator.releaseFundsToPayer(id);
 
         _assertClosedDeposit(id);
-        assertEq(protection.getDisputeProtectionIntent(id).depositor, address(0));
+        assertEq(protection.getProtection(id).depositor, address(0));
         assertEq(vault.totalAccounted(), 0);
         assertEq(token.balanceOf(address(vault)), 0);
         assertEq(token.balanceOf(other), NET);

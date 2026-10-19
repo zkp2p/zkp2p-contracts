@@ -32,7 +32,7 @@ import {IStakeVaultV2} from "../interfaces/IStakeVaultV2.sol";
 contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, ReentrancyGuard, ERC165 {
     /* ============ Constants ============ */
 
-    uint64 public constant MAX_RISK_WINDOW = 180 days;
+    uint64 public constant MAX_DISPUTE_WINDOW = 180 days;
 
     /* ============ State Variables ============ */
 
@@ -45,11 +45,11 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
     /// @notice Verifier used to validate signed dispute evidence.
     IDisputeVerifier public disputeVerifier;
 
-    /// @dev Orchestrator authorization keyed by caller address.
-    mapping(address => bool) internal isOrchestratorAuthorizedByAddress;
+    /// @notice Orchestrators allowed to call the settlement callbacks.
+    mapping(address => bool) public override isOrchestratorAuthorized;
 
     /// @dev Open protections keyed by globally unique intent hash; deleted on release or dispute.
-    mapping(bytes32 => DisputeProtectionIntent) internal disputeProtectionIntentByIntentHash;
+    mapping(bytes32 => Protection) internal protections;
 
     /* ============ Constructor ============ */
 
@@ -82,7 +82,7 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
     /* ============ Modifiers ============ */
 
     modifier onlyAuthorizedOrchestrator() {
-        if (!isOrchestratorAuthorizedByAddress[msg.sender]) {
+        if (!isOrchestratorAuthorized[msg.sender]) {
             revert UnauthorizedOrchestrator(msg.sender);
         }
         _;
@@ -95,56 +95,44 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
         external override onlyAuthorizedOrchestrator returns (address deferralVault)
     {
         uint256 window = abi.decode(_context.settlementData, (uint256));
-        if (window > MAX_RISK_WINDOW) revert InvalidDisputeWindow(window);
+        if (window > MAX_DISPUTE_WINDOW) revert InvalidDisputeWindow(window);
         if (window == 0) return address(0);
         if (_context.token != address(stakeVault.stakeToken())) return address(0);
-        if (disputeProtectionIntentByIntentHash[_context.intentHash].depositor != address(0)) {
-            revert DisputeProtectionIntentAlreadyExists(_context.intentHash);
-        }
+        if (protections[_context.intentHash].depositor != address(0)) revert ProtectionExists(_context.intentHash);
         if (_context.releaseAmount == 0 || _context.netAmount == 0) {
             revert InvalidSettlementAmount(_context.releaseAmount, _context.netAmount);
         }
-        return _settleProtectedIntent(_context, uint64(window));
+        return _protect(_context, uint64(window));
     }
 
     /// @dev Apply the reentrancy guard only to protected settlements that change state.
-    function _settleProtectedIntent(SettlementContext calldata _context, uint64 _riskWindow) internal nonReentrant returns (address deferralVault) {
-        disputeProtectionIntentByIntentHash[_context.intentHash] =
-            DisputeProtectionIntent({depositor: _context.depositor, paymentMethod: _context.paymentMethod});
+    function _protect(SettlementContext calldata _context, uint64 _window) internal nonReentrant returns (address deferralVault) {
+        protections[_context.intentHash] = Protection({depositor: _context.depositor, paymentMethod: _context.paymentMethod});
         address stakeOwner = stakeVault.stakeOwnerOf(_context.taker);
         if (stakeVault.freeStake(stakeOwner) >= _context.releaseAmount) {
-            stakeVault.lockStake(stakeOwner, _context.intentHash, _context.releaseAmount, _calculateReleaseEligibleAt(_riskWindow));
+            stakeVault.lockStake(stakeOwner, _context.intentHash, _context.releaseAmount, _maturity(_window));
         } else {
             deferralVault = address(stakeVault);
         }
-        emit DisputeProtectionIntentSettled(_context.intentHash, _context.depositor);
+        emit ProtectionOpened(_context.intentHash, _context.depositor);
     }
 
     /// @inheritdoc IIntentSettlementPolicy
     function onDeferredPayoutFunded(SettlementContext calldata _context) external override onlyAuthorizedOrchestrator nonReentrant {
-        uint64 riskWindow = uint64(abi.decode(_context.settlementData, (uint256)));
-        stakeVault.fundLock(_context.recipient, _context.intentHash, _context.netAmount, _calculateReleaseEligibleAt(riskWindow));
+        uint64 window = uint64(abi.decode(_context.settlementData, (uint256)));
+        stakeVault.fundLock(_context.recipient, _context.intentHash, _context.netAmount, _maturity(window));
     }
 
     /* ============ Permissionless Functions ============ */
 
     /**
-     * @notice Releases collateral for one settled intent once its minimum risk window has elapsed.
-     * @dev Disputes remain valid after the lock matures until this release transaction executes.
-     * @param _intentHash Settled dispute protection intent whose collateral should be unlocked.
+     * @notice Releases the collateral of every listed protection whose lock has matured.
+     * @dev Disputes remain valid after a lock matures until its release executes. One ineligible intent reverts the batch.
+     * @param _intentHashes Protected intents whose collateral should be unlocked.
      */
-    function releaseMaturedDisputeProtectionIntent(bytes32 _intentHash) external nonReentrant {
-        _releaseMaturedDisputeProtectionIntent(_intentHash);
-    }
-
-    /**
-     * @notice Releases collateral for a batch of settled intents whose minimum risk windows have elapsed.
-     * @dev The batch is atomic: one invalid or ineligible intent reverts every release in the call.
-     * @param _intentHashes Settled dispute protection intents whose collateral should be unlocked.
-     */
-    function releaseMaturedDisputeProtectionIntents(bytes32[] calldata _intentHashes) external nonReentrant {
-        for (uint256 intentIndex = 0; intentIndex < _intentHashes.length; intentIndex++) {
-            _releaseMaturedDisputeProtectionIntent(_intentHashes[intentIndex]);
+    function release(bytes32[] calldata _intentHashes) external nonReentrant {
+        for (uint256 i = 0; i < _intentHashes.length; i++) {
+            _release(_intentHashes[i]);
         }
     }
 
@@ -156,20 +144,20 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
      */
     function submitDispute(IDisputeVerifier.DisputeAttestation calldata _attestation) external nonReentrant {
         bytes32 intentHash = _attestation.intentHash;
-        DisputeProtectionIntent memory disputeProtectionIntent = disputeProtectionIntentByIntentHash[intentHash];
-        if (disputeProtectionIntent.depositor == address(0)) revert DisputeProtectionIntentNotFound(intentHash);
+        Protection memory protection = protections[intentHash];
+        if (protection.depositor == address(0)) revert ProtectionNotFound(intentHash);
 
         (bytes32 disputeId, bytes32 disputeNullifier) =
-            disputeVerifier.verifyDispute(_attestation, disputeProtectionIntent.paymentMethod);
+            disputeVerifier.verifyDispute(_attestation, protection.paymentMethod);
         disputeNullifierRegistry.addNullifier(disputeNullifier);
-        delete disputeProtectionIntentByIntentHash[intentHash];
+        delete protections[intentHash];
 
         (address stakeOwner, uint256 compensatedAmount,) = stakeVault.locks(intentHash);
         IStakeVaultV2.Claim[] memory claims = new IStakeVaultV2.Claim[](1);
-        claims[0] = IStakeVaultV2.Claim({beneficiary: disputeProtectionIntent.depositor, amount: compensatedAmount});
+        claims[0] = IStakeVaultV2.Claim({beneficiary: protection.depositor, amount: compensatedAmount});
         stakeVault.resolveLock(intentHash, claims);
 
-        emit DisputeResolved(intentHash, stakeOwner, disputeProtectionIntent.depositor, compensatedAmount, disputeId);
+        emit DisputeResolved(intentHash, stakeOwner, protection.depositor, compensatedAmount, disputeId);
     }
 
     /* ============ Governance Functions ============ */
@@ -193,7 +181,7 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
      */
     function setOrchestratorAuthorization(address _orchestrator, bool _isAuthorized) external override onlyOwner {
         if (_isAuthorized) _validateDependency(_orchestrator);
-        isOrchestratorAuthorizedByAddress[_orchestrator] = _isAuthorized;
+        isOrchestratorAuthorized[_orchestrator] = _isAuthorized;
         emit OrchestratorAuthorizationUpdated(_orchestrator, _isAuthorized);
     }
 
@@ -207,19 +195,11 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
     /* ============ View Functions ============ */
 
     /**
-     * @notice Returns the stored dispute protection state for an intent.
-     * @param _intentHash Intent whose dispute protection state is queried.
+     * @notice Returns the open protection for an intent; zero after release or dispute.
+     * @param _intentHash Protected intent.
      */
-    function getDisputeProtectionIntent(bytes32 _intentHash) external view returns (DisputeProtectionIntent memory) {
-        return disputeProtectionIntentByIntentHash[_intentHash];
-    }
-
-    /**
-     * @notice Returns whether a orchestrator may mutate dispute protection intent state.
-     * @param _orchestrator Orchestrator whose callback authorization is queried.
-     */
-    function isOrchestratorAuthorized(address _orchestrator) external view override returns (bool) {
-        return isOrchestratorAuthorizedByAddress[_orchestrator];
+    function getProtection(bytes32 _intentHash) external view returns (Protection memory) {
+        return protections[_intentHash];
     }
 
     /// @notice Reports ERC-165 and the minimal settlement interface supported by this policy.
@@ -229,26 +209,22 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
 
     /* ============ Internal Functions ============ */
 
-    function _releaseMaturedDisputeProtectionIntent(bytes32 _intentHash) internal {
-        if (disputeProtectionIntentByIntentHash[_intentHash].depositor == address(0)) {
-            revert DisputeProtectionIntentNotFound(_intentHash);
-        }
+    function _release(bytes32 _intentHash) internal {
+        if (protections[_intentHash].depositor == address(0)) revert ProtectionNotFound(_intentHash);
 
         uint64 currentTime = _currentTimestamp();
-        (,, uint64 releaseEligibleAt) = stakeVault.locks(_intentHash);
-        if (currentTime < releaseEligibleAt) {
-            revert DisputeProtectionIntentNotReleaseEligible(releaseEligibleAt, currentTime);
-        }
+        (,, uint64 maturesAt) = stakeVault.locks(_intentHash);
+        if (currentTime < maturesAt) revert NotMatured(maturesAt, currentTime);
 
-        delete disputeProtectionIntentByIntentHash[_intentHash];
+        delete protections[_intentHash];
         stakeVault.unlockStake(_intentHash);
-        emit DisputeProtectionIntentReleased(_intentHash);
+        emit ProtectionReleased(_intentHash);
     }
 
-    function _calculateReleaseEligibleAt(uint64 _riskWindow) internal view returns (uint64) {
-        uint256 releaseEligibleAt = block.timestamp + _riskWindow;
-        if (releaseEligibleAt > type(uint64).max) revert TimestampOverflow(releaseEligibleAt);
-        return uint64(releaseEligibleAt);
+    function _maturity(uint64 _window) internal view returns (uint64) {
+        uint256 maturesAt = block.timestamp + _window;
+        if (maturesAt > type(uint64).max) revert TimestampOverflow(maturesAt);
+        return uint64(maturesAt);
     }
 
     function _currentTimestamp() internal view returns (uint64) {

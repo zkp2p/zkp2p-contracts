@@ -78,15 +78,15 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         _assertFees();
     }
 
-    event DisputeProtectionIntentSettled(bytes32 indexed intentHash, address indexed depositor);
+    event ProtectionOpened(bytes32 indexed intentHash, address indexed depositor);
 
     function _expectDeferredSettlement(bytes32 id) internal {
         vm.expectEmit(true, true, false, true, address(protection));
-        emit DisputeProtectionIntentSettled(id, depositor);
+        emit ProtectionOpened(id, depositor);
     }
 
     function _isOpen(bytes32 id) internal view returns (bool) {
-        return protection.getDisputeProtectionIntent(id).depositor != address(0);
+        return protection.getProtection(id).depositor != address(0);
     }
 
     function _whitelistTaker() internal returns (AddressGroupRegistry groups, bytes32 group) {
@@ -296,7 +296,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         _stake(vault, taker, INTENT_AMOUNT);
         bytes32 id = _signalDefault();
         vm.expectEmit(true, true, false, true, address(protection));
-        emit DisputeProtectionIntentSettled(id, depositor);
+        emit ProtectionOpened(id, depositor);
         _settle(id, 2 * INTENT_AMOUNT, RISK_WINDOW);
         _assertLock(id, taker, INTENT_AMOUNT);
         assertEq(token.balanceOf(other), NET);
@@ -351,8 +351,13 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
     function _release(bytes32 id) internal {
         (,, uint64 maturesAt) = vault.locks(id);
         vm.warp(maturesAt);
-        protection.releaseMaturedDisputeProtectionIntent(id);
+        protection.release(_ids(id));
         assertEq(vault.lockedStake(other), 0);
         assertEq(vault.freeStake(other), NET);
+    }
+
+    function _ids(bytes32 id) internal pure returns (bytes32[] memory ids) {
+        ids = new bytes32[](1);
+        ids[0] = id;
     }
 }

@@ -17,8 +17,8 @@ import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
 import {AttestationVerifierMock} from "../../mocks/AttestationVerifierMock.sol";
 
 contract DisputeProtectionPolicyV2Test is Test {
-    event DisputeProtectionIntentSettled(bytes32 indexed intentHash, address indexed depositor);
-    event DisputeProtectionIntentReleased(bytes32 indexed intentHash);
+    event ProtectionOpened(bytes32 indexed intentHash, address indexed depositor);
+    event ProtectionReleased(bytes32 indexed intentHash);
     event OrchestratorAuthorizationUpdated(address indexed orchestrator, bool isAuthorized);
     event DisputeVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
     uint64 internal constant WINDOW = 14 days;
@@ -74,11 +74,11 @@ contract DisputeProtectionPolicyV2Test is Test {
         vault.depositStake(amount);
         vm.stopPrank();
     }
-    function _record() internal view returns (P.DisputeProtectionIntent memory) {
-        return policy.getDisputeProtectionIntent(ID);
+    function _record() internal view returns (P.Protection memory) {
+        return policy.getProtection(ID);
     }
     function _assertOpen(bytes32 id, bool open) internal view {
-        assertEq(policy.getDisputeProtectionIntent(id).depositor != address(0), open);
+        assertEq(policy.getProtection(id).depositor != address(0), open);
     }
     function _assertLock(bytes32 id, address owner, uint256 amount, uint256 maturesAt) internal view {
         (address lockOwner, uint256 lockAmount, uint64 lockMaturity) = vault.locks(id);
@@ -113,7 +113,7 @@ contract DisputeProtectionPolicyV2Test is Test {
     function test_SettlementStoresDepositorAndMethodAndEmitsOneEvent() public {
         vm.recordLogs();
         vm.expectEmit(true, true, false, true, address(policy));
-        emit DisputeProtectionIntentSettled(ID, DEPOSITOR);
+        emit ProtectionOpened(ID, DEPOSITOR);
         _defer();
         // expectEmit also records the test's expected log; the policy emits exactly one event.
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -154,7 +154,7 @@ contract DisputeProtectionPolicyV2Test is Test {
     function test_StakeBoundaryEqualLocksStake() public {
         _stake(TAKER, GROSS);
         vm.expectEmit(true, true, false, true, address(policy));
-        emit DisputeProtectionIntentSettled(ID, DEPOSITOR);
+        emit ProtectionOpened(ID, DEPOSITOR);
         assertFalse(_settle(ID, GROSS, NET));
         _assertLock(ID, TAKER, GROSS, block.timestamp + WINDOW);
     }
@@ -216,12 +216,12 @@ contract DisputeProtectionPolicyV2Test is Test {
     }
     function test_SettleTwiceReverts() public {
         _settleStake();
-        vm.expectRevert(abi.encodeWithSelector(P.DisputeProtectionIntentAlreadyExists.selector, ID));
+        vm.expectRevert(abi.encodeWithSelector(P.ProtectionExists.selector, ID));
         _settle(ID, GROSS, NET);
     }
     function test_SettleUnfundedDeferredTwiceReverts() public {
         _defer();
-        vm.expectRevert(abi.encodeWithSelector(P.DisputeProtectionIntentAlreadyExists.selector, ID));
+        vm.expectRevert(abi.encodeWithSelector(P.ProtectionExists.selector, ID));
         _settle(ID, GROSS, NET);
     }
     function test_FundDeferredLocksNetForRecipient() public {
@@ -272,31 +272,31 @@ contract DisputeProtectionPolicyV2Test is Test {
     function test_DisputeAfterReleaseReverts() public {
         _fund();
         _mature(ID);
-        policy.releaseMaturedDisputeProtectionIntent(ID);
+        policy.release(_ids(ID));
         IDisputeVerifier.DisputeAttestation memory a = _attestation();
-        vm.expectRevert(abi.encodeWithSelector(P.DisputeProtectionIntentNotFound.selector, ID));
+        vm.expectRevert(abi.encodeWithSelector(P.ProtectionNotFound.selector, ID));
         policy.submitDispute(a);
     }
     function test_DisputeUnknownIntentReverts() public {
         IDisputeVerifier.DisputeAttestation memory a = _attestation();
-        vm.expectRevert(abi.encodeWithSelector(P.DisputeProtectionIntentNotFound.selector, ID));
+        vm.expectRevert(abi.encodeWithSelector(P.ProtectionNotFound.selector, ID));
         policy.submitDispute(a);
     }
     function test_ReleaseBeforeMaturityReverts() public {
         _fund();
-        vm.expectRevert(abi.encodeWithSelector(P.DisputeProtectionIntentNotReleaseEligible.selector, uint64(block.timestamp + WINDOW), uint64(block.timestamp)));
-        policy.releaseMaturedDisputeProtectionIntent(ID);
+        vm.expectRevert(abi.encodeWithSelector(P.NotMatured.selector, uint64(block.timestamp + WINDOW), uint64(block.timestamp)));
+        policy.release(_ids(ID));
     }
     function test_ReleaseUnknownIntentReverts() public {
-        vm.expectRevert(abi.encodeWithSelector(P.DisputeProtectionIntentNotFound.selector, ID));
-        policy.releaseMaturedDisputeProtectionIntent(ID);
+        vm.expectRevert(abi.encodeWithSelector(P.ProtectionNotFound.selector, ID));
+        policy.release(_ids(ID));
     }
     function test_ReleaseDeferredBecomesRecipientFreeStake() public {
         _fund();
         _mature(ID);
         vm.expectEmit(true, false, false, true, address(policy));
-        emit DisputeProtectionIntentReleased(ID);
-        policy.releaseMaturedDisputeProtectionIntent(ID);
+        emit ProtectionReleased(ID);
+        policy.release(_ids(ID));
         assertEq(vault.freeStake(RECIPIENT), NET);
         _assertOpen(ID, false);
         _assertLock(ID, address(0), 0, 0);
@@ -369,12 +369,12 @@ contract DisputeProtectionPolicyV2Test is Test {
         ids[0] = ID;
         ids[1] = ID2;
         uint64 timestamp = uint64(vm.getBlockTimestamp());
-        vm.expectRevert(abi.encodeWithSelector(P.DisputeProtectionIntentNotReleaseEligible.selector, timestamp + 1, timestamp));
-        policy.releaseMaturedDisputeProtectionIntents(ids);
+        vm.expectRevert(abi.encodeWithSelector(P.NotMatured.selector, timestamp + 1, timestamp));
+        policy.release(ids);
         _assertOpen(ID, true);
         assertEq(vault.lockedStake(TAKER), 2 * GROSS);
         vm.warp(vm.getBlockTimestamp() + 1);
-        policy.releaseMaturedDisputeProtectionIntents(ids);
+        policy.release(ids);
         assertEq(vault.lockedStake(TAKER), 0);
     }
     function test_SettlementWindowBoundedAsDefenceInDepth() public {
@@ -383,7 +383,7 @@ contract DisputeProtectionPolicyV2Test is Test {
         context.settlementData = abi.encode(uint256(max + 1));
         vm.expectRevert(abi.encodeWithSelector(P.InvalidDisputeWindow.selector, max + 1));
         policy.settleIntent(context);
-        assertEq(policy.MAX_RISK_WINDOW(), max);
+        assertEq(policy.MAX_DISPUTE_WINDOW(), max);
         _stake(TAKER, GROSS);
         context.settlementData = abi.encode(uint256(max));
         policy.settleIntent(context);
@@ -393,12 +393,17 @@ contract DisputeProtectionPolicyV2Test is Test {
     function test_Views() public {
         _defer();
 
-        P.DisputeProtectionIntent memory r = _record();
+        P.Protection memory r = _record();
         assertEq(r.depositor, DEPOSITOR);
         assertEq(r.paymentMethod, METHOD);
         assertTrue(policy.isOrchestratorAuthorized(address(this)));
         assertFalse(policy.isOrchestratorAuthorized(STRANGER));
         assertEq(address(policy.stakeVault()), address(vault));
         assertEq(address(policy.disputeNullifierRegistry()), address(disputes));
+    }
+
+    function _ids(bytes32 id) internal pure returns (bytes32[] memory ids) {
+        ids = new bytes32[](1);
+        ids[0] = id;
     }
 }

@@ -52,7 +52,7 @@ contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
                 for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].emitter != address(protection));
             }
             vm.clearMockedCalls();
-            bool open = protection.getDisputeProtectionIntent(id).depositor != address(0);
+            bool open = protection.getProtection(id).depositor != address(0);
             (address lockOwner, uint256 lockedAmount, uint64 maturesAt) = vault.locks(id);
             if (window == 0 || whitelisted) {
                 assertFalse(open);

@@ -42,7 +42,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
         freeStake = bound(freeStake, 0, 2e12);
         uint256 net = _settle(releaseAmount, freeStake, protocolBps, referralBps);
         bool staked = freeStake >= releaseAmount;
-        assertEq(policy.getDisputeProtectionIntent(ID).depositor, DEPOSITOR);
+        assertEq(policy.getProtection(ID).depositor, DEPOSITOR);
         (address owner, uint256 amount,) = vault.locks(ID);
         assertEq(amount, staked ? releaseAmount : net);
         assertEq(owner, staked ? TAKER : RECIPIENT);
@@ -55,7 +55,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
         _settle(releaseAmount, freeStake, protocolBps, referralBps);
         (address owner, uint256 amount, uint64 maturesAt) = vault.locks(ID);
         vm.warp(maturesAt);
-        policy.releaseMaturedDisputeProtectionIntent(ID);
+        policy.release(_ids(ID));
         _accounting();
         if (owner == RECIPIENT) {
             vm.prank(RECIPIENT);
@@ -115,6 +115,11 @@ contract DeferredPayoutCascadeFuzzTest is Test {
     function _accounting() internal view {
         assertGe(token.balanceOf(address(vault)), vault.totalAccounted());
     }
+
+    function _ids(bytes32 id) internal pure returns (bytes32[] memory ids) {
+        ids = new bytes32[](1);
+        ids[0] = id;
+    }
 }
 
 contract WhitelistedPayoutFuzzTest is DisputeProtectionStackV2Fixture {
@@ -136,7 +141,7 @@ contract WhitelistedPayoutFuzzTest is DisputeProtectionStackV2Fixture {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].emitter != address(protection));
         vm.clearMockedCalls();
-        assertEq(protection.getDisputeProtectionIntent(id).depositor, address(0));
+        assertEq(protection.getProtection(id).depositor, address(0));
         assertEq(token.balanceOf(other), NET);
         assertEq(vault.freeStake(taker), stake);
         assertEq(vault.lockedStake(taker), 0);

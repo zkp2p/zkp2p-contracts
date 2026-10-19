@@ -37,11 +37,11 @@ contract SettlementPolicyHandler is DisputeProtectionStackV2Fixture {
         }
         (address owner, uint256 amount,) = vault.locks(id);
         if (!protected) {
-            assertEq(protection.getDisputeProtectionIntent(id).depositor, address(0));
+            assertEq(protection.getProtection(id).depositor, address(0));
             assertEq(amount, 0);
             assertEq(token.balanceOf(other) - recipientBefore, NET);
         } else {
-            assertEq(protection.getDisputeProtectionIntent(id).depositor, depositor);
+            assertEq(protection.getProtection(id).depositor, depositor);
             assertEq(owner, hasStake ? taker : other);
             assertEq(amount, hasStake ? INTENT_AMOUNT : NET);
             assertEq(token.balanceOf(other) - recipientBefore, hasStake ? NET : 0);
@@ -52,10 +52,10 @@ contract SettlementPolicyHandler is DisputeProtectionStackV2Fixture {
     function release(uint256 index) external {
         if (settled.length == 0) return;
         bytes32 id = settled[index % settled.length];
-        if (protection.getDisputeProtectionIntent(id).depositor == address(0)) return;
+        if (protection.getProtection(id).depositor == address(0)) return;
         (address owner, uint256 amount, uint64 maturesAt) = vault.locks(id);
         if (block.timestamp < maturesAt) vm.warp(maturesAt);
-        protection.releaseMaturedDisputeProtectionIntent(id);
+        protection.release(_ids(id));
         if (owner == other) {
             vm.prank(other);
             vault.withdrawStake(amount);
@@ -69,10 +69,15 @@ contract SettlementPolicyHandler is DisputeProtectionStackV2Fixture {
             bytes32 id = settled[index];
             (address owner, uint256 amount,) = vault.locks(id);
             // A policy record exists exactly while its funded vault lock does.
-            assertEq(protection.getDisputeProtectionIntent(id).depositor != address(0), owner != address(0));
+            assertEq(protection.getProtection(id).depositor != address(0), owner != address(0));
             totalLocked += amount;
         }
         assertEq(totalLocked, vault.lockedStake(taker) + vault.lockedStake(other));
+    }
+
+    function _ids(bytes32 id) internal pure returns (bytes32[] memory ids) {
+        ids = new bytes32[](1);
+        ids[0] = id;
     }
 }
 

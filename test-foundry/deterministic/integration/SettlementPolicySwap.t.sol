@@ -25,13 +25,13 @@ contract SettlementPolicySwapTest is DisputeProtectionStackV2Fixture {
         bytes32 second = _signalDefault();
         _settle(second, INTENT_AMOUNT, RISK_WINDOW);
         assertEq(vault.lockController(second), address(successor));
-        assertEq(successor.getDisputeProtectionIntent(second).depositor, depositor);
-        assertEq(protection.getDisputeProtectionIntent(second).depositor, address(0));
-        assertEq(successor.getDisputeProtectionIntent(first).depositor, address(0));
+        assertEq(successor.getProtection(second).depositor, depositor);
+        assertEq(protection.getProtection(second).depositor, address(0));
+        assertEq(successor.getProtection(first).depositor, address(0));
         assertEq(vault.lockedStake(other), 2 * NET);
 
         vm.warp(firstMaturesAt);
-        protection.releaseMaturedDisputeProtectionIntent(first);
+        protection.release(_ids(first));
         assertEq(vault.lockController(first), address(0));
         assertEq(vault.lockedStake(other), NET);
         assertEq(vault.freeStake(other), NET);
@@ -45,7 +45,7 @@ contract SettlementPolicySwapTest is DisputeProtectionStackV2Fixture {
         assertFalse(vault.isController(address(protection)));
         (,, uint64 secondMaturesAt) = vault.locks(second);
         vm.warp(secondMaturesAt);
-        successor.releaseMaturedDisputeProtectionIntent(second);
+        successor.release(_ids(second));
         vm.prank(other);
         vault.withdrawStake(NET);
         assertEq(token.balanceOf(other), 2 * NET);
@@ -53,5 +53,10 @@ contract SettlementPolicySwapTest is DisputeProtectionStackV2Fixture {
         assertEq(vault.totalStaked(), 0);
         assertEq(vault.totalAccounted(), 0);
         assertEq(token.balanceOf(address(vault)), 0);
+    }
+
+    function _ids(bytes32 id) internal pure returns (bytes32[] memory ids) {
+        ids = new bytes32[](1);
+        ids[0] = id;
     }
 }

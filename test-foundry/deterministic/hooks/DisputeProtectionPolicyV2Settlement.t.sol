@@ -13,7 +13,7 @@ import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
 import {AttestationVerifierMock} from "../../mocks/AttestationVerifierMock.sol";
 
 contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
-    event DisputeProtectionIntentSettled(bytes32 indexed intentHash, address indexed depositor);
+    event ProtectionOpened(bytes32 indexed intentHash, address indexed depositor);
 
     bytes32 internal constant ID = keccak256("intent");
     uint256 internal constant NET = INTENT_AMOUNT - 1e6;
@@ -37,7 +37,7 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
     }
 
     function _isOpen(bytes32 id) internal view returns (bool) {
-        return policy.getDisputeProtectionIntent(id).depositor != address(0);
+        return policy.getProtection(id).depositor != address(0);
     }
 
     function _fund(bytes32 id, uint256 window) internal {
@@ -48,7 +48,7 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
     function test_RegisteredRelayerTakerIsProtected() public {
         relayerRegistry.addRelayer(taker);
         vm.expectEmit(true, true, false, true, address(policy));
-        emit DisputeProtectionIntentSettled(ID, depositor);
+        emit ProtectionOpened(ID, depositor);
         assertEq(policy.settleIntent(_context(ID, 14 days)), address(vault));
         assertTrue(_isOpen(ID));
     }
@@ -99,7 +99,7 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
 
     function test_SignedWindowsSetDeferredMaturity() public {
         uint256[3] memory windows = [uint256(1), uint256(7 days), uint256(180 days)];
-        assertEq(policy.MAX_RISK_WINDOW(), windows[2]);
+        assertEq(policy.MAX_DISPUTE_WINDOW(), windows[2]);
         for (uint256 i; i < windows.length; ++i) {
             bytes32 id = bytes32(i + 1);
             assertEq(policy.settleIntent(_context(id, windows[i])), address(vault));
