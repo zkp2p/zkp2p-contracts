@@ -47,7 +47,7 @@ abstract contract DisputeProtectionStackV2Fixture is OrchestratorV4Fixture {
         vault = new StakeVaultV2(address(this), token, address(0));
         disputeNullifiers = new NullifierRegistry();
         disputeVerifier = new DisputeVerifier(address(this), nullifiers, witnesses);
-        protection = new DisputeProtectionPolicyV2(address(this), vault, disputeVerifier, disputeNullifiers, whitelist);
+        protection = new DisputeProtectionPolicyV2(address(this), vault, disputeVerifier, disputeNullifiers);
         vault.setController(address(protection), true);
         disputeNullifiers.addWritePermission(address(protection));
         protection.setOrchestratorAuthorization(address(orchestrator), true);

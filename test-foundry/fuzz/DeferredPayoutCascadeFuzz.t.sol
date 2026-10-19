@@ -2,11 +2,6 @@
 pragma solidity ^0.8.18;
 
 import {IIntentSettlementPolicy as S} from "contracts/interfaces/IIntentSettlementPolicy.sol";
-import {IWhitelistPolicy} from "contracts/interfaces/IWhitelistPolicy.sol";
-import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
-import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
-import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
-import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DisputeProtectionStackV2Fixture} from "../deterministic/helpers/DisputeProtectionStackV2Fixture.sol";
@@ -29,7 +24,6 @@ contract DeferredPayoutCascadeFuzzTest is Test {
     USDCMock internal token;
     StakeVaultV2 internal vault;
     DisputeProtectionPolicyV2 internal policy;
-    WhitelistPolicy internal whitelist;
 
     function setUp() public {
         token = new USDCMock(1e18, "USDC", "USDC");
@@ -38,8 +32,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
         signers[0] = vm.addr(0xA11CE);
         DisputeVerifier verifier = new DisputeVerifier(address(this), new NullifierRegistryV2(new NullifierRegistry()), new MultiAttestationVerifier(signers, 1));
         NullifierRegistry disputes = new NullifierRegistry();
-        if (address(whitelist) == address(0)) whitelist = new WhitelistPolicy(new AddressGroupRegistry(), new EscrowRegistry(), new OrchestratorRegistry());
-        policy = new DisputeProtectionPolicyV2(address(this), vault, verifier, disputes, whitelist);
+        policy = new DisputeProtectionPolicyV2(address(this), vault, verifier, disputes);
         vault.setController(address(policy), true);
         policy.setOrchestratorAuthorization(address(this), true);
         disputes.addWritePermission(address(policy));
@@ -81,7 +74,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
     function testFuzz_AttestedWindowSetsMaturity(uint64 window, bool staked) public {
         window = uint64(bound(window, 1, 180 days));
         if (staked) _deposit(TAKER, 100e6);
-        bool deferred = (policy.settleIntent(S.SettlementContext(ID, address(token), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, 100e6, 99e6, abi.encode(uint256(window)), false)) != address(0));
+        bool deferred = (policy.settleIntent(S.SettlementContext(ID, address(token), TAKER, RECIPIENT, DEPOSITOR, METHOD, 100e6, 99e6, abi.encode(uint256(window)))) != address(0));
         P.DisputeProtectionIntent memory record = policy.getDisputeProtectionIntent(ID);
         assertEq(deferred, !staked);
         assertEq(uint256(record.status), uint256(P.DisputeProtectionIntentStatus.SETTLED));
@@ -103,7 +96,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
             uint256 relocked = bound(seed, 0, available);
             bytes32 lockId = keccak256(abi.encode("relock", step));
             if (relocked != 0) {
-                assertFalse((policy.settleIntent(S.SettlementContext(lockId, address(token), RECIPIENT, TAKER, DEPOSITOR, address(0), 0, METHOD, relocked, relocked, abi.encode(uint256(WINDOW)), false)) != address(0)));
+                assertFalse((policy.settleIntent(S.SettlementContext(lockId, address(token), RECIPIENT, TAKER, DEPOSITOR, METHOD, relocked, relocked, abi.encode(uint256(WINDOW)))) != address(0)));
                 _accounting();
             }
             paid += _claim(net - paid, step % 2 == 0 ? TAKER : RECIPIENT);
@@ -131,7 +124,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
         uint256 referralFee = gross * referralBps / 10000;
         net = gross - protocolFee - referralFee;
         if (freeStake != 0) _deposit(TAKER, freeStake);
-        bool deferred = (policy.settleIntent(S.SettlementContext(ID, address(token), TAKER, RECIPIENT, DEPOSITOR, address(0), 0, METHOD, gross, net, abi.encode(uint256(WINDOW)), false)) != address(0));
+        bool deferred = (policy.settleIntent(S.SettlementContext(ID, address(token), TAKER, RECIPIENT, DEPOSITOR, METHOD, gross, net, abi.encode(uint256(WINDOW)))) != address(0));
         _accounting();
         token.transfer(address(0x44), protocolFee);
         token.transfer(address(0x55), referralFee);

@@ -12,19 +12,16 @@ interface IIntentSettlementPolicy {
         address taker;
         address recipient;
         address depositor; // Captured before escrow unlock can delete the deposit.
-        address escrow;
-        uint256 depositId;
         bytes32 paymentMethod;
         uint256 releaseAmount;
         uint256 netAmount;
         bytes extensionData;
-        bool isManualRelease;
     }
 
     /// @notice Selects immediate or deferred settlement.
-    /// @dev Signed extension word 0 = dispute window (uint256 seconds), required for non-manual
-    /// settlements and at most 180 days. Later words are reserved. The current policy exempts zero windows,
-    /// live whitelisted takers and non-stake tokens. Manual release skips these checks.
+    /// @dev O4 calls this only for verified fulfilments by takers that were not whitelisted at signal.
+    /// Signed extension word 0 = dispute window (uint256 seconds), at most 180 days. Later words are reserved.
+    /// The current policy pays zero windows and non-stake tokens now.
     /// @return deferralVault Zero to pay intent.to now; otherwise the vault that must receive
     /// netAmount before onDeferredPayoutFunded is called in the same transaction.
     function settleIntent(SettlementContext calldata context) external returns (address deferralVault);

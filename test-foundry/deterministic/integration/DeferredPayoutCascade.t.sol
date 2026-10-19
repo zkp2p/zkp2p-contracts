@@ -141,35 +141,31 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         _assertFees();
     }
 
-    function test_AllowedTakerWithWhitelistDisabledAtSettlementIsProtected() public {
+    function test_WhitelistDisabledAfterSignalStillPaysNow() public {
         _whitelistTaker();
         bytes32 id = _signalDefault();
         vm.prank(depositor);
         whitelist.setEnabled(address(escrow), depositId, METHOD, false);
-        assertTrue(whitelist.isTakerAllowed(address(escrow), depositId, METHOD, taker));
+        _settleWhitelistedWithoutRecord(id);
+        assertEq(token.balanceOf(other), NET);
+        _assertFees();
+    }
+
+    function test_WhitelistEnabledAfterSignalIsProtected() public {
+        bytes32 id = _signalDefault();
+        _whitelistTaker();
         _assertDeferredSettlement(id);
     }
 
-    function test_TakerRemovedAfterSignalIsProtected() public {
+    function test_TakerRemovedAfterSignalStillPaysNow() public {
         (AddressGroupRegistry groups, bytes32 group) = _whitelistTaker();
         bytes32 id = _signalDefault();
         address[] memory members = new address[](1);
         members[0] = taker;
         groups.removeMembers(group, members);
-        _assertDeferredSettlement(id);
-    }
-
-    function test_WhitelistedRecipientDoesNotBypass() public {
-        (AddressGroupRegistry groups, bytes32 group) = _whitelistTaker();
-        bytes32 id = _signalDefault();
-        address[] memory members = new address[](1);
-        members[0] = taker;
-        groups.removeMembers(group, members);
-        members[0] = other;
-        groups.addMembers(group, members);
-        assertTrue(whitelist.isTakerAllowed(address(escrow), depositId, METHOD, other));
-        assertFalse(whitelist.isTakerAllowed(address(escrow), depositId, METHOD, taker));
-        _assertDeferredSettlement(id);
+        _settleWhitelistedWithoutRecord(id);
+        assertEq(token.balanceOf(other), NET);
+        _assertFees();
     }
 
     function test_WhitelistedTakerManualReleaseCreatesNoRecord() public {

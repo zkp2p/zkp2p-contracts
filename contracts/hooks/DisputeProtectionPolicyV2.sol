@@ -4,7 +4,6 @@ pragma solidity ^0.8.18;
 
 import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 import {IIntentSettlementPolicy} from "../interfaces/IIntentSettlementPolicy.sol";
-import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
@@ -25,10 +24,10 @@ import {IStakeVaultV2} from "../interfaces/IStakeVaultV2.sol";
  * predecessor keeps serving its own locks; de-authorize it only after its locks drain. Any authorized vault
  * controller can lock any owner's free stake and pay out that free stake only to its owner.
  * Protection applies only to stake-token deposits with a nonzero attested window supplied in the signed extension.
- * There are no per-method windows or paused admissions. Whitelisted takers, manual releases and zero
- * windows settle without a record or event. Relayer takers get no exemption. Non-stake tokens return without
- * a record or event. Protected settlements lock gross stake or defer the net payout until now plus the attested
- * window; only these STAKE and DEFERRED_PAYOUT settlements emit DisputeProtectionIntentSettled.
+ * There are no per-method windows or paused admissions. O4 never calls the policy for manual releases or for
+ * takers whitelisted at signal. Zero windows and non-stake tokens return without a record or event. Protected
+ * settlements lock gross stake or defer the net payout until now plus the attested window; only these STAKE and
+ * DEFERRED_PAYOUT settlements emit DisputeProtectionIntentSettled.
  */
 contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, ReentrancyGuard, ERC165 {
     /* ============ Constants ============ */
@@ -39,9 +38,6 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
 
     /// @notice Stake custody and lock accounting controlled by this policy.
     IStakeVaultV2 public immutable override stakeVault;
-
-    /// @notice Live deposit/payment-method whitelist used to exempt allowed takers.
-    IWhitelistPolicy public immutable whitelistPolicy;
 
     /// @notice Dedicated replay registry for payment-method-scoped dispute nullifiers.
     INullifierRegistry public immutable disputeNullifierRegistry;
@@ -65,22 +61,18 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
      * @param _stakeVault Vault holding and locking taker collateral.
      * @param _disputeVerifier Verifier for signed dispute evidence.
      * @param _disputeNullifierRegistry Dedicated registry that rejects reused dispute nullifiers.
-     * @param _whitelistPolicy Live whitelist for settlement exemptions.
      */
     constructor(
         address _owner,
         IStakeVaultV2 _stakeVault,
         IDisputeVerifier _disputeVerifier,
-        INullifierRegistry _disputeNullifierRegistry,
-        IWhitelistPolicy _whitelistPolicy
+        INullifierRegistry _disputeNullifierRegistry
     ) {
         if (_owner == address(0)) revert ZeroAddress();
         _validateDependency(address(_stakeVault));
         _validateDependency(address(_disputeVerifier));
         _validateDependency(address(_disputeNullifierRegistry));
 
-        _validateDependency(address(_whitelistPolicy));
-        whitelistPolicy = _whitelistPolicy;
         stakeVault = _stakeVault;
         disputeVerifier = _disputeVerifier;
         disputeNullifierRegistry = _disputeNullifierRegistry;
@@ -102,17 +94,10 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
     function settleIntent(SettlementContext calldata _context)
         external override onlyAuthorizedOrchestrator returns (address deferralVault)
     {
-        if (_context.isManualRelease) return address(0);
         if (_context.extensionData.length < 32) revert MissingDisputeWindow();
         uint256 window = abi.decode(_context.extensionData[:32], (uint256));
         if (window > MAX_RISK_WINDOW) revert InvalidDisputeWindow(window);
         if (window == 0) return address(0);
-        if (
-            whitelistPolicy.enabled(_context.escrow, _context.depositId, _context.paymentMethod)
-                && whitelistPolicy.isTakerAllowed(
-                    _context.escrow, _context.depositId, _context.paymentMethod, _context.taker
-                )
-        ) return address(0);
         if (_context.token != address(stakeVault.stakeToken())) return address(0);
         if (disputeProtectionIntentByIntentHash[_context.intentHash].status != DisputeProtectionIntentStatus.NONE) {
             revert DisputeProtectionIntentAlreadyExists(_context.intentHash);

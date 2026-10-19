@@ -36,13 +36,10 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         assertEq(context.depositor, depositor);
         assertEq(context.taker, taker);
         assertEq(context.recipient, taker);
-        assertEq(context.escrow, address(escrow));
-        assertEq(context.depositId, depositId);
         assertEq(context.paymentMethod, METHOD);
         assertEq(context.releaseAmount, INTENT_AMOUNT);
         assertEq(context.netAmount, INTENT_AMOUNT - 250_000);
         assertEq(context.extensionData, abi.encode(uint256(1)));
-        assertFalse(context.isManualRelease);
         assertEq(token.balanceOf(referrer) - referrerBefore, 150_000);
         assertEq(token.balanceOf(other) - otherBefore, 100_000);
         assertEq(token.balanceOf(taker) - recipientBefore, INTENT_AMOUNT - 250_000);
@@ -69,8 +66,9 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         _fulfill(intentHash, INTENT_AMOUNT, CONVERSION_RATE);
     }
 
-    function test_ManualReleaseRoutesThroughPolicyToRecipient() public {
+    function test_ManualReleaseSkipsPolicyAndPaysRecipient() public {
         orchestrator.setSettlementPolicy(policyMock);
+        policyMock.setRevertOnCallback(true);
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.referralFees = _twoReferralFees();
         params.to = delegate;
@@ -82,10 +80,7 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         emit IntentFulfilled(intentHash, delegate, netAmount, true);
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(intentHash);
-        assertEq(policyMock.settlementCalls(), 1);
-        (,,,,,,,,,, bytes memory extensionData, bool isManualRelease) = policyMock.lastSettlementContext();
-        assertEq(extensionData, "");
-        assertTrue(isManualRelease);
+        assertEq(policyMock.settlementCalls(), 0);
         assertEq(token.balanceOf(taker), recipientBefore);
         assertEq(token.balanceOf(delegate) - hookRecipientBefore, netAmount);
         assertEq(postIntentHook.lastPostIntentHookData(), "");
@@ -208,6 +203,35 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         vm.prank(depositor);
         whitelist.setEnabled(address(escrow), depositId, METHOD, false);
         _signal(other, params);
+    }
+
+    function test_TakerWhitelistedAtSignalSkipsPolicy() public {
+        address[] memory allowed = new address[](1);
+        allowed[0] = taker;
+        vm.prank(depositor);
+        whitelist.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), allowed);
+        orchestrator.setSettlementPolicy(policyMock);
+        policyMock.setRevertOnCallback(true);
+        bytes32 id = _signalDefault();
+        assertTrue(orchestrator.getIntent(id).takerWhitelisted);
+        vm.prank(depositor);
+        whitelist.setEnabled(address(escrow), depositId, METHOD, false);
+        _fulfill(id, INTENT_AMOUNT, CONVERSION_RATE);
+        assertEq(policyMock.settlementCalls(), 0);
+        assertEq(token.balanceOf(taker), INTENT_AMOUNT);
+    }
+
+    function test_WhitelistEnabledAfterSignalStillCallsPolicy() public {
+        orchestrator.setSettlementPolicy(policyMock);
+        bytes32 id = _signalDefault();
+        assertFalse(orchestrator.getIntent(id).takerWhitelisted);
+        address[] memory allowed = new address[](1);
+        allowed[0] = taker;
+        vm.prank(depositor);
+        whitelist.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), allowed);
+        _fulfill(id, INTENT_AMOUNT, CONVERSION_RATE);
+        assertEq(policyMock.settlementCalls(), 1);
+        assertEq(policyMock.lastIntentHash(), id);
     }
 
     function test_ConstructorRequiresDeployedWhitelist() public {

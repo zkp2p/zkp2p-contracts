@@ -8,7 +8,8 @@ import { IIntentSettlementPolicy } from "./IIntentSettlementPolicy.sol";
 /**
  * @title IOrchestratorV4
  * @notice Interface for the V4 orchestrator with deferred settlement.
- * @dev Intent keeps V3 field order with the intent hooks removed and the hook data replaced by payerCommitment.
+ * @dev Intent keeps V3 field order with the intent hooks removed and the hook data replaced by payerCommitment,
+ * then appends takerWhitelisted.
  */
 interface IOrchestratorV4 {
 
@@ -27,6 +28,7 @@ interface IOrchestratorV4 {
         bytes32 payeeId;                            // Hashed payee identifier to whom the owner will pay offchain
         IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker
         bytes payerCommitment;                      // What the payer commits to, e.g. a salted payer ID hash; empty = none
+        bool takerWhitelisted;                      // Taker passed the deposit's enabled whitelist at signal; skips the policy
     }
 
     struct SignalIntentParams {

@@ -32,7 +32,8 @@ import { ReferralFeeLib } from "./lib/ReferralFeeLib.sol";
  * @notice Standalone V4 orchestrator for the ZKP2P protocol. Owns the complete intent (order)
  * lifecycle — signal, cancel, fulfill, manual release, prune, orphan cleanup — and extends it
  * with a governance-selected settlement policy and deferred settlement.
- * @dev Intent keeps V3 field order with the intent hooks removed and the hook data replaced by payerCommitment.
+ * @dev Intent keeps V3 field order with the intent hooks removed and the hook data replaced by payerCommitment,
+ * then appends takerWhitelisted.
  */
 contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
 
@@ -120,7 +121,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         whenNotPaused
     {
         // Checks
-        _validateSignalIntent(_params);
+        bool takerWhitelisted = _validateSignalIntent(_params);
 
         // Effects
         bytes32 intentHash = _calculateIntentHash();
@@ -147,6 +148,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         storedIntent.payeeId = depData.payeeDetails;
         storedIntent.timestamp = block.timestamp;
         storedIntent.payerCommitment = _params.payerCommitment;
+        storedIntent.takerWhitelisted = takerWhitelisted;
 
         for (uint256 i = 0; i < _params.referralFees.length; ++i) {
             IReferralFee.ReferralFee calldata referralFee = _params.referralFees[i];
@@ -257,8 +259,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     /**
      * @notice Allows depositor to release funds to the payer in case of a failed fulfill intent or because of some other arrangement
      * between the two parties. Upon submission we check to make sure the msg.sender is the depositor, the intent is removed, and 
-     * escrow state is updated. Manual release notifies the current settlement policy with isManualRelease = true
-     * and an empty extension, then transfers the net payout to the recipient or the policy-selected deferral vault.
+     * escrow state is updated. Manual release pays the recipient directly without calling the settlement policy.
      *
      * @param _intentHash        Hash of intent to resolve by releasing the funds
      */
@@ -471,7 +472,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     /**
      * @notice Validates an intent before it is signaled.
      */
-    function _validateSignalIntent(SignalIntentParams calldata _intent) internal view {
+    function _validateSignalIntent(SignalIntentParams calldata _intent) internal view returns (bool takerWhitelisted) {
         // Check if account can have multiple intents
         bool canHaveMultipleIntents = relayerRegistry.isWhitelistedRelayer(msg.sender) || allowMultipleIntents;
         if (!canHaveMultipleIntents && accountIntents[msg.sender].length > 0) {
@@ -502,10 +503,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (minConversionRate == 0) revert CurrencyNotSupported(_intent.paymentMethod, _intent.fiatCurrency);
         if (_intent.conversionRate < minConversionRate) revert RateBelowMinimum(_intent.conversionRate, minConversionRate);
 
-        if (
-            whitelistPolicy.enabled(_intent.escrow, _intent.depositId, _intent.paymentMethod)
-                && !whitelistPolicy.isTakerAllowed(_intent.escrow, _intent.depositId, _intent.paymentMethod, msg.sender)
-        ) {
+        takerWhitelisted = whitelistPolicy.enabled(_intent.escrow, _intent.depositId, _intent.paymentMethod);
+        if (takerWhitelisted && !whitelistPolicy.isTakerAllowed(_intent.escrow, _intent.depositId, _intent.paymentMethod, msg.sender)) {
             revert TakerNotWhitelisted(_intent.escrow, _intent.depositId, _intent.paymentMethod, msg.sender);
         }
 
@@ -602,7 +601,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      * executable remainder to the deferral vault or directly to the recipient.
      * @dev A reverting settlement policy aborts the entire settlement, including the preceding fee transfers.
      * The settlement policy receives the depositor captured before escrow unlock and no token allowance.
-     * Manual release passes an empty extension to the settlement policy.
+     * Manual releases and whitelisted takers settle without calling the policy.
      */
     function _collectFeesTransferFundsAndExecuteAction(
         IERC20 _token,
@@ -621,7 +620,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         uint256 netAmount = _releaseAmount - netFees;
 
         address vault;
-        if (address(policy) != address(0)) {
+        if (address(policy) != address(0) && !_isManualRelease && !_intent.takerWhitelisted) {
             vault = policy.settleIntent(
                 IIntentSettlementPolicy.SettlementContext({
                     intentHash: _intentHash,
@@ -629,13 +628,10 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
                     depositor: _depositor,
                     taker: _intent.owner,
                     recipient: _intent.to,
-                    escrow: _intent.escrow,
-                    depositId: _intent.depositId,
                     paymentMethod: _intent.paymentMethod,
                     releaseAmount: _releaseAmount,
                     netAmount: netAmount,
-                    extensionData: _extensionData,
-                    isManualRelease: _isManualRelease
+                    extensionData: _extensionData
                 })
             );
         }

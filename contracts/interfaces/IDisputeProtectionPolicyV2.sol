@@ -4,8 +4,7 @@ pragma solidity ^0.8.18;
 import {IIntentSettlementPolicy} from "./IIntentSettlementPolicy.sol";
 import {IStakeVaultV2} from "./IStakeVaultV2.sol";
 
-/// @notice Selects dispute collateral, with a pay-now exemption for whitelisted takers. Manual and zero-window
-/// releases and non-stake tokens also pay now without a record or event.
+/// @notice Selects dispute collateral. Zero windows and non-stake tokens pay now without a record or event.
 interface IDisputeProtectionPolicyV2 is IIntentSettlementPolicy {
     enum DisputeProtectionIntentStatus { NONE, SETTLED, RELEASED, DISPUTED }
     /// @dev Exempt takers settle without creating a record.

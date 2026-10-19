@@ -18,15 +18,15 @@ contract SettlementPolicyHandler is DisputeProtectionStackV2Fixture {
         vm.prank(depositor);
         whitelist.setEnabled(address(escrow), depositId, METHOD, false);
         orchestrator.setSettlementPolicy(enabledAtSignal ? IIntentSettlementPolicy(address(protection)) : IIntentSettlementPolicy(address(0)));
-        bytes32 id = _signalDefault();
-        orchestrator.setSettlementPolicy(enableAfterSignal ? IIntentSettlementPolicy(address(protection)) : IIntentSettlementPolicy(address(0)));
-        if (staked && vault.freeStake(taker) < INTENT_AMOUNT) _stake(vault, taker, INTENT_AMOUNT);
         if (exempt) {
             address[] memory allowed = new address[](1);
             allowed[0] = taker;
             vm.prank(depositor);
             whitelist.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), allowed);
         }
+        bytes32 id = _signalDefault();
+        orchestrator.setSettlementPolicy(enableAfterSignal ? IIntentSettlementPolicy(address(protection)) : IIntentSettlementPolicy(address(0)));
+        if (staked && vault.freeStake(taker) < INTENT_AMOUNT) _stake(vault, taker, INTENT_AMOUNT);
         uint256 recipientBefore = token.balanceOf(other);
         bool protected = enableAfterSignal && !manual && !zeroWindow && !exempt;
         bool hasStake = vault.freeStake(taker) >= INTENT_AMOUNT;

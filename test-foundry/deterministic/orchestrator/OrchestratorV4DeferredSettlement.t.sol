@@ -111,23 +111,22 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
     function test_ExtensionWordZeroForwarded() public {
         verifier.setExtensionData(abi.encode(uint256(1)));
         _fulfill(_signalDefault(), INTENT_AMOUNT, CONVERSION_RATE);
-        (,,,,,,,,,, bytes memory extensionData,) = hook.lastSettlementContext();
+        (,,,,,,,, bytes memory extensionData) = hook.lastSettlementContext();
         assertEq(extensionData, abi.encode(uint256(1)));
         verifier.setExtensionData(abi.encode(uint256(0)));
         _fulfill(_signalDefault(), INTENT_AMOUNT, CONVERSION_RATE);
-        (,,,,,,,,,, extensionData,) = hook.lastSettlementContext();
+        (,,,,,,,, extensionData) = hook.lastSettlementContext();
         assertEq(extensionData, abi.encode(uint256(0)));
     }
 
-    function test_ManualReleasePassesEmptyExtension() public {
-        verifier.setExtensionData(abi.encode(uint256(1)));
+    function test_ManualReleaseNeverDefers() public {
+        hook.setDeferralVault(address(hook));
         bytes32 hash = _signalDefault();
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(hash);
-        (,,,,,,,,,, bytes memory extensionData, bool manual) = hook.lastSettlementContext();
-        assertEq(extensionData, "");
-        assertTrue(manual);
+        assertEq(hook.settlementCalls(), 0);
         assertEq(token.balanceOf(taker), INTENT_AMOUNT);
+        assertEq(token.balanceOf(address(hook)), 0);
     }
 
     function test_RevertsAgainstThreeFieldVerifier() public {
