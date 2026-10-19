@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-import {OrchestratorV4} from "contracts/OrchestratorV4.sol";
-import {IWhitelistPolicy} from "contracts/interfaces/IWhitelistPolicy.sol";
 import {IIntentSettlementPolicy} from "contracts/interfaces/IIntentSettlementPolicy.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {SettlementPolicyMock} from "../../mocks/SettlementPolicyMock.sol";
@@ -93,8 +91,7 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         orchestrator.setSettlementPolicy(policyMock);
         assertEq(address(orchestrator.settlementPolicy()), address(policyMock));
         orchestrator.setSettlementPolicy(IIntentSettlementPolicy(address(0)));
-        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.InvalidSettlementPolicy.selector, other));
-        orchestrator.setSettlementPolicy(IIntentSettlementPolicy(other));
+        assertEq(address(orchestrator.settlementPolicy()), address(0));
     }
 
     function test_DepositWhitelistSelectorsNoLongerExist() public view {
@@ -233,12 +230,4 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         assertEq(policyMock.settlementCalls(), 1);
         assertEq(policyMock.lastIntentHash(), id);
     }
-
-    function test_ConstructorRequiresDeployedWhitelist() public {
-        vm.expectRevert(IOrchestratorV4.ZeroAddress.selector);
-        new OrchestratorV4(address(this), CHAIN_ID, address(escrowRegistry), address(paymentVerifierRegistry), address(relayerRegistry), 0, protocolFeeRecipient, IWhitelistPolicy(address(0)));
-        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.InvalidWhitelistPolicy.selector, other));
-        new OrchestratorV4(address(this), CHAIN_ID, address(escrowRegistry), address(paymentVerifierRegistry), address(relayerRegistry), 0, protocolFeeRecipient, IWhitelistPolicy(other));
-    }
-
 }

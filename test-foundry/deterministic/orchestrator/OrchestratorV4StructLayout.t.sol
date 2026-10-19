@@ -110,8 +110,6 @@ contract OrchestratorV4StructLayoutTest is Test {
         assertEq(IIntentSettlementPolicy.settleIntent.selector, bytes4(keccak256(
             "settleIntent((bytes32,address,address,address,address,bytes32,uint256,uint256,bytes))"
         )));
-        assertEq(type(IIntentSettlementPolicy).interfaceId,
-            IIntentSettlementPolicy.settleIntent.selector ^ IIntentSettlementPolicy.onDeferredPayoutFunded.selector);
         IIntentSettlementPolicy.SettlementContext memory context = IIntentSettlementPolicy.SettlementContext(
             bytes32(uint256(1)), address(2), address(3), address(4), address(5), bytes32(uint256(6)), 7, 8, hex"cc"
         );

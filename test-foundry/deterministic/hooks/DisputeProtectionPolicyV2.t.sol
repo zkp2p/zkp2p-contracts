@@ -8,7 +8,6 @@ import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicy
 import {IDisputeProtectionPolicyV2 as P} from "contracts/interfaces/IDisputeProtectionPolicyV2.sol";
 import {IStakeVaultV2} from "contracts/interfaces/IStakeVaultV2.sol";
 import {IDisputeVerifier} from "contracts/interfaces/IDisputeVerifier.sol";
-import {INullifierRegistry} from "contracts/interfaces/INullifierRegistry.sol";
 import {StakeVaultV2} from "contracts/StakeVaultV2.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
@@ -208,22 +207,6 @@ contract DisputeProtectionPolicyV2Test is Test {
         _assertLock(ID, TAKER, GROSS, block.timestamp + 1 days);
         _assertLock(ID2, TAKER, GROSS, block.timestamp + 2 days);
     }
-    function test_ZeroAmountsFailClosed() public {
-        vm.expectRevert(abi.encodeWithSelector(P.InvalidSettlementAmount.selector, 0, NET));
-        _settle(ID, 0, NET);
-        vm.expectRevert(abi.encodeWithSelector(P.InvalidSettlementAmount.selector, GROSS, 0));
-        _settle(ID, GROSS, 0);
-    }
-    function test_SettleTwiceReverts() public {
-        _settleStake();
-        vm.expectRevert(abi.encodeWithSelector(P.ProtectionExists.selector, ID));
-        _settle(ID, GROSS, NET);
-    }
-    function test_SettleUnfundedDeferredTwiceReverts() public {
-        _defer();
-        vm.expectRevert(abi.encodeWithSelector(P.ProtectionExists.selector, ID));
-        _settle(ID, GROSS, NET);
-    }
     function test_FundDeferredLocksNetForRecipient() public {
         _stake(RECIPIENT, 10e6);
         _fund();
@@ -314,14 +297,10 @@ contract DisputeProtectionPolicyV2Test is Test {
         vm.stopPrank();
     }
 
-    function test_OrchestratorAuthorizationRetainsOwnerAndContractGuards() public {
+    function test_OrchestratorAuthorizationIsOwnerOnly() public {
         vm.expectRevert("Ownable: caller is not the owner");
         vm.prank(STRANGER);
         policy.setOrchestratorAuthorization(address(this), false);
-        vm.expectRevert(P.ZeroAddress.selector);
-        policy.setOrchestratorAuthorization(address(0), true);
-        vm.expectRevert(abi.encodeWithSelector(P.InvalidContract.selector, STRANGER));
-        policy.setOrchestratorAuthorization(STRANGER, true);
         vm.expectEmit(true, false, false, true, address(policy));
         emit OrchestratorAuthorizationUpdated(address(this), false);
         policy.setOrchestratorAuthorization(address(this), false);
@@ -330,24 +309,14 @@ contract DisputeProtectionPolicyV2Test is Test {
         _settle(ID, GROSS, NET);
         policy.setOrchestratorAuthorization(address(this), true);
         assertTrue(policy.isOrchestratorAuthorized(address(this)));
-        // Revocation does not require code; it must remain possible after a caller is retired.
-        policy.setOrchestratorAuthorization(STRANGER, false);
     }
     function test_RenounceDisabled() public {
         vm.expectRevert(P.OwnershipRenunciationDisabled.selector);
         policy.renounceOwnership();
     }
-    function test_ConstructorRejectsZeroOrCodelessDependencies() public {
+    function test_ConstructorRejectsZeroOwner() public {
         vm.expectRevert(P.ZeroAddress.selector);
         new DisputeProtectionPolicyV2(address(0), vault, verifier, disputes);
-        for (uint256 i; i < 3; ++i) {
-            for (uint256 j; j < 2; ++j) {
-                address bad = j == 0 ? address(0) : STRANGER;
-                if (j == 0) vm.expectRevert(P.ZeroAddress.selector);
-                else vm.expectRevert(abi.encodeWithSelector(P.InvalidContract.selector, bad));
-                new DisputeProtectionPolicyV2(address(this), i == 0 ? IStakeVaultV2(bad) : vault, i == 1 ? IDisputeVerifier(bad) : verifier, i == 2 ? INullifierRegistry(bad) : disputes);
-            }
-        }
     }
     function test_SetDisputeVerifier() public {
         DisputeVerifier next = new DisputeVerifier(address(this), payments, new AttestationVerifierMock());

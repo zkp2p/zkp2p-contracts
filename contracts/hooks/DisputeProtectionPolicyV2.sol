@@ -2,7 +2,6 @@
 
 pragma solidity ^0.8.18;
 
-import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 import {IIntentSettlementPolicy} from "../interfaces/IIntentSettlementPolicy.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
@@ -29,7 +28,7 @@ import {IStakeVaultV2} from "../interfaces/IStakeVaultV2.sol";
  * settlements lock gross stake or defer the net payout until now plus the attested window. The vault lock holds
  * the owner, amount and maturity; this policy keeps only the depositor and payment method a dispute needs.
  */
-contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, ReentrancyGuard, ERC165 {
+contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, ReentrancyGuard {
     /* ============ Constants ============ */
 
     uint64 public constant MAX_DISPUTE_WINDOW = 180 days;
@@ -69,10 +68,6 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
         INullifierRegistry _disputeNullifierRegistry
     ) {
         if (_owner == address(0)) revert ZeroAddress();
-        _validateDependency(address(_stakeVault));
-        _validateDependency(address(_disputeVerifier));
-        _validateDependency(address(_disputeNullifierRegistry));
-
         stakeVault = _stakeVault;
         disputeVerifier = _disputeVerifier;
         disputeNullifierRegistry = _disputeNullifierRegistry;
@@ -98,10 +93,6 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
         if (window > MAX_DISPUTE_WINDOW) revert InvalidDisputeWindow(window);
         if (window == 0) return address(0);
         if (_context.token != address(stakeVault.stakeToken())) return address(0);
-        if (protections[_context.intentHash].depositor != address(0)) revert ProtectionExists(_context.intentHash);
-        if (_context.releaseAmount == 0 || _context.netAmount == 0) {
-            revert InvalidSettlementAmount(_context.releaseAmount, _context.netAmount);
-        }
         return _protect(_context, uint64(window));
     }
 
@@ -164,10 +155,9 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
 
     /**
      * @notice GOVERNANCE ONLY: Replaces the verifier used for future dispute submissions.
-     * @param _verifier New non-zero deployed dispute verifier.
+     * @param _verifier New dispute verifier.
      */
     function setDisputeVerifier(address _verifier) external onlyOwner {
-        _validateDependency(_verifier);
         address previousVerifier = address(disputeVerifier);
         disputeVerifier = IDisputeVerifier(_verifier);
         emit DisputeVerifierUpdated(previousVerifier, _verifier);
@@ -180,7 +170,6 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
      * @param _isAuthorized Whether the orchestrator may mutate dispute protection intent state.
      */
     function setOrchestratorAuthorization(address _orchestrator, bool _isAuthorized) external override onlyOwner {
-        if (_isAuthorized) _validateDependency(_orchestrator);
         isOrchestratorAuthorized[_orchestrator] = _isAuthorized;
         emit OrchestratorAuthorizationUpdated(_orchestrator, _isAuthorized);
     }
@@ -202,19 +191,13 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
         return protections[_intentHash];
     }
 
-    /// @notice Reports ERC-165 and the minimal settlement interface supported by this policy.
-    function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
-        return interfaceId == type(IIntentSettlementPolicy).interfaceId || super.supportsInterface(interfaceId);
-    }
-
     /* ============ Internal Functions ============ */
 
     function _release(bytes32 _intentHash) internal {
         if (protections[_intentHash].depositor == address(0)) revert ProtectionNotFound(_intentHash);
 
-        uint64 currentTime = _currentTimestamp();
         (,, uint64 maturesAt) = stakeVault.locks(_intentHash);
-        if (currentTime < maturesAt) revert NotMatured(maturesAt, currentTime);
+        if (block.timestamp < maturesAt) revert NotMatured(maturesAt, uint64(block.timestamp));
 
         delete protections[_intentHash];
         stakeVault.unlockStake(_intentHash);
@@ -222,18 +205,6 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
     }
 
     function _maturity(uint64 _window) internal view returns (uint64) {
-        uint256 maturesAt = block.timestamp + _window;
-        if (maturesAt > type(uint64).max) revert TimestampOverflow(maturesAt);
-        return uint64(maturesAt);
-    }
-
-    function _currentTimestamp() internal view returns (uint64) {
-        if (block.timestamp > type(uint64).max) revert TimestampOverflow(block.timestamp);
-        return uint64(block.timestamp);
-    }
-
-    function _validateDependency(address _dependency) internal view {
-        if (_dependency == address(0)) revert ZeroAddress();
-        if (_dependency.code.length == 0) revert InvalidContract(_dependency);
+        return uint64(block.timestamp) + _window;
     }
 }

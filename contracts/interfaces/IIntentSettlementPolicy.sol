@@ -2,9 +2,8 @@
 pragma solidity ^0.8.18;
 
 /// @notice Minimal settlement boundary used by OrchestratorV4.
-/// @dev O4 depends only on these two functions. A replacement policy needs to implement only this
-/// settlement interface (and advertise it through ERC-165), so settlement rules can change without
-/// deploying another orchestrator. O4 applies its current policy at settlement.
+/// @dev O4 depends only on these two functions, so settlement rules can change without deploying another
+/// orchestrator. O4 applies its current policy at settlement.
 interface IIntentSettlementPolicy {
     struct SettlementContext {
         bytes32 intentHash;

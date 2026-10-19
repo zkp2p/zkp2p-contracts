@@ -3,7 +3,6 @@ pragma solidity ^0.8.18;
 
 import {OrchestratorV4Fixture} from "../helpers/OrchestratorV4Fixture.sol";
 import {IIntentSettlementPolicy} from "contracts/interfaces/IIntentSettlementPolicy.sol";
-import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {IDisputeProtectionPolicyV2 as P} from "contracts/interfaces/IDisputeProtectionPolicyV2.sol";
 import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicyV2.sol";
 import {StakeVaultV2} from "contracts/StakeVaultV2.sol";
@@ -124,14 +123,5 @@ contract DisputeProtectionPolicyV2SettlementTest is OrchestratorV4Fixture {
         vm.expectRevert(abi.encodeWithSelector(P.UnauthorizedOrchestrator.selector, other));
         policy.onDeferredPayoutFunded(context);
         vm.stopPrank();
-    }
-
-    function test_SupportsOnlyMinimalSettlementAndERC165Interfaces() public view {
-        bytes4 expected = IIntentSettlementPolicy.settleIntent.selector ^ IIntentSettlementPolicy.onDeferredPayoutFunded.selector;
-        assertEq(expected, type(IIntentSettlementPolicy).interfaceId);
-        assertTrue(policy.supportsInterface(expected));
-        assertTrue(policy.supportsInterface(0x01ffc9a7));
-        assertFalse(policy.supportsInterface(0xffffffff));
-        assertFalse(policy.supportsInterface(type(IOrchestratorV4).interfaceId));
     }
 }

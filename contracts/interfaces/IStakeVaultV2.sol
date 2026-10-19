@@ -28,7 +28,6 @@ interface IStakeVaultV2 {
     error ZeroAmount();
     error ZeroLockId();
     error UnauthorizedController(address caller);
-    error InvalidController(address controller);
     error UnauthorizedLockController(bytes32 lockId, address caller, address controller);
     error InvalidTaker(address taker);
     error UnauthorizedStakeOwner(address taker, address stakeOwner);
@@ -37,10 +36,8 @@ interface IStakeVaultV2 {
     error LockNotFound(bytes32 lockId);
     error InsufficientFreeStake(address stakeOwner, uint256 available, uint256 required);
     error InsufficientUnaccountedTokens(uint256 available, uint256 required);
-    error InvalidReceivedAmount(uint256 expected, uint256 received);
     error InvalidClaim(address beneficiary, uint256 amount);
     error ClaimsExceedLock(uint256 lockAmount, uint256 claimsAmount);
-    error TimestampOverflow(uint256 timestamp);
     error OwnershipRenunciationDisabled();
 
     event StakeDeposited(address indexed stakeOwner, uint256 amount, uint256 newStakeBalance);
@@ -82,7 +79,6 @@ interface IStakeVaultV2 {
     function resolveLock(bytes32 _lockId, Claim[] calldata _claims) external;
 
     /// @notice Immediately changes controller authorization; de-authorize only after its locks drain.
-    /// @dev Authorization requires a non-zero address with deployed code.
     function setController(address _controller, bool _authorized) external;
 
     function stakeToken() external view returns (IERC20);

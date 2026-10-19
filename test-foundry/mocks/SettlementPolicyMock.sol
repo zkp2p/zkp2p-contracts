@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
-
 import {IIntentSettlementPolicy} from "contracts/interfaces/IIntentSettlementPolicy.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @notice Configurable settlement callbacks for OrchestratorV4 tests.
-contract SettlementPolicyMock is ERC165, IIntentSettlementPolicy {
+contract SettlementPolicyMock is IIntentSettlementPolicy {
     bool public revertOnCallback;
     bool public revertOnFunding;
     address public deferralVault;
@@ -75,10 +73,5 @@ contract SettlementPolicyMock is ERC165, IIntentSettlementPolicy {
     /// @notice Returns all fields forwarded at settlement.
     function getLastSettlementContext() external view returns (SettlementContext memory) {
         return lastSettlementContext;
-    }
-
-    /// @notice Reports ERC-165 and IIntentSettlementPolicy support.
-    function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
-        return interfaceId == type(IIntentSettlementPolicy).interfaceId || super.supportsInterface(interfaceId);
     }
 }

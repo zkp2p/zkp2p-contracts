@@ -113,7 +113,6 @@ interface IOrchestratorV4 {
     error PaymentMethodNotWhitelisted(bytes32 paymentMethod);
     error EscrowNotWhitelisted(address escrow);
     error TakerNotWhitelisted(address escrow, uint256 depositId, bytes32 paymentMethod, address taker);
-    error InvalidWhitelistPolicy(address policy);
 
     // Amount and fee errors
     error AmountBelowMin(uint256 amount, uint256 min);
@@ -124,7 +123,6 @@ interface IOrchestratorV4 {
 
     // Validation errors
     error AccountHasActiveIntent(address account, bytes32 existingIntent);
-    error InvalidSettlementPolicy(address policy);
     error InvalidSignature();
     error PayerCommitmentRequiresGatingService();
     error SignatureExpired(uint256 expiration, uint256 currentTime);

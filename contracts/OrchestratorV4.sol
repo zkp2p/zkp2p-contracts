@@ -2,7 +2,6 @@
 
 pragma solidity ^0.8.18;
 
-import {ERC165Checker} from "@openzeppelin/contracts/utils/introspection/ERC165Checker.sol";
 import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
@@ -90,15 +89,13 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     )
         Ownable()
     {
-        if (address(_whitelistPolicy) == address(0)) revert ZeroAddress();
-        if (address(_whitelistPolicy).code.length == 0) revert InvalidWhitelistPolicy(address(_whitelistPolicy));
-        whitelistPolicy = _whitelistPolicy;
         chainId = _chainId;
         escrowRegistry = IEscrowRegistry(_escrowRegistry);
         paymentVerifierRegistry = IPaymentVerifierRegistry(_paymentVerifierRegistry);
         relayerRegistry = IRelayerRegistry(_relayerRegistry);
         protocolFee = _protocolFee;
         protocolFeeRecipient = _protocolFeeRecipient;
+        whitelistPolicy = _whitelistPolicy;
 
         transferOwnership(_owner);
     }
@@ -355,15 +352,9 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      * @param _policy   New global settlement policy
      */
     function setSettlementPolicy(IIntentSettlementPolicy _policy) external onlyOwner {
-        address policyAddress = address(_policy);
-        // Reject the wrong contract at configuration time instead of failing every fulfil.
-        if (policyAddress != address(0) && !ERC165Checker.supportsInterface(policyAddress, type(IIntentSettlementPolicy).interfaceId)) {
-            revert InvalidSettlementPolicy(policyAddress);
-        }
-
         address previousPolicy = address(settlementPolicy);
         settlementPolicy = _policy;
-        emit SettlementPolicyUpdated(previousPolicy, policyAddress);
+        emit SettlementPolicyUpdated(previousPolicy, address(_policy));
     }
 
     /**

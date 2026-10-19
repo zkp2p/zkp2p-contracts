@@ -10,18 +10,6 @@ import {StakeVaultV2} from "contracts/StakeVaultV2.sol";
 import {IStakeVaultV2} from "contracts/interfaces/IStakeVaultV2.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
 
-contract FeeOnTransferTokenV2 is ERC20 {
-    constructor(address _holder) ERC20("Fee Token", "FEE") {
-        _mint(_holder, 1_000_000e6);
-    }
-
-    function _transfer(address _from, address _to, uint256 _amount) internal override {
-        uint256 fee = _amount / 100;
-        super._transfer(_from, _to, _amount - fee);
-        _burn(_from, fee);
-    }
-}
-
 contract ReentrantTokenV2 is ERC20 {
     StakeVaultV2 internal vault;
     bool public reentrySucceeded;
@@ -130,16 +118,6 @@ contract StakeVaultV2Test is Test {
         assertEq(token.balanceOf(address(vault)), vault.totalAccounted());
     }
 
-    function test_DepositRejectsFeeOnTransferTokenV2() public {
-        FeeOnTransferTokenV2 feeToken = new FeeOnTransferTokenV2(address(this));
-        StakeVaultV2 feeVault = new StakeVaultV2(address(this), feeToken);
-        feeToken.approve(address(feeVault), type(uint256).max);
-
-        vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.InvalidReceivedAmount.selector, 100e6, 99e6));
-        feeVault.depositStake(100e6);
-        assertEq(feeToken.balanceOf(address(feeVault)), 0);
-    }
-
     function test_DepositBlocksTokenCallbackReentrancy() public {
         ReentrantTokenV2 reentrantToken = new ReentrantTokenV2(address(this));
         StakeVaultV2 reentrantVault = new StakeVaultV2(address(this), reentrantToken);
@@ -193,13 +171,6 @@ contract StakeVaultV2Test is Test {
 
         vm.expectRevert(IStakeVaultV2.ZeroAddress.selector);
         vault.setController(address(0), false);
-    }
-
-    function test_LockRejectsTimestampOverflow() public {
-        vm.warp(uint256(type(uint64).max) + 1);
-        vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.TimestampOverflow.selector, block.timestamp));
-        vm.prank(controller);
-        vault.lockStake(safeA, keccak256("overflow"), 1, NEVER_MATURES);
     }
 
     function test_DelegationRequiresOwnerAuthorizationAndTakerSelection() public {
@@ -625,12 +596,6 @@ contract StakeVaultV2Test is Test {
         vault.setController(controller, false);
         vm.expectRevert(IStakeVaultV2.ZeroAddress.selector);
         vault.setController(address(0), true);
-        vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.InvalidController.selector, attacker));
-        vault.setController(attacker, true);
-        // Removing permission remains possible if a controller no longer has code.
-        vm.etch(controller, hex"");
-        vault.setController(controller, false);
-        assertFalse(vault.isController(controller));
     }
 
     function test_AuthorizeSuccessorWithExistingStakeAndLocks() public {

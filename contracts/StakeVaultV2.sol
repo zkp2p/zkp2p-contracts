@@ -139,20 +139,12 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
 
     /**
      * @notice Deposits stake-token principal owned exclusively by the caller.
-     * @dev Pulls exactly `_amount` from the caller and verifies the vault's balance increased by that amount before
-     *      crediting stake. Fee-on-transfer and rebasing behavior that changes the observed delta is rejected. Deposited
-     *      principal begins as free stake and does not affect delegation selections or authorizations.
      * @param _amount Amount of stake token to transfer into and credit within the vault.
      */
     function depositStake(uint256 _amount) external override nonReentrant {
         if (_amount == 0) revert ZeroAmount();
 
-        uint256 balanceBefore = stakeToken.balanceOf(address(this));
         stakeToken.safeTransferFrom(msg.sender, address(this), _amount);
-        uint256 balanceAfter = stakeToken.balanceOf(address(this));
-        uint256 received = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
-        if (received != _amount) revert InvalidReceivedAmount(_amount, received);
-
         stakeBalance[msg.sender] += _amount;
         totalStaked += _amount;
         emit StakeDeposited(msg.sender, _amount, stakeBalance[msg.sender]);
@@ -361,12 +353,11 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
      * @notice GOVERNANCE ONLY: Immediately authorizes or de-authorizes a controller.
      * @dev Every authorized controller can lock any owner's free stake.
      *      De-authorize a controller only after its locks drain; only an authorized creator can service its locks.
-     * @param _controller Non-zero controller address; authorization additionally requires deployed code.
+     * @param _controller Non-zero controller address.
      * @param _authorized Whether the controller may act.
      */
     function setController(address _controller, bool _authorized) external override onlyOwner {
         if (_controller == address(0)) revert ZeroAddress();
-        if (_authorized && _controller.code.length == 0) revert InvalidController(_controller);
         isController[_controller] = _authorized;
         emit ControllerUpdated(_controller, _authorized);
     }
@@ -475,8 +466,7 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
         if (_lockId == bytes32(0)) revert ZeroLockId();
         if (_amount == 0) revert ZeroAmount();
         if (locks[_lockId].stakeOwner != address(0)) revert LockAlreadyExists(_lockId);
-        uint64 currentTime = _currentTimestamp();
-        if (_maturesAt <= currentTime) revert InvalidMaturity(_maturesAt, currentTime);
+        if (_maturesAt <= block.timestamp) revert InvalidMaturity(_maturesAt, uint64(block.timestamp));
     }
 
     /**
@@ -505,14 +495,5 @@ contract StakeVaultV2 is IStakeVaultV2, Ownable2Step, ReentrancyGuard {
         delete locks[_lockId];
         delete lockController[_lockId];
         lockedStake[stakeLock.stakeOwner] -= stakeLock.amount;
-    }
-
-    /**
-     * @dev Returns the current block timestamp after checked narrowing to the lock timestamp width.
-     * @return Current EVM timestamp represented as `uint64`.
-     */
-    function _currentTimestamp() internal view returns (uint64) {
-        if (block.timestamp > type(uint64).max) revert TimestampOverflow(block.timestamp);
-        return uint64(block.timestamp);
     }
 }

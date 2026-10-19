@@ -6,42 +6,8 @@ import {OrchestratorV3} from "contracts/OrchestratorV3.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {IIntentSettlementPolicy} from "contracts/interfaces/IIntentSettlementPolicy.sol";
-import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
-import {IWhitelistPolicy} from "contracts/interfaces/IWhitelistPolicy.sol";
-import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionPolicy.sol";
 import {PaymentVerifierMock} from "contracts/mocks/PaymentVerifierMock.sol";
 import {SettlementPolicyMock} from "../../mocks/SettlementPolicyMock.sol";
-
-contract WrongSettlementInterface {
-    /// @notice Rejects only the settlement interface, including an invalid ERC-165 advertisement.
-    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
-        return interfaceId != type(IIntentSettlementPolicy).interfaceId;
-    }
-}
-
-contract ERC165OnlyPolicy {
-    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
-        return interfaceId == 0x01ffc9a7;
-    }
-}
-
-contract ShortERC165Response {
-    fallback() external {
-        assembly {
-            return(0, 1)
-        }
-    }
-}
-
-contract InvalidERC165Response {
-    fallback() external {
-        bytes4 marker = type(IIntentSettlementPolicy).interfaceId;
-        assembly {
-            mstore(0, or(marker, 1))
-            return(0, 32)
-        }
-    }
-}
 
 contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
     event IntentPayoutDeferred(bytes32 indexed intentHash, address indexed recipient, address indexed vault, uint256 amount);
@@ -165,9 +131,6 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
         assertTrue(orchestrator.supportsInterface(0x01ffc9a7));
         assertFalse(orchestrator.supportsInterface(0xffffffff));
         assertFalse(orchestrator.supportsInterface(type(IIntentSettlementPolicy).interfaceId));
-        assertTrue(hook.supportsInterface(type(IIntentSettlementPolicy).interfaceId));
-        assertTrue(hook.supportsInterface(0x01ffc9a7));
-        assertFalse(hook.supportsInterface(0xffffffff));
     }
 
     function test_IntentHashesDifferFromV3() public {
@@ -191,22 +154,6 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
         assertEq(orchestrator.intentCounter(), oldOrchestrator.intentCounter());
     }
 
-    function test_SetSettlementPolicyRejectsV1Hook() public {
-        IntentLifecycleHookV1 oldHook = new IntentLifecycleHookV1(
-            orchestratorRegistry, IWhitelistPolicy(address(token)), IDisputeProtectionPolicy(address(token))
-        );
-        _rejectHook(address(oldHook));
-    }
-
-    function test_SetSettlementPolicyRejectsWrongInterfaceAndCodeless() public {
-        _rejectHook(address(new WrongSettlementInterface()));
-        _rejectHook(address(new ERC165OnlyPolicy()));
-        _rejectHook(address(token));
-        _rejectHook(other);
-        _rejectHook(address(new ShortERC165Response()));
-        _rejectHook(address(new InvalidERC165Response()));
-    }
-
     function test_SetSettlementPolicyAcceptsPolicyAndZero() public {
         orchestrator.setSettlementPolicy(hook);
         assertEq(address(orchestrator.settlementPolicy()), address(hook));
@@ -214,9 +161,4 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
         assertEq(address(orchestrator.settlementPolicy()), address(0));
     }
 
-    function _rejectHook(address candidate) internal {
-        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.InvalidSettlementPolicy.selector, candidate));
-        orchestrator.setSettlementPolicy(IIntentSettlementPolicy(candidate));
-        assertEq(address(orchestrator.settlementPolicy()), address(hook));
-    }
 }

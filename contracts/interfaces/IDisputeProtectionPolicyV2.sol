@@ -19,13 +19,9 @@ interface IDisputeProtectionPolicyV2 is IIntentSettlementPolicy {
     event OrchestratorAuthorizationUpdated(address indexed orchestrator, bool isAuthorized);
 
     error ZeroAddress();
-    error InvalidContract(address dependency);
     error UnauthorizedOrchestrator(address caller);
-    error ProtectionExists(bytes32 intentHash);
     error ProtectionNotFound(bytes32 intentHash);
     error NotMatured(uint64 maturesAt, uint64 currentTime);
-    error InvalidSettlementAmount(uint256 releaseAmount, uint256 netAmount);
-    error TimestampOverflow(uint256 timestamp);
     error InvalidDisputeWindow(uint256 window);
     error OwnershipRenunciationDisabled();
 
