@@ -1,23 +1,26 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-import {IOrchestrator} from "contracts/interfaces/IOrchestrator.sol";
 import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IPaymentVerifierV2} from "contracts/interfaces/IPaymentVerifierV2.sol";
 
 contract UnifiedPaymentVerifierV4CallerHarness {
-    mapping(bytes32 => IOrchestrator.Intent) internal intents;
+    mapping(bytes32 => IOrchestratorV2.Intent) internal intents;
 
     /// @notice Sets the intent returned to the verifier.
-    function setIntent(bytes32 intentHash, IOrchestrator.Intent calldata intent) external {
+    function setIntent(bytes32 intentHash, IOrchestratorV2.Intent calldata intent) external {
         intents[intentHash] = intent;
     }
 
     /// @notice Returns the configured intent snapshot.
-    function getIntent(bytes32 intentHash) external view returns (IOrchestrator.Intent memory) {
+    function getIntent(bytes32 intentHash) external view returns (IOrchestratorV2.Intent memory) {
         return intents[intentHash];
+    }
+
+    function getDepositPreIntentHook(address, uint256) external pure returns (address) {
+        return address(0);
     }
 
     /// @notice Calls the verifier and decodes the static result and signed settlement data bytes.

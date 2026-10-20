@@ -230,7 +230,7 @@ contract UnifiedPaymentVerifierV3Test is Test {
         UnifiedPaymentVerifierV3 target,
         bytes32 intentHash,
         bytes memory proof
-    ) internal returns (IPaymentVerifier.PaymentVerificationResult memory) {
+    ) internal virtual returns (IPaymentVerifier.PaymentVerificationResult memory) {
         return caller.verifyPayment(
             target, IPaymentVerifier.VerifyPaymentData({intentHash: intentHash, paymentProof: proof, data: ""})
         );

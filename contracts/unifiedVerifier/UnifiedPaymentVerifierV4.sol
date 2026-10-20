@@ -4,7 +4,6 @@ pragma solidity ^0.8.18;
 import { BaseUnifiedPaymentVerifierV3 } from "./BaseUnifiedPaymentVerifierV3.sol";
 import { INullifierRegistryV2 } from "../interfaces/INullifierRegistryV2.sol";
 import { IAttestationVerifier } from "../interfaces/IAttestationVerifier.sol";
-import { IOrchestrator } from "../interfaces/IOrchestrator.sol";
 import { ERC165Checker } from "@openzeppelin/contracts/utils/introspection/ERC165Checker.sol";
 import { IOrchestratorV4 } from "../interfaces/IOrchestratorV4.sol";
 import { IOrchestratorV2 } from "../interfaces/IOrchestratorV2.sol";
@@ -16,6 +15,7 @@ import { IPaymentVerifierV2 } from "../interfaces/IPaymentVerifierV2.sol";
  * @notice Preserves V3 payment verification and returns all verified fields and signed settlement data.
  *
  * Key features:
+ * - Supports Orchestrator V2/V3 and V4 intent layouts; rejects V1
  * - Supports multiple payment methods, each with custom configuration
  * - Uses AttestationVerifier to validate offchain payment attestations
  * - Ensures trust anchor integrity for off-chain verification processes
@@ -238,17 +238,7 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
                 bytes32(0)
             );
         } else {
-            IOrchestrator.Intent memory intent = IOrchestrator(msg.sender).getIntent(intentHash);
-            _validateSnapshotAgainstIntent(
-                snapshot,
-                intent.payeeId,
-                intent.amount,
-                intent.paymentMethod,
-                intent.fiatCurrency,
-                intent.conversionRate,
-                intent.timestamp,
-                bytes32(0)
-            );
+            revert("UPV: Unsupported orchestrator");
         }
 
         require(snapshot.timestampBuffer <= MAX_TIMESTAMP_BUFFER, "UPV: Snapshot timestamp buffer exceeds maximum");

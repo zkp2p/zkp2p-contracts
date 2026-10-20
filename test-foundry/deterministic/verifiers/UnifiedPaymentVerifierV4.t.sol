@@ -6,13 +6,14 @@ import {UnifiedPaymentVerifierV3} from "contracts/unifiedVerifier/UnifiedPayment
 import {UnifiedPaymentVerifierV4} from "contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol";
 import {IPaymentVerifier} from "contracts/interfaces/IPaymentVerifier.sol";
 import {IPaymentVerifierV2} from "contracts/interfaces/IPaymentVerifierV2.sol";
-import {IOrchestrator} from "contracts/interfaces/IOrchestrator.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
 import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {UnifiedPaymentVerifierV4CallerHarness, UnifiedPaymentVerifierV4V4CallerHarness} from "../../mocks/UnifiedPaymentVerifierV4CallerHarness.sol";
 
 contract UnifiedPaymentVerifierV4Test is UnifiedPaymentVerifierV3Test {
+    UnifiedPaymentVerifierV4CallerHarness internal supportedPrimaryCaller;
+
     function setUp() public override {
         super.setUp();
         UnifiedPaymentVerifierV4 replacement =
@@ -22,6 +23,41 @@ contract UnifiedPaymentVerifierV4Test is UnifiedPaymentVerifierV3Test {
         nullifierRegistry.removeWritePermission(address(verifier));
         nullifierRegistry.addWritePermission(address(replacement));
         verifier = UnifiedPaymentVerifierV3(address(replacement));
+        supportedPrimaryCaller = new UnifiedPaymentVerifierV4CallerHarness();
+        supportedPrimaryCaller.setIntent(LEGACY_INTENT, v2Caller.getIntent(V2_INTENT));
+        orchestratorRegistry.addOrchestrator(address(supportedPrimaryCaller));
+    }
+
+    /// @dev Reuse the shared signature, snapshot, and replay matrix with two supported V2-shaped callers.
+    /// Tests deploying a separate UPV3 retain its actual V1 caller and compatibility coverage.
+    function _call(
+        IUnifiedVerifierCaller caller,
+        UnifiedPaymentVerifierV3 target,
+        bytes32 intentHash,
+        bytes memory proof
+    ) internal override returns (IPaymentVerifier.PaymentVerificationResult memory) {
+        if (address(target) == address(verifier) && address(caller) == address(legacyCaller)) {
+            caller = IUnifiedVerifierCaller(address(supportedPrimaryCaller));
+        }
+        return super._call(caller, target, intentHash, proof);
+    }
+
+    function test_RejectsRegisteredV1WithoutConsumingPayment() public {
+        bytes32 paymentId = keccak256("retired-v1");
+        bytes memory proof = _validProof(verifier, LEGACY_INTENT, paymentId);
+        vm.expectRevert("UPV: Unsupported orchestrator");
+        legacyCaller.verifyPayment(
+            verifier, IPaymentVerifier.VerifyPaymentData(LEGACY_INTENT, proof, "")
+        );
+        assertFalse(nullifierRegistry.isNullified(_nullifier(paymentId)));
+        assertEq(nullifierRegistry.nullifierByIntentHash(LEGACY_INTENT), bytes32(0));
+
+        // The rejected V1 call does not prevent the same payment from settling a supported intent.
+        IPaymentVerifier.PaymentVerificationResult memory result = _call(
+            IUnifiedVerifierCaller(address(v2Caller)), verifier, V2_INTENT, _validProof(verifier, V2_INTENT, paymentId)
+        );
+        assertTrue(result.success);
+        assertEq(nullifierRegistry.intentHashByNullifier(_nullifier(paymentId)), V2_INTENT);
     }
 
     function test_O4IntentValidatesBeforeV2Probe() public {
@@ -85,12 +121,12 @@ contract UnifiedPaymentVerifierV4Test is UnifiedPaymentVerifierV3Test {
         assertEq(result.intent.payerCommitmentHash, keccak256(commitment));
     }
 
-    function test_LegacyIntentRejectsNonZeroPayerCommitment() public {
-        bytes32 paymentId = keccak256("legacy-commitment");
-        bytes memory data = abi.encode(_payment(paymentId), _snapshot(LEGACY_INTENT), keccak256("payer"), bytes(""));
-        bytes memory proof = _encodeProof(verifier, LEGACY_INTENT, AMOUNT, keccak256(data), data, WITNESS_KEY);
+    function test_V2IntentRejectsNonZeroPayerCommitment() public {
+        bytes32 paymentId = keccak256("v2-commitment");
+        bytes memory data = abi.encode(_payment(paymentId), _snapshot(V2_INTENT), keccak256("payer"), bytes(""));
+        bytes memory proof = _encodeProof(verifier, V2_INTENT, AMOUNT, keccak256(data), data, WITNESS_KEY);
         vm.expectRevert("UPV: Snapshot payer commitment mismatch");
-        _call(IUnifiedVerifierCaller(address(legacyCaller)), verifier, LEGACY_INTENT, proof);
+        _call(IUnifiedVerifierCaller(address(v2Caller)), verifier, V2_INTENT, proof);
     }
 
     function test_AcceptsEmptySettlementData() public {
@@ -112,37 +148,37 @@ contract UnifiedPaymentVerifierV4Test is UnifiedPaymentVerifierV3Test {
 
     function _checkSettlementData(bytes memory settlementData) internal {
         UnifiedPaymentVerifierV4CallerHarness caller = new UnifiedPaymentVerifierV4CallerHarness();
-        caller.setIntent(LEGACY_INTENT, legacyCaller.getIntent(LEGACY_INTENT));
+        caller.setIntent(V2_INTENT, v2Caller.getIntent(V2_INTENT));
         orchestratorRegistry.addOrchestrator(address(caller));
         bytes32 paymentId = keccak256("settlement-data");
-        bytes memory data = abi.encode(_payment(paymentId), _snapshot(LEGACY_INTENT), bytes32(0), settlementData);
-        bytes memory proof = _encodeProof(verifier, LEGACY_INTENT, AMOUNT - 1, keccak256(data), data, WITNESS_KEY);
+        bytes memory data = abi.encode(_payment(paymentId), _snapshot(V2_INTENT), bytes32(0), settlementData);
+        bytes memory proof = _encodeProof(verifier, V2_INTENT, AMOUNT - 1, keccak256(data), data, WITNESS_KEY);
         UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(proof, (UnifiedPaymentVerifierV4.PaymentAttestation));
         attestation.metadata = hex"badbad";
         (IPaymentVerifierV2.PaymentVerificationResultV2 memory result, bytes memory returned) = caller.verifyPayment(
-            IPaymentVerifierV2(address(verifier)), IPaymentVerifierV2.VerifyPaymentData(LEGACY_INTENT, abi.encode(attestation), "")
+            IPaymentVerifierV2(address(verifier)), IPaymentVerifierV2.VerifyPaymentData(V2_INTENT, abi.encode(attestation), "")
         );
         assertTrue(result.success);
-        assertEq(result.intentHash, LEGACY_INTENT);
+        assertEq(result.intentHash, V2_INTENT);
         assertEq(result.releaseAmount, AMOUNT - 1);
         assertEq(result.attestedReleaseAmount, AMOUNT - 1);
         assertEq(abi.encode(result.payment), abi.encode(_payment(paymentId)));
-        assertEq(abi.encode(result.intent), abi.encode(_snapshot(LEGACY_INTENT), bytes32(0)));
+        assertEq(abi.encode(result.intent), abi.encode(_snapshot(V2_INTENT), bytes32(0)));
         assertEq(returned, settlementData);
     }
 
     function test_SettlementDataTamperingFails() public {
         bytes32 paymentId = keccak256("tampered-settlement-data");
-        bytes memory data = abi.encode(_payment(paymentId), _snapshot(LEGACY_INTENT), bytes32(0), hex"010203");
-        bytes memory proof = _encodeProof(verifier, LEGACY_INTENT, AMOUNT, keccak256(data), data, WITNESS_KEY);
+        bytes memory data = abi.encode(_payment(paymentId), _snapshot(V2_INTENT), bytes32(0), hex"010203");
+        bytes memory proof = _encodeProof(verifier, V2_INTENT, AMOUNT, keccak256(data), data, WITNESS_KEY);
         UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(proof, (UnifiedPaymentVerifierV4.PaymentAttestation));
         // Content starts after the sixteen-word head and the length word.
         attestation.data[545] = 0xff;
         vm.expectRevert("UPV: Data hash mismatch");
-        _call(IUnifiedVerifierCaller(address(legacyCaller)), verifier, LEGACY_INTENT, abi.encode(attestation));
+        _call(IUnifiedVerifierCaller(address(v2Caller)), verifier, V2_INTENT, abi.encode(attestation));
         attestation.dataHash = keccak256(attestation.data);
         vm.expectRevert("ThresholdSigVerifierUtils: Not enough valid witness signatures");
-        _call(IUnifiedVerifierCaller(address(legacyCaller)), verifier, LEGACY_INTENT, abi.encode(attestation));
+        _call(IUnifiedVerifierCaller(address(v2Caller)), verifier, V2_INTENT, abi.encode(attestation));
         assertFalse(nullifierRegistry.isNullified(_nullifier(paymentId)));
     }
 
@@ -152,80 +188,67 @@ contract UnifiedPaymentVerifierV4Test is UnifiedPaymentVerifierV3Test {
             _rejectPayload(new bytes(lengths[i]));
         }
         bytes32 paymentId = keccak256("old-480-byte-payload");
-        _rejectPayload(abi.encode(_payment(paymentId), _snapshot(LEGACY_INTENT), true));
-        _rejectPayload(abi.encode(_payment(paymentId), _snapshot(LEGACY_INTENT), false));
+        _rejectPayload(abi.encode(_payment(paymentId), _snapshot(V2_INTENT), true));
+        _rejectPayload(abi.encode(_payment(paymentId), _snapshot(V2_INTENT), false));
     }
 
     function _rejectPayload(bytes memory data) internal {
-        bytes memory proof = _encodeProof(verifier, LEGACY_INTENT, AMOUNT, keccak256(data), data, WITNESS_KEY);
+        bytes memory proof = _encodeProof(verifier, V2_INTENT, AMOUNT, keccak256(data), data, WITNESS_KEY);
         vm.expectRevert();
-        _call(IUnifiedVerifierCaller(address(legacyCaller)), verifier, LEGACY_INTENT, proof);
+        _call(IUnifiedVerifierCaller(address(v2Caller)), verifier, V2_INTENT, proof);
     }
 
     function test_SettlementDataIsSigned() public {
         bytes32 paymentId = keccak256("signed-settlement-data");
-        bytes memory proof = _validProof(verifier, LEGACY_INTENT, paymentId);
+        bytes memory proof = _validProof(verifier, V2_INTENT, paymentId);
         UnifiedPaymentVerifierV3.PaymentAttestation memory attestation =
             abi.decode(proof, (UnifiedPaymentVerifierV3.PaymentAttestation));
-        attestation.data = abi.encode(_payment(paymentId), _snapshot(LEGACY_INTENT), bytes32(0), abi.encode(true));
+        attestation.data = abi.encode(_payment(paymentId), _snapshot(V2_INTENT), bytes32(0), abi.encode(true));
         vm.expectRevert("UPV: Data hash mismatch");
-        _call(IUnifiedVerifierCaller(address(legacyCaller)), verifier, LEGACY_INTENT, abi.encode(attestation));
+        _call(IUnifiedVerifierCaller(address(v2Caller)), verifier, V2_INTENT, abi.encode(attestation));
         assertFalse(nullifierRegistry.isNullified(_nullifier(paymentId)));
     }
 
     function test_IgnoresIntentData() public {
         bytes[4] memory opaqueData =
             [bytes(hex"deadbeef"), bytes(hex"1234"), abi.encode(address(0), bytes("")), abi.encode(attacker, bytes(""))];
-        for (uint256 i; i < 2; i++) {
-            for (uint256 j; j < opaqueData.length; j++) {
-                bytes32 intentHash = keccak256(abi.encode("opaque-intent", i, j));
-                bytes32 paymentId = keccak256(abi.encode("opaque-data", i, j));
-                if (i == 0) {
-                    IOrchestrator.Intent memory intent = legacyCaller.getIntent(LEGACY_INTENT);
-                    intent.data = opaqueData[j];
-                    legacyCaller.setIntent(intentHash, intent);
-                } else {
-                    IOrchestratorV2.Intent memory intent = v2Caller.getIntent(V2_INTENT);
-                    intent.data = opaqueData[j];
-                    v2Caller.setIntent(intentHash, intent);
-                }
-                IPaymentVerifier.PaymentVerificationResult memory result = _call(
-                    IUnifiedVerifierCaller(i == 0 ? address(legacyCaller) : address(v2Caller)),
-                    verifier, intentHash, _validProof(verifier, intentHash, paymentId)
-                );
-                assertTrue(result.success);
-                assertEq(nullifierRegistry.intentHashByNullifier(_nullifier(paymentId)), intentHash);
-            }
+        for (uint256 index; index < opaqueData.length; index++) {
+            bytes32 intentHash = keccak256(abi.encode("opaque-intent", index));
+            bytes32 paymentId = keccak256(abi.encode("opaque-data", index));
+            IOrchestratorV2.Intent memory intent = v2Caller.getIntent(V2_INTENT);
+            intent.data = opaqueData[index];
+            v2Caller.setIntent(intentHash, intent);
+            IPaymentVerifier.PaymentVerificationResult memory result = _call(
+                IUnifiedVerifierCaller(address(v2Caller)), verifier, intentHash, _validProof(verifier, intentHash, paymentId)
+            );
+            assertTrue(result.success);
+            assertEq(nullifierRegistry.intentHashByNullifier(_nullifier(paymentId)), intentHash);
         }
     }
 
     function test_ThreeFieldCallerDecodesV4Result() public {
-        for (uint256 i; i < 2; i++) {
-            bytes32 intentHash = i == 0 ? LEGACY_INTENT : V2_INTENT;
-            bytes32 paymentId = keccak256(abi.encode("three-field", i));
-            IPaymentVerifier.PaymentVerificationResult memory result = _call(
-                IUnifiedVerifierCaller(i == 0 ? address(legacyCaller) : address(v2Caller)),
-                verifier, intentHash, _validProof(verifier, intentHash, paymentId)
-            );
-            assertTrue(result.success);
-            assertEq(result.intentHash, intentHash);
-            assertEq(result.releaseAmount, AMOUNT);
-        }
+        bytes32 paymentId = keccak256("three-field");
+        IPaymentVerifier.PaymentVerificationResult memory result = _call(
+            IUnifiedVerifierCaller(address(v2Caller)), verifier, V2_INTENT, _validProof(verifier, V2_INTENT, paymentId)
+        );
+        assertTrue(result.success);
+        assertEq(result.intentHash, V2_INTENT);
+        assertEq(result.releaseAmount, AMOUNT);
     }
 
     function test_NullifierAndSnapshotChecksUnchanged() public {
         bytes32 paymentId = keccak256("replay");
-        bytes memory proof = _validProof(verifier, LEGACY_INTENT, paymentId);
-        IUnifiedVerifierCaller caller = IUnifiedVerifierCaller(address(legacyCaller));
-        _call(caller, verifier, LEGACY_INTENT, proof);
+        bytes memory proof = _validProof(verifier, V2_INTENT, paymentId);
+        IUnifiedVerifierCaller caller = IUnifiedVerifierCaller(address(v2Caller));
+        _call(caller, verifier, V2_INTENT, proof);
         vm.expectRevert("Nullifier has already been used");
-        _call(caller, verifier, LEGACY_INTENT, proof);
-        UnifiedPaymentVerifierV3.IntentSnapshot memory snapshot = _snapshot(LEGACY_INTENT);
+        _call(caller, verifier, V2_INTENT, proof);
+        UnifiedPaymentVerifierV3.IntentSnapshot memory snapshot = _snapshot(V2_INTENT);
         snapshot.amount++;
         paymentId = keccak256("snapshot-mismatch");
-        proof = _proof(verifier, LEGACY_INTENT, AMOUNT, _payment(paymentId), snapshot, WITNESS_KEY, true);
+        proof = _proof(verifier, V2_INTENT, AMOUNT, _payment(paymentId), snapshot, WITNESS_KEY, true);
         vm.expectRevert("UPV: Snapshot amount mismatch");
-        _call(caller, verifier, LEGACY_INTENT, proof);
+        _call(caller, verifier, V2_INTENT, proof);
         assertFalse(nullifierRegistry.isNullified(_nullifier(paymentId)));
     }
 
