@@ -268,21 +268,6 @@ contract WhitelistPolicy is Ownable, IWhitelistPolicy {
     }
 
     /**
-     * @inheritdoc IWhitelistPolicy
-     */
-    function isTakerWhitelisted(
-        address _escrow,
-        uint256 _depositId,
-        bytes32 _paymentMethod,
-        address _taker,
-        bytes32 _groupId
-    ) external view override returns (bool) {
-        if (_groupId == bytes32(0)) return isWhitelisted[_escrow][_depositId][_taker];
-        return _containsGroup(allowedGroups[_escrow][_depositId][_paymentMethod], _groupId)
-            && groupRegistry.isMember(_groupId, _taker);
-    }
-
-    /**
      * @notice Enforces this deposit's whitelist policy during intent signaling.
      * @dev Only registered orchestrators may invoke the hook.
      */
