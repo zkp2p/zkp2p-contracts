@@ -98,6 +98,7 @@ test("lane 45 exports its O4 stack identity, tags, and live flags", () => {
     "DisputeProtectionPolicyV2",
     "UnifiedPaymentVerifierV4",
     "OrchestratorV4",
+    "ProtocolViewerV4",
   ]);
   assert.deepEqual(O4_ARTIFACT_NAMES, {
     StakeVaultV2: "StakeVaultV2",
@@ -106,6 +107,7 @@ test("lane 45 exports its O4 stack identity, tags, and live flags", () => {
     DisputeProtectionPolicyV2: "DisputeProtectionPolicyV2",
     UnifiedPaymentVerifierV4: "UnifiedPaymentVerifierV4",
     OrchestratorV4: "OrchestratorV4",
+    ProtocolViewerV4: "ProtocolViewerV4",
   });
   assert.deepEqual(lane45.default.tags, [
     "45_deploy_orchestrator_v4_stack",
@@ -142,6 +144,7 @@ test("lane 45 pins exact live step order and classifies only contiguous prefixes
     "add-verifier-method:xmoney",
     "deploy-orchestrator",
     "set-orchestrator-policy",
+    "deploy-viewer",
   ]);
   assert.deepEqual(lane45.LANE_45_STEP_KINDS.base, [
     "deploy-vault",
@@ -166,6 +169,7 @@ test("lane 45 pins exact live step order and classifies only contiguous prefixes
     "deploy-orchestrator",
     "set-orchestrator-policy",
     "set-allow-multiple-intents",
+    "deploy-viewer",
     "transfer-vault-owner",
     "transfer-policy-owner",
     "transfer-whitelist-owner",
@@ -716,6 +720,7 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
     ["OrchestratorV4", ["supportsInterface", "setSettlementPolicy", "extendIntent"]],
     ["UnifiedPaymentVerifierV4", ["addPaymentMethod", "DOMAIN_SEPARATOR"]],
     ["WhitelistPolicyV4", ["isTakerWhitelisted"]],
+    ["ProtocolViewerV4", ["getIntentV4", "getIntentsV4", "getAccountIntentsV4"]],
   ]);
   for (const [recordName, functionNames] of requiredAbiFunctions) {
     const abi = state.records.get(recordName).abi;
@@ -752,7 +757,7 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
         `${recordName} ABI still has ${name}`
       );
   }
-  assert.equal(state.deployCalls(), initialCalls + 6);
+  assert.equal(state.deployCalls(), initialCalls + 7);
   const vault = await ethers.getContractAt(
     "StakeVaultV2",
     state.records.get("StakeVaultV2").address
@@ -1054,14 +1059,14 @@ async function assertO4Config(state, o4) {
     );
 }
 
-test("local lane 45 prepares six inert records and mirrors O3 config", async () => {
+test("local lane 45 prepares seven inert records and mirrors O3 config", async () => {
   for (const multiple of [false, true]) {
     const state = await localhostFixture();
     await (await state.orchestrator.setAllowMultipleIntents(multiple)).wait();
     const before = await routingSnapshot(state);
     const calls = state.deployCalls();
     await deployLane45(state.fakeHre);
-    assert.equal(state.deployCalls(), calls + 6);
+    assert.equal(state.deployCalls(), calls + 7);
     const o4 = await ethers.getContractAt(
       "OrchestratorV4",
       state.records.get("OrchestratorV4").address
@@ -1152,7 +1157,7 @@ test("lane 45 reads an empty record set and rejects a non-contiguous prefix", as
   });
   const context = /** @type {any} */ ({ network: "base_staging" });
   const state = await lane45.readFreshState(hre, context);
-  assert.deepEqual(state.deployments, [null, null, null, null, null, null]);
+  assert.deepEqual(state.deployments, [null, null, null, null, null, null, null]);
   assert.deepEqual(state.contracts, {});
   assert.deepEqual(state.completed, {
     "deploy-vault": false,
@@ -1161,6 +1166,7 @@ test("lane 45 reads an empty record set and rejects a non-contiguous prefix", as
     "deploy-policy": false,
     "deploy-verifier": false,
     "deploy-orchestrator": false,
+    "deploy-viewer": false,
   });
   records.set("OrchestratorV4", { address: ethers.constants.AddressZero });
   await assert.rejects(
@@ -1272,6 +1278,7 @@ test("lane 45 live step handlers only configure the fresh stack on Base and stag
       await lane45.executeLane45Step(hre, context, state, step);
     assert.deepEqual([...records.keys()], O4_DEPLOYMENT_NAMES);
     assert.equal(records.get("WhitelistPolicyV4").contract, "WhitelistPolicy");
+    assert.deepEqual(records.get("ProtocolViewerV4").args, []);
     assert.equal(records.get("AddressGroupRegistryV4").contract, "AddressGroupRegistry");
     assert.deepEqual(records.get("AddressGroupRegistryV4").args, []);
     assert.deepEqual(records.get("WhitelistPolicyV4").args, [

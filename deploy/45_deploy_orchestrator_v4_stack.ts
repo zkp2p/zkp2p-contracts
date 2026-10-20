@@ -619,6 +619,7 @@ export async function readFreshState(
     policyRecord,
     verifierRecord,
     orchestratorRecord,
+    viewerRecord,
   ] = deployments;
   await assertFreshPolicyUnused(hre, policyRecord);
   const contracts: Lane45State["contracts"] = {};
@@ -629,6 +630,8 @@ export async function readFreshState(
     "deploy-policy": Boolean(policyRecord),
     "deploy-verifier": Boolean(verifierRecord),
     "deploy-orchestrator": Boolean(orchestratorRecord),
+    // Stateless: its canonical record check above is the whole step.
+    "deploy-viewer": Boolean(viewerRecord),
   };
   if (groupRegistryRecord) {
     contracts.groupRegistry = await hre.ethers.getContractAt(
@@ -944,6 +947,8 @@ export async function executeLane45Step(
     await (
       await state.contracts.orchestrator!.setAllowMultipleIntents(true)
     ).wait();
+  } else if (step === "deploy-viewer") {
+    await deployFresh(hre, "ProtocolViewerV4", context.deployer, []);
   } else if (step === "transfer-orchestrator-owner") {
     await (
       await state.contracts.orchestrator!.transferOwnership(context.governance)
@@ -1088,6 +1093,7 @@ function localSteps(context: StackContext): string[] {
     "deploy-orchestrator",
     "set-orchestrator-policy",
     ...(context.allowMultipleIntents ? ["set-allow-multiple-intents"] : []),
+    "deploy-viewer",
   ];
 }
 
@@ -1172,6 +1178,7 @@ async function deployLocalO4Stack(
     ).wait();
     await waitForDeploymentDelay(hre);
   }
+  await deploy("ProtocolViewerV4", []);
   state = await readFreshState(hre, context);
   const expectedSteps = localSteps(context);
   requireState(

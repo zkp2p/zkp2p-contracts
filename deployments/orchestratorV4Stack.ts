@@ -19,6 +19,7 @@ export const O4_DEPLOYMENT_NAMES = [
   "DisputeProtectionPolicyV2",
   "UnifiedPaymentVerifierV4",
   "OrchestratorV4",
+  "ProtocolViewerV4",
 ] as const;
 export type O4DeploymentName = (typeof O4_DEPLOYMENT_NAMES)[number];
 export const O4_ARTIFACT_NAMES: Record<O4DeploymentName, string> = {
@@ -28,6 +29,7 @@ export const O4_ARTIFACT_NAMES: Record<O4DeploymentName, string> = {
   DisputeProtectionPolicyV2: "DisputeProtectionPolicyV2",
   UnifiedPaymentVerifierV4: "UnifiedPaymentVerifierV4",
   OrchestratorV4: "OrchestratorV4",
+  ProtocolViewerV4: "ProtocolViewerV4",
 };
 /** Each network's recording PR adds its pins after lane 45 runs there. */
 export const O4_RECORDED_DEPLOYMENTS: Partial<
@@ -291,6 +293,7 @@ function deploymentSteps(network: O4Network): string[] {
     ...(O4_EXPECTED_LIVE[network].allowMultipleIntents
       ? ["set-allow-multiple-intents"]
       : []),
+    "deploy-viewer",
   ];
 }
 

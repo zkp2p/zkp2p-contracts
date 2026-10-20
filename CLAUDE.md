@@ -170,7 +170,7 @@ Current numbered lanes include:
   under its tag with `ENABLE_BASE_FX_RATE_FEEDS_DEPLOYMENT=true`. It seeds both
   feeds, then hands ownership to `MULTI_SIG.base`. It was executed on Base on
   2026-10-01 from `88be796` and is still mounted; tagged reruns only verify.
-- `45`: `OrchestratorV4` stack, deploy-only on live networks (tag plus
+- `45`: `OrchestratorV4` stack and `ProtocolViewerV4`, deploy-only on live networks (tag plus
   `ENABLE_{STAGING,BASE}_ORCHESTRATOR_V4_STACK_DEPLOYMENT=true`); O4 stays
   unregistered. Not executed on either network.
 - `46`: `OrchestratorV4` activation (tag-only; staging deployer steps, one guarded

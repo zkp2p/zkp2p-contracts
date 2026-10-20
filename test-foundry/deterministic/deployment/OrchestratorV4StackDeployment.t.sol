@@ -5,6 +5,9 @@ import {Vm} from "forge-std/Vm.sol";
 
 import {OrchestratorV3Fixture} from "../helpers/OrchestratorV3Fixture.sol";
 import {OrchestratorV4} from "contracts/OrchestratorV4.sol";
+import {ProtocolViewerV2} from "contracts/ProtocolViewerV2.sol";
+import {ProtocolViewerV4} from "contracts/ProtocolViewerV4.sol";
+import {IProtocolViewerV4} from "contracts/interfaces/IProtocolViewerV4.sol";
 import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicyV2.sol";
 import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionPolicy.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
@@ -52,6 +55,7 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
     DisputeProtectionPolicyV2 internal freshPolicy;
     IntentLifecycleHookV1 internal predecessorHook;
     OrchestratorV4 internal orchestratorV4;
+    ProtocolViewerV4 internal viewer;
     bytes32[] internal originalMethods;
     mapping(bytes32 => bytes32[]) internal originalCurrencies;
 
@@ -129,6 +133,7 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         );
         orchestratorV4.setSettlementPolicy(freshPolicy);
         if (orchestrator.allowMultipleIntents()) orchestratorV4.setAllowMultipleIntents(true);
+        viewer = new ProtocolViewerV4();
     }
 
     function _activateLane46() private {
@@ -449,6 +454,18 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         orchestratorV4.releaseFundsToPayer(id, INTENT_AMOUNT / 2);
         assertEq(token.balanceOf(other), INTENT_AMOUNT / 2);
         assertEq(freshPolicy.getProtection(id).depositor, address(0));
+    }
+
+    function test_ViewerReadsO4IntentsAndRejectsO3AfterCutover() public {
+        _activateLane46();
+        bytes32 id = _signalO4();
+        IProtocolViewerV4.IntentViewV4 memory intentView = viewer.getIntentV4(address(orchestratorV4), id);
+        assertEq(intentView.intentHash, id);
+        assertEq(intentView.intent.owner, taker);
+        assertEq(intentView.intent.to, other);
+        assertEq(intentView.deposit.depositId, depositId);
+        vm.expectRevert(abi.encodeWithSelector(ProtocolViewerV2.InvalidOrchestrator.selector, address(orchestrator)));
+        viewer.getIntentV4(address(orchestrator), id);
     }
 
     function test_CutoverEndsV1FulfilmentThroughTheSharedRegistry() public {
