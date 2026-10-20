@@ -518,7 +518,6 @@ type StackContext = {
   disputeNullifierRegistry: string;
   orchestratorRegistry: string;
   predecessorWhitelistPolicy: string;
-  groupRegistry: string;
   nullifierRegistryV2: string;
   attestationVerifier: string;
   paymentMethods: string[];
@@ -536,6 +535,7 @@ type Lane45State = {
   completed: boolean[];
   deployments: Array<Deployment | null>;
   contracts: {
+    groupRegistry?: Contract;
     whitelist?: Contract;
     vault?: Contract;
     policy?: Contract;
@@ -614,6 +614,7 @@ export async function readFreshState(
   }
   const [
     vaultRecord,
+    groupRegistryRecord,
     whitelistRecord,
     policyRecord,
     verifierRecord,
@@ -623,11 +624,17 @@ export async function readFreshState(
   const contracts: Lane45State["contracts"] = {};
   const completed: Record<string, boolean> = {
     "deploy-vault": Boolean(vaultRecord),
+    "deploy-group-registry": Boolean(groupRegistryRecord),
     "deploy-whitelist": Boolean(whitelistRecord),
     "deploy-policy": Boolean(policyRecord),
     "deploy-verifier": Boolean(verifierRecord),
     "deploy-orchestrator": Boolean(orchestratorRecord),
   };
+  if (groupRegistryRecord) {
+    contracts.groupRegistry = await hre.ethers.getContractAt(
+      "AddressGroupRegistry", groupRegistryRecord.address
+    );
+  }
   if (whitelistRecord) {
     requireState(
       !sameAddress(whitelistRecord.address, context.predecessorWhitelistPolicy),
@@ -636,9 +643,13 @@ export async function readFreshState(
     const whitelist = (contracts.whitelist = await hre.ethers.getContractAt(
       "WhitelistPolicy", whitelistRecord.address
     ));
-    for (const field of ["groupRegistry", "escrowRegistry", "orchestratorRegistry"] as const) {
+    for (const [field, address] of [
+      ["groupRegistry", groupRegistryRecord!.address],
+      ["escrowRegistry", context.escrowRegistry],
+      ["orchestratorRegistry", context.orchestratorRegistry],
+    ] as const) {
       requireState(
-        sameAddress(await whitelist[field](), context[field]),
+        sameAddress(await whitelist[field](), address),
         `Fresh WhitelistPolicyV4 ${field} drifted`
       );
     }
@@ -882,9 +893,11 @@ export async function executeLane45Step(
       context.deployer,
       context.stakeToken,
     ]);
+  } else if (step === "deploy-group-registry") {
+    await deployFresh(hre, "AddressGroupRegistryV4", context.deployer, []);
   } else if (step === "deploy-whitelist") {
     await deployFresh(hre, "WhitelistPolicyV4", context.deployer, [
-      context.groupRegistry,
+      state.contracts.groupRegistry!.address,
       context.escrowRegistry,
       context.orchestratorRegistry,
     ]);
@@ -1066,6 +1079,7 @@ async function localContext(
 function localSteps(context: StackContext): string[] {
   return [
     "deploy-vault",
+    "deploy-group-registry",
     "deploy-whitelist",
     "deploy-policy",
     "authorize-controller",
@@ -1106,8 +1120,9 @@ async function deployLocalO4Stack(
     deployer,
     context.stakeToken,
   ]);
+  const groupRegistryRecord = await deploy("AddressGroupRegistryV4", []);
   const whitelistRecord = await deploy("WhitelistPolicyV4", [
-    context.groupRegistry,
+    groupRegistryRecord.address,
     context.escrowRegistry,
     context.orchestratorRegistry,
   ]);

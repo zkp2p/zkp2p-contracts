@@ -46,6 +46,7 @@ contract OrchestratorV4ActivationTest is OrchestratorV3Fixture {
     DisputeProtectionPolicy internal predecessorPolicy;
     DisputeProtectionPolicyV2 internal freshPolicy;
     AddressGroupRegistry internal groupRegistry;
+    AddressGroupRegistry internal freshGroupRegistry;
     WhitelistPolicy internal whitelistPolicy;
     WhitelistPolicy internal freshWhitelistPolicy;
     IntentLifecycleHookV1 internal predecessorHook;
@@ -68,7 +69,8 @@ contract OrchestratorV4ActivationTest is OrchestratorV3Fixture {
             new DisputeProtectionPolicy(address(this), predecessorVault, disputeVerifier, disputeRegistry);
         groupRegistry = new AddressGroupRegistry();
         whitelistPolicy = new WhitelistPolicy(groupRegistry, escrowRegistry, orchestratorRegistry);
-        freshWhitelistPolicy = new WhitelistPolicy(groupRegistry, escrowRegistry, orchestratorRegistry);
+        freshGroupRegistry = new AddressGroupRegistry();
+        freshWhitelistPolicy = new WhitelistPolicy(freshGroupRegistry, escrowRegistry, orchestratorRegistry);
         freshPolicy = new DisputeProtectionPolicyV2(
             address(this), freshVault, disputeVerifier, disputeRegistry, orchestratorRegistry
         );
@@ -615,6 +617,7 @@ contract OrchestratorV4ActivationTest is OrchestratorV3Fixture {
         surface.whitelistPolicy = address(whitelistPolicy);
         surface.freshWhitelistPolicy = address(freshWhitelistPolicy);
         surface.groupRegistry = address(groupRegistry);
+        surface.freshGroupRegistry = address(freshGroupRegistry);
         surface.attestationVerifier = address(attestationVerifier);
         surface.witnesses = new address[](1);
         surface.witnesses[0] = witness;

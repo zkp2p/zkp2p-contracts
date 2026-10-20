@@ -35,6 +35,7 @@ struct OrchestratorV4TrustSurface {
     address whitelistPolicyOwner;
     address freshWhitelistPolicy;
     address groupRegistry;
+    address freshGroupRegistry;
     address stakeToken;
     address predecessorVault;
     address predecessorPolicy;
@@ -296,7 +297,7 @@ abstract contract OrchestratorV4TrustSurfaceChecks {
         freshAddress = freshWhitelist.escrowRegistry();
         if (freshAddress != expected.escrowRegistry) revert FreshWhitelistPolicyEscrowRegistryMismatch(freshAddress);
         freshAddress = freshWhitelist.groupRegistry();
-        if (freshAddress != expected.groupRegistry) revert FreshWhitelistPolicyGroupRegistryMismatch(freshAddress);
+        if (freshAddress != expected.freshGroupRegistry) revert FreshWhitelistPolicyGroupRegistryMismatch(freshAddress);
         freshAddress = freshWhitelist.orchestratorRegistry();
         if (freshAddress != expected.orchestratorRegistry) {
             revert FreshWhitelistPolicyOrchestratorRegistryMismatch(freshAddress);

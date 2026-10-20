@@ -224,6 +224,7 @@ const trustSurface = object({
   whitelistPolicyOwner: address,
   freshWhitelistPolicy: address,
   groupRegistry: address,
+  freshGroupRegistry: address,
   stakeToken: address,
   predecessorVault: address,
   predecessorPolicy: address,

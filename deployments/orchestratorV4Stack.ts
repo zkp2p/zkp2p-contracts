@@ -14,6 +14,7 @@ export const LANE_46_TAG = "46_activate_orchestrator_v4_stack";
 // Record order follows the resumable deployment steps, not the artifact table.
 export const O4_DEPLOYMENT_NAMES = [
   "StakeVaultV2",
+  "AddressGroupRegistryV4",
   "WhitelistPolicyV4",
   "DisputeProtectionPolicyV2",
   "UnifiedPaymentVerifierV4",
@@ -22,6 +23,7 @@ export const O4_DEPLOYMENT_NAMES = [
 export type O4DeploymentName = (typeof O4_DEPLOYMENT_NAMES)[number];
 export const O4_ARTIFACT_NAMES: Record<O4DeploymentName, string> = {
   StakeVaultV2: "StakeVaultV2",
+  AddressGroupRegistryV4: "AddressGroupRegistry",
   WhitelistPolicyV4: "WhitelistPolicy",
   DisputeProtectionPolicyV2: "DisputeProtectionPolicyV2",
   UnifiedPaymentVerifierV4: "UnifiedPaymentVerifierV4",
@@ -276,6 +278,7 @@ export function paymentMethodHash(name: string): string {
 function deploymentSteps(network: O4Network): string[] {
   return [
     "deploy-vault",
+    "deploy-group-registry",
     "deploy-whitelist",
     "deploy-policy",
     "authorize-controller",

@@ -116,6 +116,7 @@ function expected(network = "base") {
     whitelistPolicy: address(20),
     freshWhitelistPolicy: address(28),
     groupRegistry: address(21),
+    freshGroupRegistry: address(26),
     attestationVerifier: address(22),
     disputeVerifier: address(23),
     stakeToken: address(24),
@@ -240,7 +241,7 @@ function snapshot(wanted, k = 0) {
     freshWhitelistPolicy: {
       owner,
       escrowRegistry: a.escrowRegistry,
-      groupRegistry: a.groupRegistry,
+      groupRegistry: a.freshGroupRegistry,
       orchestratorRegistry: a.orchestratorRegistry,
     },
     whitelistPolicy: {

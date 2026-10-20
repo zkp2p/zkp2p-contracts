@@ -161,7 +161,8 @@
     `0x81630fb1ab2A7Eab137888b9746b66889f78F091`. All three contracts are Basescan-verified. The lane is immutable
     and pinned in `deployments/immutableDeploymentLanes.ts`.
 - Lanes `45`/`46` deploy and activate the `OrchestratorV4` stack beside O3; neither has run on either network. Lane
-  45 is deploy-only and leaves O4 unregistered (`DisputeProtectionPolicyV2` authorizes callers through
+  45 is deploy-only: it builds `WhitelistPolicyV4` on a fresh `AddressGroupRegistryV4`, because groups now store
+  their arbitrator, and leaves O4 unregistered (`DisputeProtectionPolicyV2` authorizes callers through
   `OrchestratorRegistry`). Lane 46 adds the policy's dispute-nullifier writer, moves every route and the sole
   `NullifierRegistryV2` writer to UPV4, and registers O4 last: deployer steps on staging, one guarded Safe batch on
   Base. Flags and pins live in the lane sources and `deployments/orchestratorV4Stack.ts`.

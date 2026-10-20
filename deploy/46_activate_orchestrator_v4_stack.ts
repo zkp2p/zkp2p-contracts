@@ -105,6 +105,7 @@ const RECORD_NAMES = {
   whitelistPolicy: "WhitelistPolicyMethodScoped",
   freshWhitelistPolicy: "WhitelistPolicyV4",
   groupRegistry: "AddressGroupRegistry",
+  freshGroupRegistry: "AddressGroupRegistryV4",
 } as const;
 type RecordKey = keyof typeof RECORD_NAMES;
 type ActivationContext = {

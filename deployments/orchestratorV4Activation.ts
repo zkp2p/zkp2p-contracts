@@ -131,6 +131,7 @@ export type O4ExpectedActivationState = {
     | "freshWhitelistPolicy"
     | "whitelistPolicy"
     | "groupRegistry"
+    | "freshGroupRegistry"
     | "attestationVerifier"
     | "disputeVerifier"
     | "stakeToken",
@@ -174,6 +175,7 @@ export type O4TrustSurfaceInput = {
   whitelistPolicyOwner: string;
   freshWhitelistPolicy: string;
   groupRegistry: string;
+  freshGroupRegistry: string;
   stakeToken: string;
   predecessorVault: string;
   predecessorPolicy: string;
@@ -334,7 +336,7 @@ function commonInvariants(
     "orchestratorRegistry.owner": e.governance,
     "freshWhitelistPolicy.owner": e.governance,
     "freshWhitelistPolicy.escrowRegistry": a.escrowRegistry,
-    "freshWhitelistPolicy.groupRegistry": a.groupRegistry,
+    "freshWhitelistPolicy.groupRegistry": a.freshGroupRegistry,
     "freshWhitelistPolicy.orchestratorRegistry": a.orchestratorRegistry,
     "whitelistPolicy.escrowRegistry": a.escrowRegistry,
     "whitelistPolicy.groupRegistry": a.groupRegistry,
@@ -617,6 +619,7 @@ export function buildO4TrustSurface(
     whitelistPolicyOwner: snapshot.whitelistPolicy.owner,
     freshWhitelistPolicy: a.freshWhitelistPolicy,
     groupRegistry: a.groupRegistry,
+    freshGroupRegistry: a.freshGroupRegistry,
     stakeToken: a.stakeToken,
     predecessorVault: a.predecessorVault,
     predecessorPolicy: a.predecessorPolicy,
@@ -655,6 +658,7 @@ export function o4TrustSurfaceTuple(
     s.whitelistPolicyOwner,
     s.freshWhitelistPolicy,
     s.groupRegistry,
+    s.freshGroupRegistry,
     s.stakeToken,
     s.predecessorVault,
     s.predecessorPolicy,

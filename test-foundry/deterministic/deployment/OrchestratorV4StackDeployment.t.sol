@@ -43,6 +43,7 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
     DisputeVerifier internal disputeVerifier;
     WhitelistPolicy internal whitelist;
     WhitelistPolicy internal freshWhitelist;
+    AddressGroupRegistry internal freshGroupRegistry;
     UnifiedPaymentVerifierV3 internal predecessor;
     UnifiedPaymentVerifierV4 internal successor;
     StakeVault internal predecessorVault;
@@ -105,7 +106,8 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
     }
 
     function _deployLane45() private {
-        freshWhitelist = new WhitelistPolicy(whitelist.groupRegistry(), escrowRegistry, orchestratorRegistry);
+        freshGroupRegistry = new AddressGroupRegistry();
+        freshWhitelist = new WhitelistPolicy(freshGroupRegistry, escrowRegistry, orchestratorRegistry);
         freshVault = new StakeVaultV2(address(this), token);
         freshPolicy = new DisputeProtectionPolicyV2(
             address(this), freshVault, disputeVerifier, disputeNullifiers, orchestratorRegistry
@@ -273,7 +275,8 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         assertEq(address(orchestratorV4.settlementPolicy()), address(freshPolicy));
         assertEq(address(orchestratorV4.whitelistPolicy()), address(freshWhitelist));
         assertNotEq(address(freshWhitelist), address(whitelist));
-        assertEq(address(freshWhitelist.groupRegistry()), address(whitelist.groupRegistry()));
+        assertEq(address(freshWhitelist.groupRegistry()), address(freshGroupRegistry));
+        assertNotEq(address(freshGroupRegistry), address(whitelist.groupRegistry()));
         assertEq(address(predecessorHook.whitelistPolicy()), address(whitelist));
         assertFalse(orchestratorRegistry.isOrchestrator(address(orchestratorV4)));
     }
@@ -284,7 +287,7 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         _deployLane45();
         assertTrue(whitelist.enabled(address(escrow), depositId, METHOD));
         assertFalse(freshWhitelist.enabled(address(escrow), depositId, METHOD));
-        assertEq(address(freshWhitelist.groupRegistry()), address(whitelist.groupRegistry()));
+        assertEq(address(freshWhitelist.groupRegistry()), address(freshGroupRegistry));
         assertEq(address(orchestratorV4.whitelistPolicy()), address(freshWhitelist));
         _activateLane46();
         bytes32 id = _signalO4();
@@ -422,6 +425,32 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         orchestratorV4.signalIntent(params);
     }
 
+    function test_O4GroupArbitratorComesFromTheFreshRegistryAfterCutover() public {
+        _activateLane46();
+        address arbitrator = makeAddr("arbitrator");
+        address[] memory members = new address[](1);
+        members[0] = taker;
+        bytes32[] memory groups = new bytes32[](1);
+        vm.startPrank(depositor);
+        groups[0] = freshGroupRegistry.createGroup("o4-staging");
+        freshGroupRegistry.setArbitrator(groups[0], arbitrator);
+        freshGroupRegistry.addMembers(groups[0], members);
+        freshWhitelist.configureDeposit(address(escrow), depositId, METHOD, false, groups, new address[](0));
+        vm.stopPrank();
+        IOrchestratorV4.SignalIntentParams memory params = _defaultV4Params();
+        params.to = other;
+        params.groupId = groups[0];
+        bytes32 id = _nextO4IntentHash();
+        vm.prank(taker);
+        orchestratorV4.signalIntent(params);
+        assertEq(orchestratorV4.getIntent(id).arbitrator, arbitrator);
+        assertFalse(orchestratorV4.getIntent(id).takerWhitelisted);
+        vm.prank(arbitrator);
+        orchestratorV4.releaseFundsToPayer(id, INTENT_AMOUNT / 2);
+        assertEq(token.balanceOf(other), INTENT_AMOUNT / 2);
+        assertEq(freshPolicy.getProtection(id).depositor, address(0));
+    }
+
     function test_CutoverEndsV1FulfilmentThroughTheSharedRegistry() public {
         // A V1 orchestrator stays registered on Base and staging and routes through the same payment registry.
         UnifiedPaymentVerifierV3CallerHarness v1 = new UnifiedPaymentVerifierV3CallerHarness();
@@ -483,11 +512,15 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         });
     }
 
-    function _signalO4() private returns (bytes32 id) {
-        id = bytes32(
+    function _nextO4IntentHash() private view returns (bytes32) {
+        return bytes32(
             uint256(keccak256(abi.encodePacked(address(orchestratorV4), orchestratorV4.intentCounter())))
                 % CIRCOM_PRIME_FIELD
         );
+    }
+
+    function _signalO4() private returns (bytes32 id) {
+        id = _nextO4IntentHash();
         IOrchestratorV4.SignalIntentParams memory params = _defaultV4Params();
         params.to = other;
         vm.prank(taker);
