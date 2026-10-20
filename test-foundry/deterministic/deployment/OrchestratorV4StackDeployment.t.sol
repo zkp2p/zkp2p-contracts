@@ -422,9 +422,7 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         freshWhitelist.setEnabled(address(escrow), depositId, METHOD, true);
         IOrchestratorV4.SignalIntentParams memory params = _defaultV4Params();
         vm.expectRevert(
-            abi.encodeWithSelector(
-                WhitelistPolicy.TakerNotWhitelisted.selector, taker, address(escrow), depositId, METHOD
-            )
+            abi.encodeWithSelector(IOrchestratorV4.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker)
         );
         vm.prank(taker);
         orchestratorV4.signalIntent(params);
