@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
+import {WhitelistPolicyV2} from "contracts/hooks/WhitelistPolicyV2.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -43,7 +43,7 @@ abstract contract OrchestratorV4Fixture is Test {
     USDCMock internal token;
     EscrowV2 internal escrow;
     OrchestratorV4 internal orchestrator;
-    WhitelistPolicy internal whitelist;
+    WhitelistPolicyV2 internal whitelist;
     EscrowRegistry internal escrowRegistry;
     OrchestratorRegistry internal orchestratorRegistry;
     PaymentVerifierRegistry internal paymentVerifierRegistry;
@@ -83,7 +83,7 @@ abstract contract OrchestratorV4Fixture is Test {
             20,
             1 hours
         );
-        whitelist = new WhitelistPolicy(new AddressGroupRegistry(), escrowRegistry, orchestratorRegistry);
+        whitelist = new WhitelistPolicyV2(new AddressGroupRegistry());
         orchestrator = new OrchestratorV4(
             address(this),
             CHAIN_ID,
@@ -144,6 +144,16 @@ abstract contract OrchestratorV4Fixture is Test {
                 retainOnEmpty: false
             })
         );
+    }
+
+    /// @dev Whitelists `_taker` directly on the default deposit and enables the whitelist, as the depositor.
+    function _whitelist(address _taker) internal {
+        address[] memory takers = new address[](1);
+        takers[0] = _taker;
+        vm.startPrank(depositor);
+        whitelist.setTakers(address(escrow), depositId, takers, true);
+        whitelist.setEnabled(address(escrow), depositId, true);
+        vm.stopPrank();
     }
 
     function _emptyReferralFees() internal pure returns (IReferralFee.ReferralFee[] memory) {

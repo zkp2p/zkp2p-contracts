@@ -26,12 +26,7 @@ contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
             if (index == 1) _stake(vault, taker, INTENT_AMOUNT);
             assertEq(vault.freeStake(taker), index == 1 ? INTENT_AMOUNT : 0);
             bool whitelisted = index == 3;
-            if (whitelisted) {
-                address[] memory takers = new address[](1);
-                takers[0] = taker;
-                vm.prank(depositor);
-                whitelist.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), takers);
-            }
+            if (whitelisted) _whitelist(taker);
             bytes32 id = _signalDefault();
             bytes memory proof = _serviceProof(attestor, id, modes[index], index);
             UnifiedPaymentVerifierV4.PaymentAttestation memory attestation =

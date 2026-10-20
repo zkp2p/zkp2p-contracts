@@ -18,7 +18,7 @@ import { IReferralFee } from "./interfaces/IReferralFee.sol";
 import { IEscrow } from "./interfaces/IEscrow.sol";
 import { IEscrowV2 } from "./interfaces/IEscrowV2.sol";
 import { IEscrowRegistry } from "./interfaces/IEscrowRegistry.sol";
-import { IWhitelistPolicy } from "./interfaces/IWhitelistPolicy.sol";
+import { IWhitelistPolicyV2 } from "./interfaces/IWhitelistPolicyV2.sol";
 import { IIntentSettlementPolicy } from "./interfaces/IIntentSettlementPolicy.sol";
 import { IPaymentVerifierV2 } from "./interfaces/IPaymentVerifierV2.sol";
 import { IPaymentVerifierRegistry } from "./interfaces/IPaymentVerifierRegistry.sol";
@@ -65,7 +65,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     // Contract references
     IEscrowRegistry public escrowRegistry;                              // Registry of escrow contracts
     IPaymentVerifierRegistry public  paymentVerifierRegistry;          // Registry of payment verifiers
-    IWhitelistPolicy public immutable whitelistPolicy;
+    IWhitelistPolicyV2 public immutable whitelistPolicy;
     IRelayerRegistry public relayerRegistry;                           // Registry of relayers
 
     // Protocol fee configuration
@@ -85,7 +85,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         address _relayerRegistry,
         uint256 _protocolFee,
         address _protocolFeeRecipient,
-        IWhitelistPolicy _whitelistPolicy
+        IWhitelistPolicyV2 _whitelistPolicy
     )
         Ownable()
     {
@@ -522,11 +522,9 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (_intent.conversionRate < minConversionRate) revert RateBelowMinimum(_intent.conversionRate, minConversionRate);
 
         // With the whitelist off, anyone may signal and groupId is ignored; a group taker gets its group's arbitrator.
-        bool depositWhitelisted = whitelistPolicy.enabled(_intent.escrow, _intent.depositId, _intent.paymentMethod);
+        bool depositWhitelisted = whitelistPolicy.enabled(_intent.escrow, _intent.depositId);
         if (depositWhitelisted) {
-            takerWhitelisted = whitelistPolicy.isTakerWhitelisted(
-                _intent.escrow, _intent.depositId, _intent.paymentMethod, msg.sender, _intent.groupId
-            );
+            takerWhitelisted = whitelistPolicy.isWhitelisted(_intent.escrow, _intent.depositId, msg.sender, _intent.groupId);
             if (!takerWhitelisted) {
                 revert TakerNotWhitelisted(_intent.escrow, _intent.depositId, _intent.paymentMethod, msg.sender);
             }

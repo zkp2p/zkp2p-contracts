@@ -14,7 +14,7 @@ import { IWhitelistResolver } from "../interfaces/IWhitelistResolver.sol";
  * @dev The id is only unique within one registry deployment on one chain — off-chain
  * consumers must key groups by (chainId, registryAddress, groupId).
  *
- * TRUST MODEL: attaching a group to a maker's admission policy via WhitelistPolicy.addAllowedGroups
+ * TRUST MODEL: attaching a group to a maker's admission policy via WhitelistPolicyV2.setGroups
  * delegates ongoing admission policy to the group's controller set: the current curator, any future
  * curator after transfer, and the current and any future resolver. Any of these can admit arbitrary
  * accounts at any time. It also accepts the group's arbitrator, current or future, for intents a member
