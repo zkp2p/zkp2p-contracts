@@ -1,0 +1,279 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.18;
+
+import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
+import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
+import {Test} from "forge-std/Test.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+import {EscrowV2} from "contracts/EscrowV2.sol";
+import {OrchestratorV4} from "contracts/OrchestratorV4.sol";
+import {OrchestratorMock} from "../../mocks/OrchestratorMock.sol";
+import {PaymentVerifierV2Mock} from "../../mocks/PaymentVerifierV2Mock.sol";
+import {PostIntentHookV2Mock} from "../../mocks/PostIntentHookV2Mock.sol";
+import {USDCMock} from "contracts/mocks/USDCMock.sol";
+import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
+import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
+import {PaymentVerifierRegistry} from "contracts/registries/PaymentVerifierRegistry.sol";
+import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
+import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
+import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
+import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
+import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
+import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
+
+abstract contract OrchestratorV4Fixture is Test {
+    uint256 internal constant CHAIN_ID = 1;
+    uint256 internal constant INTENT_AMOUNT = 50e6;
+    uint256 internal constant CONVERSION_RATE = 1e18;
+    uint256 internal constant CIRCOM_PRIME_FIELD =
+        21888242871839275222246405745257275088548364400416034343698204186575808495617;
+    bytes32 internal constant METHOD = keccak256("venmo");
+    bytes32 internal constant USD = keccak256("USD");
+    bytes32 internal constant PAYEE = keccak256("payee");
+
+    uint256 internal gatingServiceKey;
+    address internal depositor;
+    address internal delegate;
+    address internal taker;
+    address internal other;
+    address internal referrer;
+    address internal protocolFeeRecipient;
+    address internal gatingService;
+    USDCMock internal token;
+    EscrowV2 internal escrow;
+    OrchestratorV4 internal orchestrator;
+    WhitelistPolicy internal whitelist;
+    EscrowRegistry internal escrowRegistry;
+    OrchestratorRegistry internal orchestratorRegistry;
+    PaymentVerifierRegistry internal paymentVerifierRegistry;
+    RelayerRegistry public relayerRegistry;
+    PaymentVerifierV2Mock internal verifier;
+    PostIntentHookV2Mock internal postIntentHook;
+    OrchestratorMock internal orchestratorMock;
+    uint256 internal depositId;
+
+    function setUp() public virtual {
+        depositor = makeAddr("depositor");
+        delegate = makeAddr("delegate");
+        taker = makeAddr("taker");
+        other = makeAddr("other");
+        referrer = makeAddr("referrer");
+        protocolFeeRecipient = makeAddr("protocolFeeRecipient");
+        (gatingService, gatingServiceKey) = makeAddrAndKey("gatingService");
+
+        token = new USDCMock(1_000_000_000e6, "USDC", "USDC");
+        token.transfer(depositor, 100_000e6);
+        paymentVerifierRegistry = new PaymentVerifierRegistry();
+        escrowRegistry = new EscrowRegistry();
+        orchestratorRegistry = new OrchestratorRegistry();
+        relayerRegistry = new RelayerRegistry();
+        verifier = new PaymentVerifierV2Mock();
+        bytes32[] memory currencies = new bytes32[](1);
+        currencies[0] = USD;
+        paymentVerifierRegistry.addPaymentMethod(METHOD, address(verifier), currencies);
+
+        escrow = new EscrowV2(
+            address(this),
+            CHAIN_ID,
+            address(orchestratorRegistry),
+            address(paymentVerifierRegistry),
+            address(this),
+            0,
+            20,
+            1 hours
+        );
+        whitelist = new WhitelistPolicy(new AddressGroupRegistry(), escrowRegistry, orchestratorRegistry);
+        orchestrator = new OrchestratorV4(
+            address(this),
+            CHAIN_ID,
+            address(escrowRegistry),
+            address(paymentVerifierRegistry),
+            address(relayerRegistry),
+            0,
+            protocolFeeRecipient,
+            whitelist
+        );
+        orchestrator.setAllowMultipleIntents(true);
+        postIntentHook = new PostIntentHookV2Mock(address(token), address(orchestrator));
+        orchestratorMock = new OrchestratorMock(address(escrow));
+
+        escrowRegistry.addEscrow(address(escrow));
+        orchestratorRegistry.addOrchestrator(address(orchestrator));
+        orchestratorRegistry.addOrchestrator(address(orchestratorMock));
+        verifier.setVerificationContext(address(orchestrator), address(escrow));
+        vm.startPrank(depositor);
+        token.approve(address(escrow), 100_000e6);
+        depositId = _createDeposit(address(0), delegate);
+        vm.stopPrank();
+    }
+
+    function _emptyOracle() internal pure returns (IEscrowV2.OracleRateConfig memory) {
+        return IEscrowV2.OracleRateConfig({adapter: address(0), adapterConfig: "", spreadBps: 0, maxStaleness: 0});
+    }
+
+    function _createDeposit(address intentGatingService, address depositDelegate) internal returns (uint256 id) {
+        id = escrow.depositCounter();
+        bytes32[] memory methods = new bytes32[](1);
+        methods[0] = METHOD;
+        IEscrowV2.DepositPaymentMethodData[] memory methodData = new IEscrowV2.DepositPaymentMethodData[](1);
+        methodData[0] = IEscrowV2.DepositPaymentMethodData({
+            intentGatingService: intentGatingService, payeeDetails: PAYEE, data: ""
+        });
+        IEscrowV2.Currency[][] memory currencies = new IEscrowV2.Currency[][](1);
+        currencies[0] = new IEscrowV2.Currency[](1);
+        currencies[0][0] =
+            IEscrowV2.Currency({code: USD, minConversionRate: CONVERSION_RATE, oracleRateConfig: _emptyOracle()});
+        escrow.createDeposit(
+            IEscrowV2.CreateDepositParams({
+                token: IERC20(address(token)),
+                amount: 500e6,
+                intentAmountRange: IEscrowV2.Range({min: 10e6, max: 200e6}),
+                paymentMethods: methods,
+                paymentMethodData: methodData,
+                currencies: currencies,
+                delegate: depositDelegate,
+                intentGuardian: address(0),
+                retainOnEmpty: false
+            })
+        );
+    }
+
+    function _emptyReferralFees() internal pure returns (IReferralFee.ReferralFee[] memory) {
+        return new IReferralFee.ReferralFee[](0);
+    }
+
+    function _twoReferralFees() internal view returns (IReferralFee.ReferralFee[] memory fees) {
+        fees = new IReferralFee.ReferralFee[](2);
+        fees[0] = IReferralFee.ReferralFee({recipient: referrer, fee: 3e15});
+        fees[1] = IReferralFee.ReferralFee({recipient: other, fee: 2e15});
+    }
+
+    function _params(
+        uint256 selectedDepositId,
+        address to,
+        uint256 amount,
+        uint256 conversionRate,
+        IReferralFee.ReferralFee[] memory referralFees
+    ) internal view returns (IOrchestratorV4.SignalIntentParams memory) {
+        return IOrchestratorV4.SignalIntentParams({
+            escrow: address(escrow),
+            depositId: selectedDepositId,
+            amount: amount,
+            to: to,
+            paymentMethod: METHOD,
+            fiatCurrency: USD,
+            conversionRate: conversionRate,
+            referralFees: referralFees,
+            gatingServiceSignature: "",
+            signatureExpiration: block.timestamp + 1 days,
+            payerCommitment: ""
+        });
+    }
+
+    function _defaultParams() internal view virtual returns (IOrchestratorV4.SignalIntentParams memory) {
+        return _params(
+            depositId, taker, INTENT_AMOUNT, CONVERSION_RATE, _emptyReferralFees()
+        );
+    }
+
+    function _v3Params() internal view returns (IOrchestratorV3.SignalIntentParams memory) {
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
+        return IOrchestratorV3.SignalIntentParams({
+            escrow: params.escrow, depositId: params.depositId, amount: params.amount, to: params.to,
+            paymentMethod: params.paymentMethod, fiatCurrency: params.fiatCurrency,
+            conversionRate: params.conversionRate, referralFees: params.referralFees,
+            gatingServiceSignature: params.gatingServiceSignature, signatureExpiration: params.signatureExpiration,
+            postIntentHook: IPostIntentHookV2(address(0)), preIntentHookData: "", data: ""
+        });
+    }
+
+    function _intentHash(uint256 counter) internal view returns (bytes32) {
+        return bytes32(uint256(keccak256(abi.encodePacked(address(orchestrator), counter))) % CIRCOM_PRIME_FIELD);
+    }
+
+    function _signal(address caller, IOrchestratorV4.SignalIntentParams memory params) internal returns (bytes32 hash) {
+        hash = _intentHash(orchestrator.intentCounter());
+        _signalCall(caller, params);
+    }
+
+    function _signalCall(address caller, IOrchestratorV4.SignalIntentParams memory params) internal {
+        vm.prank(caller);
+        orchestrator.signalIntent(params);
+    }
+
+    function _signalDefault() internal returns (bytes32) {
+        return _signal(taker, _defaultParams());
+    }
+
+    function _paymentProof(bytes32 intentHash, uint256 releaseAmount, uint256 conversionRate)
+        internal
+        view
+        returns (bytes memory)
+    {
+        uint256 fiatAmount = releaseAmount * conversionRate / 1e18;
+        return abi.encode(fiatAmount, block.timestamp, PAYEE, USD, intentHash);
+    }
+
+    function _fulfill(bytes32 intentHash, uint256 releaseAmount, uint256 conversionRate) internal {
+        orchestrator.fulfillIntent(
+            IOrchestratorV4.FulfillIntentParams({
+                paymentProof: _paymentProof(intentHash, releaseAmount, conversionRate),
+                intentHash: intentHash,
+                verificationData: ""
+            })
+        );
+    }
+
+    function _referralHash(IReferralFee.ReferralFee[] memory fees) internal pure returns (bytes32) {
+        bytes32[] memory hashes = new bytes32[](fees.length);
+        for (uint256 i; i < fees.length; ++i) {
+            hashes[i] = keccak256(abi.encode(fees[i].recipient, fees[i].fee));
+        }
+        return keccak256(abi.encode(hashes));
+    }
+
+    function _gatingSignature(
+        uint256 signerKey,
+        address signedCaller,
+        IOrchestratorV4.SignalIntentParams memory params,
+        uint256 expiration
+    ) internal view returns (bytes memory) {
+        bytes32 messageHash = keccak256(
+            abi.encodePacked(
+                address(orchestrator),
+                params.escrow,
+                params.depositId,
+                params.amount,
+                signedCaller,
+                params.to,
+                params.paymentMethod,
+                params.fiatCurrency,
+                params.conversionRate,
+                _referralHash(params.referralFees),
+                expiration,
+                CHAIN_ID,
+                params.payerCommitment
+            )
+        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, digest);
+        return abi.encodePacked(r, s, v);
+    }
+
+    function _gatedParams(uint256 gatedDepositId, uint256 signerKey, address signedCaller, uint256 expiration)
+        internal
+        view
+        returns (IOrchestratorV4.SignalIntentParams memory params)
+    {
+        params = _params(
+            gatedDepositId,
+            taker,
+            INTENT_AMOUNT,
+            CONVERSION_RATE,
+            _emptyReferralFees()
+        );
+        params.signatureExpiration = expiration;
+        params.gatingServiceSignature = _gatingSignature(signerKey, signedCaller, params, expiration);
+    }
+}
