@@ -19,7 +19,6 @@ import { IEscrow } from "./interfaces/IEscrow.sol";
 import { IEscrowV2 } from "./interfaces/IEscrowV2.sol";
 import { IEscrowRegistry } from "./interfaces/IEscrowRegistry.sol";
 import { IWhitelistPolicy } from "./interfaces/IWhitelistPolicy.sol";
-import { IAddressGroupRegistry } from "./interfaces/IAddressGroupRegistry.sol";
 import { IIntentSettlementPolicy } from "./interfaces/IIntentSettlementPolicy.sol";
 import { IPaymentVerifierV2 } from "./interfaces/IPaymentVerifierV2.sol";
 import { IPaymentVerifierRegistry } from "./interfaces/IPaymentVerifierRegistry.sol";
@@ -67,7 +66,6 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     IEscrowRegistry public escrowRegistry;                              // Registry of escrow contracts
     IPaymentVerifierRegistry public  paymentVerifierRegistry;          // Registry of payment verifiers
     IWhitelistPolicy public immutable whitelistPolicy;
-    IAddressGroupRegistry internal immutable groupRegistry;            // whitelistPolicy's group registry
     IRelayerRegistry public relayerRegistry;                           // Registry of relayers
 
     // Protocol fee configuration
@@ -98,7 +96,6 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         protocolFee = _protocolFee;
         protocolFeeRecipient = _protocolFeeRecipient;
         whitelistPolicy = _whitelistPolicy;
-        groupRegistry = _whitelistPolicy.groupRegistry();
 
         transferOwnership(_owner);
     }
@@ -524,20 +521,17 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (minConversionRate == 0) revert CurrencyNotSupported(_intent.paymentMethod, _intent.fiatCurrency);
         if (_intent.conversionRate < minConversionRate) revert RateBelowMinimum(_intent.conversionRate, minConversionRate);
 
+        // Naming a group requires membership even when the whitelist is off, and binds the taker to its arbitrator.
         takerWhitelisted = whitelistPolicy.enabled(_intent.escrow, _intent.depositId, _intent.paymentMethod);
-        if (_intent.groupId != bytes32(0)) {
-            // Allowing a group accepts its arbitrator; a member of an allowed group also passes the whitelist.
-            if (!whitelistPolicy.isGroupAllowed(_intent.escrow, _intent.depositId, _intent.paymentMethod, _intent.groupId)) {
-                revert GroupNotAllowed(_intent.escrow, _intent.depositId, _intent.paymentMethod, _intent.groupId);
-            }
-            if (!groupRegistry.isMember(_intent.groupId, msg.sender)) revert NotGroupMember(_intent.groupId, msg.sender);
-            (,,,,, arbitrator) = groupRegistry.getGroup(_intent.groupId);
-        } else if (
-            takerWhitelisted
-                && !whitelistPolicy.isTakerAllowed(_intent.escrow, _intent.depositId, _intent.paymentMethod, msg.sender)
+        if (
+            (takerWhitelisted || _intent.groupId != bytes32(0))
+                && !whitelistPolicy.isTakerWhitelisted(
+                    _intent.escrow, _intent.depositId, _intent.paymentMethod, msg.sender, _intent.groupId
+                )
         ) {
             revert TakerNotWhitelisted(_intent.escrow, _intent.depositId, _intent.paymentMethod, msg.sender);
         }
+        if (_intent.groupId != bytes32(0)) (,,,,, arbitrator) = whitelistPolicy.groupRegistry().getGroup(_intent.groupId);
 
         address intentGatingService = IEscrow(_intent.escrow).getDepositGatingService(_intent.depositId, _intent.paymentMethod);
         // Only a gating service can vouch that the committed payer IDs belong to the taker.

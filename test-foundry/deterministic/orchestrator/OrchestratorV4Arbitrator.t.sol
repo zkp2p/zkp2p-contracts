@@ -67,13 +67,13 @@ contract OrchestratorV4ArbitratorTest is OrchestratorV4Fixture {
         params.groupId = unallowed;
 
         vm.expectRevert(
-            abi.encodeWithSelector(IOrchestratorV4.GroupNotAllowed.selector, address(escrow), depositId, METHOD, unallowed)
+            abi.encodeWithSelector(IOrchestratorV4.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker)
         );
         _signalCall(taker, params);
     }
 
     function test_SignalRejectsTakerOutsideTheGroup() public {
-        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.NotGroupMember.selector, groupId, other));
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, other));
         _signalCall(other, _defaultParams());
     }
 

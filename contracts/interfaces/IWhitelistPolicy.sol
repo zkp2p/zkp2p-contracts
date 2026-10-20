@@ -26,6 +26,12 @@ interface IWhitelistPolicy is IPreIntentHook {
         external
         view
         returns (bool);
+    /// @notice Returns whether the taker is on the deposit's whitelist for the payment method: as a member of groupId
+    /// if it is non-zero and allowed, otherwise directly or through any allowed group.
+    function isTakerWhitelisted(address escrow, uint256 depositId, bytes32 paymentMethod, address taker, bytes32 groupId)
+        external
+        view
+        returns (bool);
 
     /**
      * @notice Bundles enabling/disabling a deposit payment method's gate with appending groups and takers.

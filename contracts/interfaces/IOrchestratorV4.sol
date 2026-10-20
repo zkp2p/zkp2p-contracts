@@ -115,8 +115,6 @@ interface IOrchestratorV4 {
     error PaymentMethodNotWhitelisted(bytes32 paymentMethod);
     error EscrowNotWhitelisted(address escrow);
     error TakerNotWhitelisted(address escrow, uint256 depositId, bytes32 paymentMethod, address taker);
-    error GroupNotAllowed(address escrow, uint256 depositId, bytes32 paymentMethod, bytes32 groupId);
-    error NotGroupMember(bytes32 groupId, address taker);
 
     // Amount and fee errors
     error AmountBelowMin(uint256 amount, uint256 min);
