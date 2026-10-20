@@ -277,14 +277,10 @@ contract WhitelistPolicy is Ownable, IWhitelistPolicy {
         address _taker,
         bytes32 _groupId
     ) external view override returns (bool) {
-        bytes32[] storage groups = allowedGroups[_escrow][_depositId][_paymentMethod];
-        if (_groupId != bytes32(0)) return _containsGroup(groups, _groupId) && groupRegistry.isMember(_groupId, _taker);
-
-        if (isWhitelisted[_escrow][_depositId][_taker]) return true;
-        for (uint256 i = 0; i < groups.length; ++i) {
-            if (groupRegistry.isMember(groups[i], _taker)) return true;
-        }
-        return false;
+        // Group members must name their group, so its arbitrator rules their intents.
+        if (_groupId == bytes32(0)) return isWhitelisted[_escrow][_depositId][_taker];
+        return _containsGroup(allowedGroups[_escrow][_depositId][_paymentMethod], _groupId)
+            && groupRegistry.isMember(_groupId, _taker);
     }
 
     /**

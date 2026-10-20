@@ -77,23 +77,28 @@ contract OrchestratorV4ArbitratorTest is OrchestratorV4Fixture {
         _signalCall(other, _defaultParams());
     }
 
-    function test_GroupSignalPassesEnabledWhitelistAndRecordsTakerWhitelisted() public {
+    function test_EnabledWhitelistAdmitsGroupMembersOnlyThroughTheirGroup() public {
         _setArbitrator(arbitrator);
-        vm.prank(depositor);
+        address[] memory direct = new address[](1);
+        direct[0] = other;
+        vm.startPrank(depositor);
         whitelist.setEnabled(address(escrow), depositId, METHOD, true);
+        whitelist.addWhitelistedAddresses(address(escrow), depositId, direct);
+        vm.stopPrank();
 
         bytes32 viaGroup = _signalDefault();
-        bytes32 withoutGroup = _signal(taker, super._defaultParams());
-
         assertTrue(orchestrator.getIntent(viaGroup).takerWhitelisted);
         assertEq(orchestrator.getIntent(viaGroup).arbitrator, arbitrator);
-        assertTrue(orchestrator.getIntent(withoutGroup).takerWhitelisted);
-        assertEq(orchestrator.getIntent(withoutGroup).arbitrator, address(0));
 
+        // Without naming the group, a member would signal with no arbitrator.
         vm.expectRevert(
-            abi.encodeWithSelector(IOrchestratorV4.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, other)
+            abi.encodeWithSelector(IOrchestratorV4.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker)
         );
-        _signalCall(other, super._defaultParams());
+        _signalCall(taker, super._defaultParams());
+
+        bytes32 directTaker = _signal(other, super._defaultParams());
+        assertTrue(orchestrator.getIntent(directTaker).takerWhitelisted);
+        assertEq(orchestrator.getIntent(directTaker).arbitrator, address(0));
     }
 
     function test_ArbitratorReleaseSkipsPolicyAndRecordsReleasedBy() public {

@@ -782,7 +782,7 @@ contract WhitelistPolicyTest is Test {
         assertFalse(_isTakerWhitelisted(taker, PEER_PLUSES));
         assertFalse(_isTakerWhitelisted(otherTaker, PEERS));
         assertTrue(_isTakerWhitelisted(otherTaker, bytes32(0)));
-        assertTrue(_isTakerWhitelisted(taker, bytes32(0)));
+        assertFalse(_isTakerWhitelisted(taker, bytes32(0)));
         assertFalse(_isTakerWhitelisted(maker, bytes32(0)));
 
         vm.prank(maker);
