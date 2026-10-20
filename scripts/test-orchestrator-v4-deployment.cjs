@@ -705,9 +705,10 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
     assert.ok(state.records.get(name), name);
   const requiredAbiFunctions = /** @type {Array<[string, string[]]>} */ ([
     ["DisputeProtectionPolicyV2", ["settleIntent", "onDeferredPayoutFunded", "release", "getProtection", "submitDispute", "orchestratorRegistry"]],
-    ["StakeVaultV2", ["withdrawStakeTo", "isController", "setController", "lockController"]],
-    ["OrchestratorV4", ["supportsInterface", "setSettlementPolicy"]],
+    ["StakeVaultV2", ["withdrawStakeTo", "payOutLock", "isController", "setController", "lockController"]],
+    ["OrchestratorV4", ["supportsInterface", "setSettlementPolicy", "extendIntent"]],
     ["UnifiedPaymentVerifierV4", ["addPaymentMethod", "DOMAIN_SEPARATOR"]],
+    ["WhitelistPolicyV4", ["isTakerWhitelisted"]],
   ]);
   for (const [recordName, functionNames] of requiredAbiFunctions) {
     const abi = state.records.get(recordName).abi;
@@ -871,6 +872,7 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
       ([name]) => !["postIntentHook", "preIntentHookData", "data"].includes(name)
     ),
     ["payerCommitment", "bytes"],
+    ["groupId", "bytes32"],
   ]);
   /** @param {any[]} abi */
   const intentFields = (abi) => {
@@ -884,6 +886,16 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
     ...intentFields(v3Abi).filter(([name]) => !["postIntentHook", "data"].includes(name)),
     ["payerCommitment", "bytes"],
     ["takerWhitelisted", "bool"],
+    ["arbitrator", "address"],
+  ]);
+  const o4Interface = new ethers.utils.Interface(o4Abi);
+  /** @param {{ name: string, type: string }[]} inputs */
+  const fields = (inputs) => inputs.map((entry) => [entry.name, entry.type]);
+  assert.deepEqual(fields(o4Interface.getFunction("releaseFundsToPayer").inputs), [
+    ["_intentHash", "bytes32"], ["_releaseAmount", "uint256"],
+  ]);
+  assert.deepEqual(fields(o4Interface.getEvent("IntentFulfilled").inputs), [
+    ["intentHash", "bytes32"], ["fundsTransferredTo", "address"], ["amount", "uint256"], ["releasedBy", "address"],
   ]);
   assert.equal(o4Abi.some(
     (/** @type {{name?: string}} */ entry) => /conditions/i.test(entry.name || "")

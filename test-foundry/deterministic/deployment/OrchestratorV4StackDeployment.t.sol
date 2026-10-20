@@ -23,8 +23,11 @@ import {INullifierRegistryV2} from "contracts/interfaces/INullifierRegistryV2.so
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
+import {IOrchestrator} from "contracts/interfaces/IOrchestrator.sol";
 import {IPaymentVerifier} from "contracts/interfaces/IPaymentVerifier.sol";
 import {IPaymentVerifierV2} from "contracts/interfaces/IPaymentVerifierV2.sol";
+import {IPostIntentHook} from "contracts/interfaces/IPostIntentHook.sol";
+import {UnifiedPaymentVerifierV3CallerHarness} from "../../mocks/UnifiedPaymentVerifierV3Harness.sol";
 
 /// @dev Models deployer-owned lanes 45/46; Safe ownership acceptance is outside this model.
 contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
@@ -389,7 +392,7 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         bytes32 id = _signalO4();
         uint256 vaultBalance = token.balanceOf(address(freshVault));
         vm.prank(depositor);
-        orchestratorV4.releaseFundsToPayer(id);
+        orchestratorV4.releaseFundsToPayer(id, INTENT_AMOUNT);
         assertEq(token.balanceOf(other), INTENT_AMOUNT);
         assertEq(token.balanceOf(address(freshVault)), vaultBalance);
         assertEq(freshVault.lockedStake(other), 0);
@@ -412,11 +415,45 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         IOrchestratorV4.SignalIntentParams memory params = _defaultV4Params();
         vm.expectRevert(
             abi.encodeWithSelector(
-                IOrchestratorV4.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker
+                WhitelistPolicy.TakerNotWhitelisted.selector, taker, address(escrow), depositId, METHOD
             )
         );
         vm.prank(taker);
         orchestratorV4.signalIntent(params);
+    }
+
+    function test_CutoverEndsV1FulfilmentThroughTheSharedRegistry() public {
+        // A V1 orchestrator stays registered on Base and staging and routes through the same payment registry.
+        UnifiedPaymentVerifierV3CallerHarness v1 = new UnifiedPaymentVerifierV3CallerHarness();
+        orchestratorRegistry.addOrchestrator(address(v1));
+        bytes32 beforeCutover = _setV1Intent(v1, keccak256("v1-before-cutover"));
+        v1.verifyPayment(
+            IPaymentVerifier(paymentVerifierRegistry.getVerifier(METHOD)),
+            IPaymentVerifier.VerifyPaymentData(
+                beforeCutover, _predecessorProof(beforeCutover, INTENT_AMOUNT, block.timestamp, keccak256("v1-before")), ""
+            )
+        );
+        _activateLane46();
+        bytes32 afterCutover = _setV1Intent(v1, keccak256("v1-after-cutover"));
+        bytes32 paymentId = keccak256("v1-after");
+        bytes memory proof =
+            _successorProof(afterCutover, INTENT_AMOUNT, block.timestamp, paymentId, abi.encode(uint256(0)));
+        IPaymentVerifier routed = IPaymentVerifier(paymentVerifierRegistry.getVerifier(METHOD));
+        assertEq(address(routed), address(successor));
+        vm.expectRevert("UPV: Unsupported orchestrator");
+        v1.verifyPayment(routed, IPaymentVerifier.VerifyPaymentData(afterCutover, proof, ""));
+        assertFalse(nullifiers.isNullified(keccak256(abi.encodePacked(METHOD, paymentId))));
+    }
+
+    function _setV1Intent(UnifiedPaymentVerifierV3CallerHarness v1, bytes32 intentHash) private returns (bytes32) {
+        v1.setIntent(
+            intentHash,
+            IOrchestrator.Intent(
+                taker, taker, address(escrow), depositId, INTENT_AMOUNT, block.timestamp, METHOD, USD,
+                CONVERSION_RATE, PAYEE, address(0), 0, IPostIntentHook(address(0)), ""
+            )
+        );
+        return intentHash;
     }
 
     function _stake(address target) private {
@@ -441,7 +478,8 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
             referralFees: params.referralFees,
             gatingServiceSignature: params.gatingServiceSignature,
             signatureExpiration: params.signatureExpiration,
-            payerCommitment: ""
+            payerCommitment: "",
+            groupId: bytes32(0)
         });
     }
 
@@ -466,6 +504,14 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
     /// @dev UPV3 payload: abi.encode(PaymentDetails, IntentSnapshot), 448 bytes.
     function _predecessorProof(bytes32 intentHash, bytes32 paymentId) private view returns (bytes memory) {
         (uint256 amount, uint256 timestamp) = _intentAmountAndTimestamp(intentHash);
+        return _predecessorProof(intentHash, amount, timestamp, paymentId);
+    }
+
+    function _predecessorProof(bytes32 intentHash, uint256 amount, uint256 timestamp, bytes32 paymentId)
+        private
+        view
+        returns (bytes memory)
+    {
         bytes memory data = abi.encode(
             UnifiedPaymentVerifierV3.PaymentDetails(METHOD, PAYEE, 5000, USD, block.timestamp * 1000, paymentId),
             UnifiedPaymentVerifierV3.IntentSnapshot(
@@ -483,6 +529,16 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         returns (bytes memory)
     {
         (uint256 amount, uint256 timestamp) = _intentAmountAndTimestamp(intentHash);
+        return _successorProof(intentHash, amount, timestamp, paymentId, settlementData);
+    }
+
+    function _successorProof(
+        bytes32 intentHash,
+        uint256 amount,
+        uint256 timestamp,
+        bytes32 paymentId,
+        bytes memory settlementData
+    ) private view returns (bytes memory) {
         bytes memory data = abi.encode(
             IPaymentVerifierV2.PaymentDetails(METHOD, PAYEE, 5000, USD, block.timestamp * 1000, paymentId),
             IPaymentVerifierV2.IntentSnapshot(
