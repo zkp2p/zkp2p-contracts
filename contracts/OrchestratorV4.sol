@@ -521,17 +521,16 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (minConversionRate == 0) revert CurrencyNotSupported(_intent.paymentMethod, _intent.fiatCurrency);
         if (_intent.conversionRate < minConversionRate) revert RateBelowMinimum(_intent.conversionRate, minConversionRate);
 
-        // Naming a group requires membership even when the whitelist is off, and binds the taker to its arbitrator.
+        // With the whitelist off, anyone may signal and groupId is ignored; a group taker gets its group's arbitrator.
         takerWhitelisted = whitelistPolicy.enabled(_intent.escrow, _intent.depositId, _intent.paymentMethod);
-        if (
-            (takerWhitelisted || _intent.groupId != bytes32(0))
-                && !whitelistPolicy.isTakerWhitelisted(
-                    _intent.escrow, _intent.depositId, _intent.paymentMethod, msg.sender, _intent.groupId
-                )
-        ) {
-            revert TakerNotWhitelisted(_intent.escrow, _intent.depositId, _intent.paymentMethod, msg.sender);
+        if (takerWhitelisted) {
+            if (!whitelistPolicy.isTakerWhitelisted(
+                _intent.escrow, _intent.depositId, _intent.paymentMethod, msg.sender, _intent.groupId
+            )) {
+                revert TakerNotWhitelisted(_intent.escrow, _intent.depositId, _intent.paymentMethod, msg.sender);
+            }
+            if (_intent.groupId != bytes32(0)) (,,,,, arbitrator) = whitelistPolicy.groupRegistry().getGroup(_intent.groupId);
         }
-        if (_intent.groupId != bytes32(0)) (,,,,, arbitrator) = whitelistPolicy.groupRegistry().getGroup(_intent.groupId);
 
         address intentGatingService = IEscrow(_intent.escrow).getDepositGatingService(_intent.depositId, _intent.paymentMethod);
         // Only a gating service can vouch that the committed payer IDs belong to the taker.

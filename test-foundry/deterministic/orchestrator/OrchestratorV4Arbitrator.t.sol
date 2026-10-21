@@ -25,7 +25,7 @@ contract OrchestratorV4ArbitratorTest is OrchestratorV4Fixture {
         policyMock = new SettlementPolicyMock();
 
         groupId = _createGroup(curator, taker);
-        _allowGroup(depositId, groupId);
+        _gateWithGroup(depositId, groupId);
     }
 
     function test_SignalCopiesGroupArbitratorAndChangesOnlyReachNewIntents() public {
@@ -51,11 +51,18 @@ contract OrchestratorV4ArbitratorTest is OrchestratorV4Fixture {
         assertEq(token.balanceOf(taker), INTENT_AMOUNT);
     }
 
-    function test_SignalWithoutGroupHasNoArbitrator() public {
+    function test_DisabledWhitelistIgnoresTheGroup() public {
         _setArbitrator(arbitrator);
-        bytes32 intentHash = _signal(taker, super._defaultParams());
+        vm.prank(depositor);
+        whitelist.setEnabled(address(escrow), depositId, METHOD, false);
 
-        assertEq(orchestrator.getIntent(intentHash).arbitrator, address(0));
+        // A non-member may name the group, and neither intent gets its arbitrator.
+        bytes32 member = _signalDefault();
+        bytes32 outsider = _signal(other, _defaultParams());
+
+        assertFalse(orchestrator.getIntent(member).takerWhitelisted);
+        assertEq(orchestrator.getIntent(member).arbitrator, address(0));
+        assertEq(orchestrator.getIntent(outsider).arbitrator, address(0));
     }
 
     function test_SignalRejectsGroupTheDepositDoesNotAllow() public {
@@ -81,10 +88,8 @@ contract OrchestratorV4ArbitratorTest is OrchestratorV4Fixture {
         _setArbitrator(arbitrator);
         address[] memory direct = new address[](1);
         direct[0] = other;
-        vm.startPrank(depositor);
-        whitelist.setEnabled(address(escrow), depositId, METHOD, true);
+        vm.prank(depositor);
         whitelist.addWhitelistedAddresses(address(escrow), depositId, direct);
-        vm.stopPrank();
 
         bytes32 viaGroup = _signalDefault();
         assertTrue(orchestrator.getIntent(viaGroup).takerWhitelisted);
@@ -265,7 +270,7 @@ contract OrchestratorV4ArbitratorTest is OrchestratorV4Fixture {
         vm.startPrank(depositor);
         guardedDepositId = _createDeposit(address(0), address(0), address(orchestrator));
         vm.stopPrank();
-        _allowGroup(guardedDepositId, groupId);
+        _gateWithGroup(guardedDepositId, groupId);
         _setArbitrator(arbitrator);
         IOrchestratorV4.SignalIntentParams memory params =
             _params(guardedDepositId, taker, INTENT_AMOUNT, CONVERSION_RATE, _emptyReferralFees());
@@ -288,11 +293,11 @@ contract OrchestratorV4ArbitratorTest is OrchestratorV4Fixture {
         vm.stopPrank();
     }
 
-    function _allowGroup(uint256 id, bytes32 group) internal {
+    function _gateWithGroup(uint256 id, bytes32 group) internal {
         bytes32[] memory groups = new bytes32[](1);
         groups[0] = group;
         vm.prank(depositor);
-        whitelist.addAllowedGroups(address(escrow), id, METHOD, groups);
+        whitelist.configureDeposit(address(escrow), id, METHOD, true, groups, new address[](0));
     }
 
     function _setArbitrator(address newArbitrator) internal {

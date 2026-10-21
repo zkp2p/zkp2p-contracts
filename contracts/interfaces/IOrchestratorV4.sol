@@ -44,7 +44,7 @@ interface IOrchestratorV4 {
         bytes gatingServiceSignature;               // Signature from the deposit's gating service
         uint256 signatureExpiration;                // Timestamp when the gating service signature expires
         bytes payerCommitment;                      // Signed by the gating service; UPV4 requires the attestor to sign its hash
-        bytes32 groupId;                            // Allowed group the taker is a member of; its arbitrator rules the intent; zero = none
+        bytes32 groupId;                            // Allowed group the taker is a member of; its arbitrator rules the intent; zero = none; ignored when the whitelist is off
     }
 
     struct FulfillIntentParams {
