@@ -15,6 +15,7 @@ import {StakeVaultV2} from "contracts/StakeVaultV2.sol";
 import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
+import {WhitelistPolicyV2} from "contracts/hooks/WhitelistPolicyV2.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
@@ -45,7 +46,7 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
     MultiAttestationVerifier internal witnesses;
     DisputeVerifier internal disputeVerifier;
     WhitelistPolicy internal whitelist;
-    WhitelistPolicy internal freshWhitelist;
+    WhitelistPolicyV2 internal freshWhitelist;
     AddressGroupRegistry internal freshGroupRegistry;
     UnifiedPaymentVerifierV3 internal predecessor;
     UnifiedPaymentVerifierV4 internal successor;
@@ -111,7 +112,7 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
 
     function _deployLane45() private {
         freshGroupRegistry = new AddressGroupRegistry();
-        freshWhitelist = new WhitelistPolicy(freshGroupRegistry, escrowRegistry, orchestratorRegistry);
+        freshWhitelist = new WhitelistPolicyV2(freshGroupRegistry);
         freshVault = new StakeVaultV2(address(this), token);
         freshPolicy = new DisputeProtectionPolicyV2(
             address(this), freshVault, disputeVerifier, disputeNullifiers, orchestratorRegistry
@@ -291,7 +292,7 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         whitelist.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), new address[](0));
         _deployLane45();
         assertTrue(whitelist.enabled(address(escrow), depositId, METHOD));
-        assertFalse(freshWhitelist.enabled(address(escrow), depositId, METHOD));
+        assertFalse(freshWhitelist.enabled(address(escrow), depositId));
         assertEq(address(freshWhitelist.groupRegistry()), address(freshGroupRegistry));
         assertEq(address(orchestratorV4.whitelistPolicy()), address(freshWhitelist));
         _activateLane46();
@@ -376,8 +377,10 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         _activateLane46();
         address[] memory takers = new address[](1);
         takers[0] = taker;
-        vm.prank(depositor);
-        freshWhitelist.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), takers);
+        vm.startPrank(depositor);
+        freshWhitelist.setTakers(address(escrow), depositId, takers, true);
+        freshWhitelist.setEnabled(address(escrow), depositId, true);
+        vm.stopPrank();
         bytes32 id = _signalO4();
         assertTrue(orchestratorV4.getIntent(id).takerWhitelisted);
         bytes memory proof = _successorProof(id, PAYMENT_ID, abi.encode(uint256(RISK_WINDOW)));
@@ -419,7 +422,7 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         assertEq(freshPolicy.getProtection(protectedId).depositor, depositor);
         assertEq(freshVault.lockedStake(other), INTENT_AMOUNT);
         vm.prank(depositor);
-        freshWhitelist.setEnabled(address(escrow), depositId, METHOD, true);
+        freshWhitelist.setEnabled(address(escrow), depositId, true);
         IOrchestratorV4.SignalIntentParams memory params = _defaultV4Params();
         vm.expectRevert(
             abi.encodeWithSelector(IOrchestratorV4.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker)
@@ -438,7 +441,8 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         groups[0] = freshGroupRegistry.createGroup("o4-staging");
         freshGroupRegistry.setArbitrator(groups[0], arbitrator);
         freshGroupRegistry.addMembers(groups[0], members);
-        freshWhitelist.configureDeposit(address(escrow), depositId, METHOD, true, groups, new address[](0));
+        freshWhitelist.setGroups(address(escrow), depositId, groups, true);
+        freshWhitelist.setEnabled(address(escrow), depositId, true);
         vm.stopPrank();
         IOrchestratorV4.SignalIntentParams memory params = _defaultV4Params();
         params.to = other;

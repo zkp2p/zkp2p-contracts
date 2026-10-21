@@ -94,7 +94,7 @@ test("lane 45 exports its O4 stack identity, tags, and live flags", () => {
   assert.deepEqual(O4_DEPLOYMENT_NAMES, [
     "StakeVaultV2",
     "AddressGroupRegistryV4",
-    "WhitelistPolicyV4",
+    "WhitelistPolicyV2",
     "DisputeProtectionPolicyV2",
     "UnifiedPaymentVerifierV4",
     "OrchestratorV4",
@@ -103,7 +103,7 @@ test("lane 45 exports its O4 stack identity, tags, and live flags", () => {
   assert.deepEqual(O4_ARTIFACT_NAMES, {
     StakeVaultV2: "StakeVaultV2",
     AddressGroupRegistryV4: "AddressGroupRegistry",
-    WhitelistPolicyV4: "WhitelistPolicy",
+    WhitelistPolicyV2: "WhitelistPolicyV2",
     DisputeProtectionPolicyV2: "DisputeProtectionPolicyV2",
     UnifiedPaymentVerifierV4: "UnifiedPaymentVerifierV4",
     OrchestratorV4: "OrchestratorV4",
@@ -172,7 +172,6 @@ test("lane 45 pins exact live step order and classifies only contiguous prefixes
     "deploy-viewer",
     "transfer-vault-owner",
     "transfer-policy-owner",
-    "transfer-whitelist-owner",
     "transfer-verifier-owner",
     "transfer-orchestrator-owner",
   ]);
@@ -379,7 +378,7 @@ test("lane 45 live preparation never changes writers, routes, O3's hook, or regi
   assert.equal(
     (livePath.match(/\.transferOwnership\(context\.governance\)/g) || [])
       .length,
-    5
+    4
   );
   assert.doesNotMatch(source, /\.addOrchestrator\(|setOrchestratorAuthorization/);
   assert.doesNotMatch(source, /orchestratorV3\.setLifecycleHook\(/);
@@ -623,15 +622,12 @@ test("local lane 45 gives O4 a fresh whitelist on a fresh group registry", async
   const o4 = await ethers.getContractAt("OrchestratorV4", state.records.get("OrchestratorV4").address);
   const policy = await ethers.getContractAt("DisputeProtectionPolicyV2", state.records.get("DisputeProtectionPolicyV2").address);
   assert.notEqual(await o4.whitelistPolicy(), old.address);
-  const fresh = await ethers.getContractAt("WhitelistPolicy", state.records.get("WhitelistPolicyV4").address);
+  const fresh = await ethers.getContractAt("WhitelistPolicyV2", state.records.get("WhitelistPolicyV2").address);
   assert.equal(await o4.whitelistPolicy(), fresh.address);
   assert.equal(await policy.orchestratorRegistry(), state.orchestrators.address);
   const groupRegistry = state.records.get("AddressGroupRegistryV4").address;
   assert.equal(await fresh.groupRegistry(), groupRegistry);
   assert.notEqual(await old.groupRegistry(), groupRegistry);
-  for (const field of /** @type {const} */ (["escrowRegistry", "orchestratorRegistry"]))
-    assert.equal(await fresh[field](), await old[field]());
-  assert.equal(await fresh.owner(), state.deployer);
   assert.equal(await state.predecessorHook.whitelistPolicy(), old.address);
 });
 
@@ -645,7 +641,6 @@ test("lane 45 validates recorded whitelist constructor dependencies against pins
       ethers: { getContractAt: async () => Object.fromEntries(fields.map((field) => [field, async () => values[field]])) },
     });
     const result = await lane45.readWhitelistDependencies(hre);
-    assert.equal(result.predecessorWhitelistPolicy, record.address);
     assert.equal(result.groupRegistry, record.args[0]);
     for (const field of fields) {
       const original = values[field];
@@ -662,17 +657,13 @@ test("lane 45 validates recorded whitelist constructor dependencies against pins
   }
 });
 
-test("local lane 45 rejects fresh whitelist ownership and registry drift on resume", async () => {
+test("local lane 45 rejects a fresh whitelist on another group registry on resume", async () => {
   const state = await localhostFixture();
   await deployLane45(state.fakeHre);
-  const whitelist = await ethers.getContractAt("WhitelistPolicy", state.records.get("WhitelistPolicyV4").address);
-  const originalRegistry = await whitelist.escrowRegistry();
-  const replacement = await deployContract("EscrowRegistry");
-  await (await whitelist.setEscrowRegistry(replacement.address)).wait();
-  await assert.rejects(deployLane45(state.fakeHre), /Fresh WhitelistPolicyV4 escrowRegistry drifted/);
-  await (await whitelist.setEscrowRegistry(originalRegistry)).wait();
-  await (await whitelist.transferOwnership(state.extraWriter.address)).wait();
-  await assert.rejects(deployLane45(state.fakeHre), /Fresh WhitelistPolicyV4 owner drifted/);
+  const otherRegistry = await deployContract("AddressGroupRegistry");
+  state.records.delete("WhitelistPolicyV2");
+  await state.deployRecord("WhitelistPolicyV2", "WhitelistPolicyV2", [otherRegistry.address]);
+  await assert.rejects(deployLane45(state.fakeHre), /Fresh WhitelistPolicyV2 groupRegistry drifted/);
 });
 
 test("local lane 45 authorizes its policy despite preexisting stake", async () => {
@@ -719,7 +710,7 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
     ["StakeVaultV2", ["withdrawStakeTo", "payOutLock", "isController", "setController", "lockController"]],
     ["OrchestratorV4", ["supportsInterface", "setSettlementPolicy", "extendIntent"]],
     ["UnifiedPaymentVerifierV4", ["addPaymentMethod", "DOMAIN_SEPARATOR"]],
-    ["WhitelistPolicyV4", ["isTakerWhitelisted"]],
+    ["WhitelistPolicyV2", ["isWhitelisted", "setEnabled", "setGroups", "setTakers"]],
     ["ProtocolViewerV4", ["getIntentV4", "getIntentsV4", "getAccountIntentsV4"]],
   ]);
   for (const [recordName, functionNames] of requiredAbiFunctions) {
@@ -747,6 +738,7 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
       "setDepositPreIntentHook", "getDepositPreIntentHook", "getIntentSettlementPolicy",
       "IntentSettlementPolicySnapshotted",
     ]],
+    ["WhitelistPolicyV2", ["owner", "bootstrapDeposits", "configureDeposit"]],
   ];
   for (const [recordName, names] of removedAbiEntries) {
     const abi = state.records.get(recordName).abi;
@@ -1234,7 +1226,6 @@ test("lane 45 live step handlers only configure the fresh stack on Base and stag
       disputeVerifier: pins.disputeVerifier.address,
       disputeNullifierRegistry: pins.disputeNullifierRegistry.address,
       orchestratorRegistry: expected.orchestratorRegistry,
-      predecessorWhitelistPolicy: pins.whitelistPolicy.address,
       nullifierRegistryV2: expected.nullifierRegistryV2,
       attestationVerifier: expected.attestationVerifier,
       chainId: 8453,
@@ -1248,10 +1239,7 @@ test("lane 45 live step handlers only configure the fresh stack on Base and stag
     const state = {
       contracts: {
         groupRegistry: { address: addresses.AddressGroupRegistryV4 },
-        whitelist: {
-          address: addresses.WhitelistPolicyV4,
-          transferOwnership: transaction("whitelist.transferOwnership"),
-        },
+        whitelist: { address: addresses.WhitelistPolicyV2 },
         vault: {
           address: addresses.StakeVaultV2,
           isController: async () => false,
@@ -1277,13 +1265,11 @@ test("lane 45 live step handlers only configure the fresh stack on Base and stag
     for (const step of lane45.LANE_45_STEP_KINDS[network])
       await lane45.executeLane45Step(hre, context, state, step);
     assert.deepEqual([...records.keys()], O4_DEPLOYMENT_NAMES);
-    assert.equal(records.get("WhitelistPolicyV4").contract, "WhitelistPolicy");
+    assert.equal(records.get("WhitelistPolicyV2").contract, "WhitelistPolicyV2");
     assert.deepEqual(records.get("ProtocolViewerV4").args, []);
     assert.equal(records.get("AddressGroupRegistryV4").contract, "AddressGroupRegistry");
     assert.deepEqual(records.get("AddressGroupRegistryV4").args, []);
-    assert.deepEqual(records.get("WhitelistPolicyV4").args, [
-      addresses.AddressGroupRegistryV4, expected.escrowRegistry, expected.orchestratorRegistry,
-    ]);
+    assert.deepEqual(records.get("WhitelistPolicyV2").args, [addresses.AddressGroupRegistryV4]);
     assert.equal(records.get("StakeVaultV2").contract, "StakeVaultV2");
     assert.deepEqual(records.get("StakeVaultV2").args, [
       pins.deployer,
@@ -1312,11 +1298,11 @@ test("lane 45 live step handlers only configure the fresh stack on Base and stag
       expected.relayerRegistry,
       "0",
       expected.protocolFeeRecipient,
-      addresses.WhitelistPolicyV4,
+      addresses.WhitelistPolicyV2,
     ]);
     assert.equal(
       writes.filter(([name]) => name.endsWith("transferOwnership")).length,
-      network === "base" ? 5 : 0
+      network === "base" ? 4 : 0
     );
     assert.deepEqual(
       writes.filter(([name]) => name === "O4.setAllowMultipleIntents"),
@@ -1327,7 +1313,7 @@ test("lane 45 live step handlers only configure the fresh stack on Base and stag
       [["O4.setSettlementPolicy", [addresses.DisputeProtectionPolicyV2]]]
     );
     assert.ok(
-      writes.every(([name]) => /^(vault|whitelist|policy|verifier|O4)\./.test(name))
+      writes.every(([name]) => /^(vault|policy|verifier|O4)\./.test(name))
     );
   }
 });

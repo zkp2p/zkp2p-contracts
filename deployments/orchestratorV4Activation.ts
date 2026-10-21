@@ -89,10 +89,7 @@ export type O4ActivationSnapshot = {
     orchestratorRegistry: string;
   };
   freshWhitelistPolicy: {
-    owner: string;
-    escrowRegistry: string;
     groupRegistry: string;
-    orchestratorRegistry: string;
   };
   attestationVerifier: {
     owner: string;
@@ -334,10 +331,7 @@ function commonInvariants(
     "orchestratorV4.settlementPolicy": a.freshPolicy,
     "orchestratorV4.whitelistPolicy": a.freshWhitelistPolicy,
     "orchestratorRegistry.owner": e.governance,
-    "freshWhitelistPolicy.owner": e.governance,
-    "freshWhitelistPolicy.escrowRegistry": a.escrowRegistry,
     "freshWhitelistPolicy.groupRegistry": a.freshGroupRegistry,
-    "freshWhitelistPolicy.orchestratorRegistry": a.orchestratorRegistry,
     "whitelistPolicy.escrowRegistry": a.escrowRegistry,
     "whitelistPolicy.groupRegistry": a.groupRegistry,
     "whitelistPolicy.orchestratorRegistry": a.orchestratorRegistry,
@@ -726,10 +720,7 @@ export const O4_GUARD_BOUND_FIELDS = [
   "orchestratorV4.registered",
   "orchestratorV4.chainId",
   "orchestratorRegistry.owner",
-  "freshWhitelistPolicy.owner",
-  "freshWhitelistPolicy.escrowRegistry",
   "freshWhitelistPolicy.groupRegistry",
-  "freshWhitelistPolicy.orchestratorRegistry",
   "whitelistPolicy.owner",
   "whitelistPolicy.escrowRegistry",
   "whitelistPolicy.groupRegistry",

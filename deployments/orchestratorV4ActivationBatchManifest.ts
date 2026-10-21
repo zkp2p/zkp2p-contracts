@@ -186,10 +186,7 @@ const snapshot = object({
     orchestratorRegistry: address,
   }),
   freshWhitelistPolicy: object({
-    owner: address,
-    escrowRegistry: address,
     groupRegistry: address,
-    orchestratorRegistry: address,
   }),
   attestationVerifier: object({
     owner: address,

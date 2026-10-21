@@ -15,7 +15,7 @@ export const LANE_46_TAG = "46_activate_orchestrator_v4_stack";
 export const O4_DEPLOYMENT_NAMES = [
   "StakeVaultV2",
   "AddressGroupRegistryV4",
-  "WhitelistPolicyV4",
+  "WhitelistPolicyV2",
   "DisputeProtectionPolicyV2",
   "UnifiedPaymentVerifierV4",
   "OrchestratorV4",
@@ -25,7 +25,7 @@ export type O4DeploymentName = (typeof O4_DEPLOYMENT_NAMES)[number];
 export const O4_ARTIFACT_NAMES: Record<O4DeploymentName, string> = {
   StakeVaultV2: "StakeVaultV2",
   AddressGroupRegistryV4: "AddressGroupRegistry",
-  WhitelistPolicyV4: "WhitelistPolicy",
+  WhitelistPolicyV2: "WhitelistPolicyV2",
   DisputeProtectionPolicyV2: "DisputeProtectionPolicyV2",
   UnifiedPaymentVerifierV4: "UnifiedPaymentVerifierV4",
   OrchestratorV4: "OrchestratorV4",
@@ -303,7 +303,6 @@ export const LANE_45_STEP_KINDS: Record<O4Network, readonly string[]> = {
     ...deploymentSteps("base"),
     "transfer-vault-owner",
     "transfer-policy-owner",
-    "transfer-whitelist-owner",
     "transfer-verifier-owner",
     "transfer-orchestrator-owner",
   ],

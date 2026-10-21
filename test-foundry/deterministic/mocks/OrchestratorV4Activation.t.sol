@@ -6,6 +6,7 @@ import {StakeVaultV2} from "contracts/StakeVaultV2.sol";
 import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
+import {WhitelistPolicyV2} from "contracts/hooks/WhitelistPolicyV2.sol";
 import {OrchestratorV4} from "contracts/OrchestratorV4.sol";
 import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicyV2.sol";
 import {IIntentLifecycleHook} from "contracts/interfaces/IIntentLifecycleHook.sol";
@@ -48,7 +49,7 @@ contract OrchestratorV4ActivationTest is OrchestratorV3Fixture {
     AddressGroupRegistry internal groupRegistry;
     AddressGroupRegistry internal freshGroupRegistry;
     WhitelistPolicy internal whitelistPolicy;
-    WhitelistPolicy internal freshWhitelistPolicy;
+    WhitelistPolicyV2 internal freshWhitelistPolicy;
     IntentLifecycleHookV1 internal predecessorHook;
     OrchestratorV4 internal orchestratorV4;
 
@@ -70,7 +71,7 @@ contract OrchestratorV4ActivationTest is OrchestratorV3Fixture {
         groupRegistry = new AddressGroupRegistry();
         whitelistPolicy = new WhitelistPolicy(groupRegistry, escrowRegistry, orchestratorRegistry);
         freshGroupRegistry = new AddressGroupRegistry();
-        freshWhitelistPolicy = new WhitelistPolicy(freshGroupRegistry, escrowRegistry, orchestratorRegistry);
+        freshWhitelistPolicy = new WhitelistPolicyV2(freshGroupRegistry);
         freshPolicy = new DisputeProtectionPolicyV2(
             address(this), freshVault, disputeVerifier, disputeRegistry, orchestratorRegistry
         );
@@ -122,7 +123,6 @@ contract OrchestratorV4ActivationTest is OrchestratorV3Fixture {
         disputeRegistry.transferOwnership(safe);
         orchestrator.transferOwnership(safe);
         whitelistPolicy.transferOwnership(safe);
-        freshWhitelistPolicy.transferOwnership(safe);
         attestationVerifier.transferOwnership(safe);
         _transfer(predecessorVault, true);
         _transfer(predecessorPolicy, true);
@@ -505,20 +505,13 @@ contract OrchestratorV4ActivationTest is OrchestratorV3Fixture {
         );
     }
 
-    function test_GuardRejectsFreshWhitelistDrift() public {
+    function test_GuardRejectsFreshWhitelistGroupRegistryDrift() public {
         OrchestratorV4CutoverGuard guard = _guard(_surface(), true, true);
-        string[4] memory getters = ["owner()", "escrowRegistry()", "groupRegistry()", "orchestratorRegistry()"];
-        bytes4[4] memory errors = [
-            OrchestratorV4TrustSurfaceChecks.FreshWhitelistPolicyOwnerMismatch.selector,
-            OrchestratorV4TrustSurfaceChecks.FreshWhitelistPolicyEscrowRegistryMismatch.selector,
-            OrchestratorV4TrustSurfaceChecks.FreshWhitelistPolicyGroupRegistryMismatch.selector,
-            OrchestratorV4TrustSurfaceChecks.FreshWhitelistPolicyOrchestratorRegistryMismatch.selector
-        ];
-        for (uint256 index; index < getters.length; index++) {
-            vm.mockCall(address(freshWhitelistPolicy), abi.encodeWithSignature(getters[index]), abi.encode(other));
-            _expectReady(guard, abi.encodeWithSelector(errors[index], other));
-            vm.clearMockedCalls();
-        }
+        vm.mockCall(address(freshWhitelistPolicy), abi.encodeWithSignature("groupRegistry()"), abi.encode(other));
+        _expectReady(
+            guard,
+            abi.encodeWithSelector(OrchestratorV4TrustSurfaceChecks.FreshWhitelistPolicyGroupRegistryMismatch.selector, other)
+        );
     }
 
     function test_GuardRejectsWhitelistOwnerDrift() public {

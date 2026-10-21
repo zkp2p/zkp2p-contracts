@@ -132,10 +132,7 @@ abstract contract OrchestratorV4TrustSurfaceChecks {
     error FreshPolicyOrchestratorRegistryMismatch(address actual);
     error WhitelistPolicyOwnerMismatch(address actual);
     error FreshWhitelistPolicyNotDistinct();
-    error FreshWhitelistPolicyOwnerMismatch(address actual);
-    error FreshWhitelistPolicyEscrowRegistryMismatch(address actual);
     error FreshWhitelistPolicyGroupRegistryMismatch(address actual);
-    error FreshWhitelistPolicyOrchestratorRegistryMismatch(address actual);
     error WhitelistPolicyEscrowRegistryMismatch(address actual);
     error WhitelistPolicyGroupRegistryMismatch(address actual);
     error WhitelistPolicyOrchestratorRegistryMismatch(address actual);
@@ -291,17 +288,8 @@ abstract contract OrchestratorV4TrustSurfaceChecks {
     }
 
     function _assertWhitelistSurface() private view {
-        IActivationWhitelistPolicy freshWhitelist = IActivationWhitelistPolicy(expected.freshWhitelistPolicy);
-        address freshAddress = freshWhitelist.owner();
-        if (freshAddress != expected.safe) revert FreshWhitelistPolicyOwnerMismatch(freshAddress);
-        freshAddress = freshWhitelist.escrowRegistry();
-        if (freshAddress != expected.escrowRegistry) revert FreshWhitelistPolicyEscrowRegistryMismatch(freshAddress);
-        freshAddress = freshWhitelist.groupRegistry();
+        address freshAddress = IActivationWhitelistPolicy(expected.freshWhitelistPolicy).groupRegistry();
         if (freshAddress != expected.freshGroupRegistry) revert FreshWhitelistPolicyGroupRegistryMismatch(freshAddress);
-        freshAddress = freshWhitelist.orchestratorRegistry();
-        if (freshAddress != expected.orchestratorRegistry) {
-            revert FreshWhitelistPolicyOrchestratorRegistryMismatch(freshAddress);
-        }
         IActivationWhitelistPolicy targetWhitelist = IActivationWhitelistPolicy(expected.whitelistPolicy);
         address actualAddress = targetWhitelist.owner();
         if (actualAddress != expected.whitelistPolicyOwner) revert WhitelistPolicyOwnerMismatch(actualAddress);

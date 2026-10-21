@@ -474,7 +474,6 @@ export async function assertLiveSharedState(
 export async function readWhitelistDependencies(
   hre: HardhatRuntimeEnvironment
 ): Promise<{
-  predecessorWhitelistPolicy: string;
   groupRegistry: string;
   escrowRegistry: string;
   orchestratorRegistry: string;
@@ -506,7 +505,7 @@ export async function readWhitelistDependencies(
       `WhitelistPolicyMethodScoped ${field} constructor dependency drifted`
     );
   }
-  return { predecessorWhitelistPolicy: record.address, ...dependencies };
+  return dependencies;
 }
 
 type StackContext = {
@@ -517,7 +516,6 @@ type StackContext = {
   disputeVerifier: string;
   disputeNullifierRegistry: string;
   orchestratorRegistry: string;
-  predecessorWhitelistPolicy: string;
   nullifierRegistryV2: string;
   attestationVerifier: string;
   paymentMethods: string[];
@@ -639,31 +637,13 @@ export async function readFreshState(
     );
   }
   if (whitelistRecord) {
-    requireState(
-      !sameAddress(whitelistRecord.address, context.predecessorWhitelistPolicy),
-      "WhitelistPolicyV4 reused WhitelistPolicyMethodScoped"
-    );
     const whitelist = (contracts.whitelist = await hre.ethers.getContractAt(
-      "WhitelistPolicy", whitelistRecord.address
+      "WhitelistPolicyV2", whitelistRecord.address
     ));
-    for (const [field, address] of [
-      ["groupRegistry", groupRegistryRecord!.address],
-      ["escrowRegistry", context.escrowRegistry],
-      ["orchestratorRegistry", context.orchestratorRegistry],
-    ] as const) {
-      requireState(
-        sameAddress(await whitelist[field](), address),
-        `Fresh WhitelistPolicyV4 ${field} drifted`
-      );
-    }
-    const owner: string = await whitelist.owner();
     requireState(
-      sameAddress(owner, context.deployer) ||
-        (context.transferOwnership && sameAddress(owner, context.governance)),
-      "Fresh WhitelistPolicyV4 owner drifted"
+      sameAddress(await whitelist.groupRegistry(), groupRegistryRecord!.address),
+      "Fresh WhitelistPolicyV2 groupRegistry drifted"
     );
-    completed["transfer-whitelist-owner"] =
-      context.transferOwnership && sameAddress(owner, context.governance);
   }
   if (vaultRecord) {
     const vault = (contracts.vault = await hre.ethers.getContractAt(
@@ -899,10 +879,8 @@ export async function executeLane45Step(
   } else if (step === "deploy-group-registry") {
     await deployFresh(hre, "AddressGroupRegistryV4", context.deployer, []);
   } else if (step === "deploy-whitelist") {
-    await deployFresh(hre, "WhitelistPolicyV4", context.deployer, [
+    await deployFresh(hre, "WhitelistPolicyV2", context.deployer, [
       state.contracts.groupRegistry!.address,
-      context.escrowRegistry,
-      context.orchestratorRegistry,
     ]);
   } else if (step === "deploy-policy") {
     await deployFresh(hre, "DisputeProtectionPolicyV2", context.deployer, [
@@ -960,10 +938,6 @@ export async function executeLane45Step(
   } else if (step === "transfer-policy-owner") {
     await (
       await state.contracts.policy!.transferOwnership(context.governance)
-    ).wait();
-  } else if (step === "transfer-whitelist-owner") {
-    await (
-      await state.contracts.whitelist!.transferOwnership(context.governance)
     ).wait();
   } else if (step === "transfer-verifier-owner") {
     await (
@@ -1127,10 +1101,8 @@ async function deployLocalO4Stack(
     context.stakeToken,
   ]);
   const groupRegistryRecord = await deploy("AddressGroupRegistryV4", []);
-  const whitelistRecord = await deploy("WhitelistPolicyV4", [
+  const whitelistRecord = await deploy("WhitelistPolicyV2", [
     groupRegistryRecord.address,
-    context.escrowRegistry,
-    context.orchestratorRegistry,
   ]);
   const policyRecord = await deploy("DisputeProtectionPolicyV2", [
     deployer,

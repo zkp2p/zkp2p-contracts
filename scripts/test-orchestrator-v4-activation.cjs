@@ -238,12 +238,7 @@ function snapshot(wanted, k = 0) {
       allowMultipleIntents: wanted.allowMultipleIntents,
       registered: row.o4Registered,
     },
-    freshWhitelistPolicy: {
-      owner,
-      escrowRegistry: a.escrowRegistry,
-      groupRegistry: a.freshGroupRegistry,
-      orchestratorRegistry: a.orchestratorRegistry,
-    },
+    freshWhitelistPolicy: { groupRegistry: a.freshGroupRegistry },
     whitelistPolicy: {
       owner: wanted.deployer,
       escrowRegistry: a.escrowRegistry,
@@ -1282,14 +1277,12 @@ test("O4 batches never call OrchestratorV3", () => {
   assert.equal(initial.registry.length, staging.paymentMethods.length);
 });
 
-test("fresh whitelist bindings, ownership and registries fail closed independently of O3", () => {
+test("fresh whitelist bindings and group registry fail closed independently of O3", () => {
   const wanted = expected();
-  for (const field of ["owner", "escrowRegistry", "groupRegistry", "orchestratorRegistry"]) {
-    const state = snapshot(wanted);
-    Object.assign(state.freshWhitelistPolicy, { [field]: address(99) });
-    assertViolation(state, wanted, `freshWhitelistPolicy.${field}`);
-    assert.throws(() => model.assertO4GuardExpectationsUnchanged(snapshot(wanted), state), /freshWhitelistPolicy/);
-  }
+  const drifted = snapshot(wanted);
+  drifted.freshWhitelistPolicy.groupRegistry = address(99);
+  assertViolation(drifted, wanted, "freshWhitelistPolicy.groupRegistry");
+  assert.throws(() => model.assertO4GuardExpectationsUnchanged(snapshot(wanted), drifted), /freshWhitelistPolicy/);
   const state = snapshot(wanted);
   state.orchestratorV4.whitelistPolicy = wanted.addresses.whitelistPolicy;
   assertViolation(state, wanted, "orchestratorV4.whitelistPolicy");
