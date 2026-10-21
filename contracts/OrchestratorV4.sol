@@ -522,11 +522,12 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (_intent.conversionRate < minConversionRate) revert RateBelowMinimum(_intent.conversionRate, minConversionRate);
 
         // With the whitelist off, anyone may signal and groupId is ignored; a group taker gets its group's arbitrator.
-        takerWhitelisted = whitelistPolicy.enabled(_intent.escrow, _intent.depositId, _intent.paymentMethod);
-        if (takerWhitelisted) {
-            if (!whitelistPolicy.isTakerWhitelisted(
+        bool depositWhitelisted = whitelistPolicy.enabled(_intent.escrow, _intent.depositId, _intent.paymentMethod);
+        if (depositWhitelisted) {
+            takerWhitelisted = whitelistPolicy.isTakerWhitelisted(
                 _intent.escrow, _intent.depositId, _intent.paymentMethod, msg.sender, _intent.groupId
-            )) {
+            );
+            if (!takerWhitelisted) {
                 revert TakerNotWhitelisted(_intent.escrow, _intent.depositId, _intent.paymentMethod, msg.sender);
             }
             if (_intent.groupId != bytes32(0)) (,,,,, arbitrator) = whitelistPolicy.groupRegistry().getGroup(_intent.groupId);
