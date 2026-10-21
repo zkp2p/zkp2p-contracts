@@ -438,7 +438,7 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         groups[0] = freshGroupRegistry.createGroup("o4-staging");
         freshGroupRegistry.setArbitrator(groups[0], arbitrator);
         freshGroupRegistry.addMembers(groups[0], members);
-        freshWhitelist.configureDeposit(address(escrow), depositId, METHOD, false, groups, new address[](0));
+        freshWhitelist.configureDeposit(address(escrow), depositId, METHOD, true, groups, new address[](0));
         vm.stopPrank();
         IOrchestratorV4.SignalIntentParams memory params = _defaultV4Params();
         params.to = other;
@@ -447,7 +447,7 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         vm.prank(taker);
         orchestratorV4.signalIntent(params);
         assertEq(orchestratorV4.getIntent(id).arbitrator, arbitrator);
-        assertFalse(orchestratorV4.getIntent(id).takerWhitelisted);
+        assertTrue(orchestratorV4.getIntent(id).takerWhitelisted);
         vm.prank(arbitrator);
         orchestratorV4.releaseFundsToPayer(id, INTENT_AMOUNT / 2);
         assertEq(token.balanceOf(other), INTENT_AMOUNT / 2);
