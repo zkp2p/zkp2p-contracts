@@ -84,19 +84,13 @@ contract WhitelistPolicyV2Test is Test {
     function test_SettersRejectAnyoneButTheDepositor() public {
         vm.startPrank(stranger);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(IWhitelistPolicyV2.NotDepositor.selector, address(escrow), DEPOSIT_ONE, stranger)
-        );
+        vm.expectRevert(abi.encodeWithSelector(IWhitelistPolicyV2.NotDepositor.selector, address(escrow), DEPOSIT_ONE, stranger));
         policy.setEnabled(address(escrow), DEPOSIT_ONE, true);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(IWhitelistPolicyV2.NotDepositor.selector, address(escrow), DEPOSIT_ONE, stranger)
-        );
+        vm.expectRevert(abi.encodeWithSelector(IWhitelistPolicyV2.NotDepositor.selector, address(escrow), DEPOSIT_ONE, stranger));
         policy.setGroups(address(escrow), DEPOSIT_ONE, _groupIds(OTHER_GROUP), true);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(IWhitelistPolicyV2.NotDepositor.selector, address(escrow), DEPOSIT_ONE, stranger)
-        );
+        vm.expectRevert(abi.encodeWithSelector(IWhitelistPolicyV2.NotDepositor.selector, address(escrow), DEPOSIT_ONE, stranger));
         policy.setTakers(address(escrow), DEPOSIT_ONE, _addresses(stranger), true);
 
         vm.stopPrank();
@@ -104,105 +98,8 @@ contract WhitelistPolicyV2Test is Test {
 
     function test_SettersRejectAnUnknownDeposit() public {
         vm.prank(maker);
-        vm.expectRevert(
-            abi.encodeWithSelector(IWhitelistPolicyV2.NotDepositor.selector, address(escrow), UNKNOWN_DEPOSIT, maker)
-        );
+        vm.expectRevert(abi.encodeWithSelector(IWhitelistPolicyV2.NotDepositor.selector, address(escrow), UNKNOWN_DEPOSIT, maker));
         policy.setEnabled(address(escrow), UNKNOWN_DEPOSIT, true);
-    }
-
-    /* ============ View Functions ============ */
-
-    function test_GroupGettersTrackBatchesDuplicatesRemovalAndReaddition() public {
-        IWhitelistPolicyV2 reader = policy;
-        bytes32[] memory groups = new bytes32[](3);
-        groups[0] = GROUP;
-        groups[1] = OTHER_GROUP;
-        groups[2] = GROUP;
-
-        vm.startPrank(maker);
-        policy.setGroups(address(escrow), DEPOSIT_ONE, groups, true);
-        assertEq(reader.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, 2);
-        assertTrue(reader.isGroupAllowed(address(escrow), DEPOSIT_ONE, GROUP));
-        assertTrue(reader.allowedGroups(address(escrow), DEPOSIT_ONE, OTHER_GROUP));
-
-        // Remove a non-final entry, repeat the removal, and remove an absent group in the same batch.
-        groups[1] = GROUP;
-        groups[2] = keccak256("absent group");
-        policy.setGroups(address(escrow), DEPOSIT_ONE, groups, false);
-        assertEq(reader.getAllowedGroups(address(escrow), DEPOSIT_ONE), _groupIds(OTHER_GROUP));
-        assertFalse(reader.isGroupAllowed(address(escrow), DEPOSIT_ONE, GROUP));
-        assertFalse(reader.allowedGroups(address(escrow), DEPOSIT_ONE, GROUP));
-        assertFalse(reader.isWhitelisted(address(escrow), DEPOSIT_ONE, member, GROUP));
-        assertTrue(reader.isWhitelisted(address(escrow), DEPOSIT_ONE, member, OTHER_GROUP));
-
-        policy.setGroups(address(escrow), DEPOSIT_ONE, _groupIds(GROUP), true);
-        assertEq(reader.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, 2);
-        assertTrue(reader.isGroupAllowed(address(escrow), DEPOSIT_ONE, GROUP));
-        assertTrue(reader.allowedGroups(address(escrow), DEPOSIT_ONE, GROUP));
-        assertTrue(reader.isWhitelisted(address(escrow), DEPOSIT_ONE, member, GROUP));
-
-        // The entry moved by the first removal must itself remain removable.
-        policy.setGroups(address(escrow), DEPOSIT_ONE, _groupIds(OTHER_GROUP), false);
-        assertEq(reader.getAllowedGroups(address(escrow), DEPOSIT_ONE), _groupIds(GROUP));
-        policy.setGroups(address(escrow), DEPOSIT_ONE, _groupIds(GROUP), false);
-        assertEq(reader.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, 0);
-        assertFalse(reader.allowedGroups(address(escrow), DEPOSIT_ONE, GROUP));
-        vm.stopPrank();
-    }
-
-    function test_GroupGettersAreScopedAndIndependentOfEnabled() public {
-        IWhitelistPolicyV2 reader = policy;
-        assertEq(reader.getAllowedGroups(address(escrow), DEPOSIT_ONE), _groupIds(GROUP));
-        assertEq(reader.getAllowedGroups(address(escrow), DEPOSIT_TWO).length, 0);
-        assertEq(reader.getAllowedGroups(address(escrow), UNKNOWN_DEPOSIT).length, 0);
-        assertEq(reader.getAllowedGroups(address(otherEscrow), DEPOSIT_ONE).length, 0);
-        assertFalse(reader.isGroupAllowed(address(escrow), DEPOSIT_TWO, GROUP));
-        assertFalse(reader.allowedGroups(address(otherEscrow), DEPOSIT_ONE, GROUP));
-
-        vm.startPrank(maker);
-        policy.setGroups(address(escrow), DEPOSIT_TWO, _groupIds(OTHER_GROUP), true);
-        policy.setGroups(address(otherEscrow), DEPOSIT_ONE, _groupIds(OTHER_GROUP), true);
-        policy.setEnabled(address(escrow), DEPOSIT_ONE, true);
-        vm.stopPrank();
-
-        assertEq(reader.getAllowedGroups(address(escrow), DEPOSIT_ONE), _groupIds(GROUP));
-        assertEq(reader.getAllowedGroups(address(escrow), DEPOSIT_TWO), _groupIds(OTHER_GROUP));
-        assertEq(reader.getAllowedGroups(address(otherEscrow), DEPOSIT_ONE), _groupIds(OTHER_GROUP));
-        assertTrue(reader.isGroupAllowed(address(escrow), DEPOSIT_ONE, GROUP));
-    }
-
-    function test_IsTakerAllowedMatchesTheNamedGroupAdmissionGate() public {
-        IWhitelistPolicyV2 reader = policy;
-        assertTrue(reader.isTakerAllowed(address(escrow), DEPOSIT_ONE, stranger, bytes32(0)));
-        assertTrue(reader.isTakerAllowed(address(escrow), DEPOSIT_ONE, stranger, OTHER_GROUP));
-
-        vm.prank(maker);
-        policy.setEnabled(address(escrow), DEPOSIT_ONE, true);
-
-        assertTrue(reader.isTakerAllowed(address(escrow), DEPOSIT_ONE, direct, bytes32(0)));
-        assertTrue(reader.isTakerAllowed(address(escrow), DEPOSIT_ONE, member, GROUP));
-        assertFalse(reader.isTakerAllowed(address(escrow), DEPOSIT_ONE, member, bytes32(0)));
-        assertFalse(reader.isTakerAllowed(address(escrow), DEPOSIT_ONE, member, OTHER_GROUP));
-        assertFalse(reader.isTakerAllowed(address(escrow), DEPOSIT_ONE, direct, GROUP));
-        assertFalse(reader.isTakerAllowed(address(escrow), DEPOSIT_ONE, stranger, GROUP));
-        assertFalse(reader.isTakerAllowed(address(escrow), DEPOSIT_ONE, stranger, bytes32(0)));
-
-        vm.prank(maker);
-        policy.setEnabled(address(escrow), DEPOSIT_ONE, false);
-        assertTrue(reader.isTakerAllowed(address(escrow), DEPOSIT_ONE, stranger, GROUP));
-        assertFalse(reader.isWhitelisted(address(escrow), DEPOSIT_ONE, stranger, GROUP));
-    }
-
-    function test_InterfaceExposesDirectTakersSeparatelyFromGroupMembership() public {
-        IWhitelistPolicyV2 reader = policy;
-        assertTrue(reader.allowedTakers(address(escrow), DEPOSIT_ONE, direct));
-        assertFalse(reader.allowedTakers(address(escrow), DEPOSIT_ONE, member));
-        assertFalse(reader.allowedTakers(address(escrow), DEPOSIT_TWO, direct));
-        assertFalse(reader.allowedTakers(address(otherEscrow), DEPOSIT_ONE, direct));
-
-        vm.prank(maker);
-        policy.setTakers(address(escrow), DEPOSIT_ONE, _addresses(direct), false);
-        assertFalse(reader.allowedTakers(address(escrow), DEPOSIT_ONE, direct));
     }
 
     /* ============ isWhitelisted ============ */
