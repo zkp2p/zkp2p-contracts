@@ -34,6 +34,8 @@ contract ForwardingRecipient {
 }
 
 contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
+    bytes32 internal takerGroup;
+
     function test_RelayerTakerUsesStakeOwnerCollateral() public {
         relayerRegistry.addRelayer(taker);
         assertFalse(whitelist.enabled(address(escrow), depositId, METHOD));
@@ -80,7 +82,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         relayerRegistry.addRelayer(taker);
         bytes32 id = _signalDefault();
         vm.prank(depositor);
-        orchestrator.releaseFundsToPayer(id);
+        orchestrator.releaseFundsToPayer(id, INTENT_AMOUNT);
         assertEq(token.balanceOf(other), NET);
         assertFalse(_isOpen(id));
     }
@@ -105,6 +107,11 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         return protection.getProtection(id).depositor != address(0);
     }
 
+    function _defaultParams() internal view override returns (IOrchestratorV4.SignalIntentParams memory params) {
+        params = super._defaultParams();
+        params.groupId = takerGroup;
+    }
+
     function _whitelistTaker() internal returns (AddressGroupRegistry groups, bytes32 group) {
         groups = AddressGroupRegistry(address(whitelist.groupRegistry()));
         group = groups.createGroup("Takers");
@@ -115,6 +122,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         ids[0] = group;
         vm.prank(depositor);
         whitelist.configureDeposit(address(escrow), depositId, METHOD, true, ids, new address[](0));
+        takerGroup = group;
     }
 
     function _settleWhitelistedWithoutRecord(bytes32 id) internal {
@@ -186,7 +194,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         _whitelistTaker();
         bytes32 id = _signalDefault();
         vm.prank(depositor);
-        orchestrator.releaseFundsToPayer(id);
+        orchestrator.releaseFundsToPayer(id, INTENT_AMOUNT);
         assertEq(token.balanceOf(other), NET);
         _assertLock(id, address(0), 0);
         assertFalse(_isOpen(id));
@@ -311,7 +319,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         bytes32 id = _signalDefault();
         uint256 vaultBefore = token.balanceOf(address(vault));
         vm.prank(depositor);
-        orchestrator.releaseFundsToPayer(id);
+        orchestrator.releaseFundsToPayer(id, INTENT_AMOUNT);
         assertEq(token.balanceOf(other), NET);
         _assertLock(id, address(0), 0);
         assertEq(token.balanceOf(address(vault)), vaultBefore);

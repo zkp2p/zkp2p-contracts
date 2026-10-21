@@ -7,7 +7,7 @@ import {SettlementPolicyMock} from "../../mocks/SettlementPolicyMock.sol";
 import {OrchestratorV4Fixture} from "../helpers/OrchestratorV4Fixture.sol";
 
 contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
-    event IntentFulfilled(bytes32 indexed intentHash, address indexed fundsTransferredTo, uint256 amount, bool manual);
+    event IntentFulfilled(bytes32 indexed intentHash, address indexed fundsTransferredTo, uint256 amount, address releasedBy);
 
     SettlementPolicyMock internal policyMock;
 
@@ -75,9 +75,9 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         uint256 hookRecipientBefore = token.balanceOf(delegate);
         uint256 netAmount = INTENT_AMOUNT - 250_000;
         vm.expectEmit(true, true, true, true);
-        emit IntentFulfilled(intentHash, delegate, netAmount, true);
+        emit IntentFulfilled(intentHash, delegate, netAmount, depositor);
         vm.prank(depositor);
-        orchestrator.releaseFundsToPayer(intentHash);
+        orchestrator.releaseFundsToPayer(intentHash, INTENT_AMOUNT);
         assertEq(policyMock.settlementCalls(), 0);
         assertEq(token.balanceOf(taker), recipientBefore);
         assertEq(token.balanceOf(delegate) - hookRecipientBefore, netAmount);

@@ -9,7 +9,7 @@ import { IIntentSettlementPolicy } from "./IIntentSettlementPolicy.sol";
  * @title IOrchestratorV4
  * @notice Interface for the V4 orchestrator with deferred settlement.
  * @dev Intent keeps V3 field order with the intent hooks removed and the hook data replaced by payerCommitment,
- * then appends takerWhitelisted.
+ * then appends takerWhitelisted and arbitrator.
  */
 interface IOrchestratorV4 {
 
@@ -29,6 +29,7 @@ interface IOrchestratorV4 {
         IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker
         bytes payerCommitment;                      // What the payer commits to, e.g. a salted payer ID hash; empty = none
         bool takerWhitelisted;                      // Taker passed the deposit's enabled whitelist at signal; skips the policy
+        address arbitrator;                         // Arbitrator of the group the taker signaled through; can release or cancel; zero = none
     }
 
     struct SignalIntentParams {
@@ -43,6 +44,7 @@ interface IOrchestratorV4 {
         bytes gatingServiceSignature;               // Signature from the deposit's gating service
         uint256 signatureExpiration;                // Timestamp when the gating service signature expires
         bytes payerCommitment;                      // Signed by the gating service; UPV4 requires the attestor to sign its hash
+        bytes32 groupId;                            // Allowed group the taker is a member of; its arbitrator rules the intent; zero = none; ignored when the whitelist is off
     }
 
     struct FulfillIntentParams {
@@ -76,7 +78,7 @@ interface IOrchestratorV4 {
         bytes32 indexed intentHash,
         address indexed fundsTransferredTo,
         uint256 amount,
-        bool isManualRelease
+        address releasedBy                          // Depositor or arbitrator for a manual release; zero for a verified payment
     );
 
     event IntentReferralFeeDistributed(
@@ -120,6 +122,7 @@ interface IOrchestratorV4 {
     error AmountExceedsLimit(uint256 amount, uint256 limit);
     error FeeExceedsMaximum(uint256 fee, uint256 maximum);
     error RateBelowMinimum(uint256 rate, uint256 minRate);
+    error PartialReleaseRequiresArbitrator(uint256 releaseAmount, uint256 intentAmount);
 
     // Validation errors
     error AccountHasActiveIntent(address account, bytes32 existingIntent);
@@ -149,15 +152,18 @@ interface IOrchestratorV4 {
     /// @notice Sets the settlement policy applied to every later settlement; zero disables protection.
     function setSettlementPolicy(IIntentSettlementPolicy policy) external;
 
-    /// @notice Cancels the caller's intent and unlocks its funds.
+    /// @notice Cancels an intent as its owner or arbitrator and unlocks its funds.
     function cancelIntent(bytes32 intentHash) external;
 
     /// @notice Verifies payment and settles immediately or defers the net payout.
     /// @dev Forwards the signed settlement data to the current settlement policy.
     function fulfillIntent(FulfillIntentParams calldata params) external;
 
-    /// @notice Manually settles an intent as its depositor.
-    function releaseFundsToPayer(bytes32 intentHash) external;
+    /// @notice Manually settles an intent: in full as its depositor, or any part as its arbitrator.
+    function releaseFundsToPayer(bytes32 intentHash, uint256 releaseAmount) external;
+
+    /// @notice Extends an intent's expiry for free as its arbitrator; the escrow must let this orchestrator extend.
+    function extendIntent(bytes32 intentHash, uint256 additionalTime) external;
 
     /* ============ External Functions for Escrow ============ */
 

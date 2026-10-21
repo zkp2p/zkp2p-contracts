@@ -772,12 +772,35 @@ contract WhitelistPolicyTest is Test {
         policy.validateSignalIntent(_preIntentContext(taker));
     }
 
+    function test_IsTakerWhitelistedChecksTheNamedGroupOrTheDepositList() public {
+        registry.addMembers(PEERS, _addresses(taker));
+        registry.addMembers(PEER_PLUSES, _addresses(taker));
+        vm.prank(maker);
+        policy.configureDeposit(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, false, _groupIds(PEERS), _addresses(otherTaker));
+
+        assertTrue(_isTakerWhitelisted(taker, PEERS));
+        assertFalse(_isTakerWhitelisted(taker, PEER_PLUSES));
+        assertFalse(_isTakerWhitelisted(otherTaker, PEERS));
+        assertTrue(_isTakerWhitelisted(otherTaker, bytes32(0)));
+        assertFalse(_isTakerWhitelisted(taker, bytes32(0)));
+        assertFalse(_isTakerWhitelisted(maker, bytes32(0)));
+
+        vm.prank(maker);
+        policy.setEnabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true);
+        assertTrue(_isTakerWhitelisted(taker, PEERS));
+        assertFalse(_isTakerWhitelisted(maker, bytes32(0)));
+    }
+
     function test_ValidateSignalIntentRejectsUnregisteredCaller() public {
         vm.expectRevert(abi.encodeWithSelector(WhitelistPolicy.UnauthorizedOrchestratorCaller.selector, address(this)));
         policy.validateSignalIntent(_preIntentContext(taker));
     }
 
     /* ============ Helpers ============ */
+
+    function _isTakerWhitelisted(address _taker, bytes32 _groupId) internal view returns (bool) {
+        return policy.isTakerWhitelisted(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, _taker, _groupId);
+    }
 
     function _groupIds(bytes32 _first) internal pure returns (bytes32[] memory groupIds) {
         groupIds = new bytes32[](1);

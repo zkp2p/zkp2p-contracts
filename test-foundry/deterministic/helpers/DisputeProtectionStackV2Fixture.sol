@@ -54,7 +54,7 @@ abstract contract DisputeProtectionStackV2Fixture is OrchestratorV4Fixture {
         orchestrator.setProtocolFee(PROTOCOL_FEE);
     }
 
-    function _defaultParams() internal view override returns (IOrchestratorV4.SignalIntentParams memory params) {
+    function _defaultParams() internal view virtual override returns (IOrchestratorV4.SignalIntentParams memory params) {
         params = super._defaultParams();
         params.to = other;
         params.referralFees = new IReferralFee.ReferralFee[](1);

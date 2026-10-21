@@ -26,6 +26,25 @@ interface IWhitelistPolicy is IPreIntentHook {
         external
         view
         returns (bool);
+    /**
+     * @notice Returns whether the taker is directly whitelisted or belongs to the specified allowed group.
+     * @dev Independent of the whitelist's enabled switch. A zero groupId checks only the direct whitelist;
+     * a nonzero groupId checks only membership in that group and whether it is allowed for the payment method.
+     * @param escrow Escrow holding the deposit.
+     * @param depositId Deposit whose whitelist is checked.
+     * @param paymentMethod Payment method whose allowed groups are checked.
+     * @param taker Account to check.
+     * @param groupId Group to check, or zero to check the deposit's direct whitelist.
+     * @return True if the taker is directly whitelisted with a zero groupId, or is a member of the specified
+     * group and that group is allowed for the deposit and payment method.
+     */
+    function isTakerWhitelisted(
+        address escrow,
+        uint256 depositId,
+        bytes32 paymentMethod,
+        address taker,
+        bytes32 groupId
+    ) external view returns (bool);
 
     /**
      * @notice Bundles enabling/disabling a deposit payment method's gate with appending groups and takers.

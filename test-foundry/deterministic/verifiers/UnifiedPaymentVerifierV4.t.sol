@@ -66,7 +66,7 @@ contract UnifiedPaymentVerifierV4Test is UnifiedPaymentVerifierV3Test {
         IOrchestratorV4.Intent memory intent = IOrchestratorV4.Intent(
             source.owner, source.to, source.escrow, source.depositId, source.amount, source.timestamp,
             source.paymentMethod, source.fiatCurrency, source.conversionRate, source.payeeId,
-            new IReferralFee.ReferralFee[](1), "", false
+            new IReferralFee.ReferralFee[](1), "", false, address(0)
         );
         intent.referralFees[0] = IReferralFee.ReferralFee(address(123), 1e15);
         caller.setIntent(V2_INTENT, intent);
@@ -104,7 +104,7 @@ contract UnifiedPaymentVerifierV4Test is UnifiedPaymentVerifierV3Test {
         IOrchestratorV4.Intent memory intent = IOrchestratorV4.Intent(
             source.owner, source.to, source.escrow, source.depositId, source.amount, source.timestamp,
             source.paymentMethod, source.fiatCurrency, source.conversionRate, source.payeeId,
-            new IReferralFee.ReferralFee[](0), commitment, false
+            new IReferralFee.ReferralFee[](0), commitment, false, address(0)
         );
         caller.setIntent(V2_INTENT, intent);
         orchestratorRegistry.addOrchestrator(address(caller));

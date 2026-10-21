@@ -31,7 +31,7 @@ contract SettlementPolicyHandler is DisputeProtectionStackV2Fixture {
         bool hasStake = vault.freeStake(taker) >= INTENT_AMOUNT;
         if (manual) {
             vm.prank(depositor);
-            orchestrator.releaseFundsToPayer(id);
+            orchestrator.releaseFundsToPayer(id, INTENT_AMOUNT);
         } else {
             _settle(id, INTENT_AMOUNT, zeroWindow ? 0 : RISK_WINDOW);
         }

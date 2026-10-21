@@ -9,14 +9,14 @@ import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
 
 contract OrchestratorV4StructLayoutTest is Test {
-    function test_SignalSelectorOmitsIntentHooksAndAddsPayerCommitment() public pure {
+    function test_SignalSelectorOmitsIntentHooksAndAddsPayerCommitmentAndGroupId() public pure {
         bytes4 expected = bytes4(keccak256(
-            "signalIntent((address,uint256,uint256,address,bytes32,bytes32,uint256,(address,uint256)[],bytes,uint256,bytes))"
+            "signalIntent((address,uint256,uint256,address,bytes32,bytes32,uint256,(address,uint256)[],bytes,uint256,bytes,bytes32))"
         ));
         assertEq(IOrchestratorV4.signalIntent.selector, expected);
     }
 
-    function test_IntentEncodingAddsPayerCommitmentAndWhitelistFlag() public pure {
+    function test_IntentEncodingAddsPayerCommitmentWhitelistFlagAndArbitrator() public pure {
         IReferralFee.ReferralFee[] memory fees = _fees();
         IOrchestratorV4.Intent memory intent = IOrchestratorV4.Intent({
             owner: address(1),
@@ -31,20 +31,22 @@ contract OrchestratorV4StructLayoutTest is Test {
             payeeId: bytes32(uint256(10)),
             referralFees: fees,
             payerCommitment: hex"0b",
-            takerWhitelisted: true
+            takerWhitelisted: true,
+            arbitrator: address(16)
         });
-        // Top-level tuple offset, thirteen-word head ending in the two tails' offsets and the flag, two referrals,
-        // then the commitment.
+        // Top-level tuple offset, fourteen-word head ending in the two tails' offsets, the flag and the arbitrator,
+        // two referrals, then the commitment.
         bytes memory expected = bytes.concat(
             abi.encode(uint256(32), address(1), address(2), address(3), uint256(4), uint256(5), uint256(6)),
-            abi.encode(bytes32(uint256(7)), bytes32(uint256(8)), uint256(9), bytes32(uint256(10)), uint256(416), uint256(576), true),
+            abi.encode(bytes32(uint256(7)), bytes32(uint256(8)), uint256(9), bytes32(uint256(10)), uint256(448), uint256(608), true),
+            abi.encode(address(16)),
             abi.encode(uint256(2), address(12), uint256(13), address(14), uint256(15)),
             abi.encode(uint256(1), bytes32(bytes1(0x0b)))
         );
         assertEq(abi.encode(intent), expected);
     }
 
-    function test_SignalIntentParamsMatchesV3MinusIntentHooksPlusPayerCommitment() public pure {
+    function test_SignalIntentParamsMatchesV3MinusIntentHooksPlusPayerCommitmentAndGroupId() public pure {
         IReferralFee.ReferralFee[] memory fees = _fees();
         IOrchestratorV3.SignalIntentParams memory v3 = IOrchestratorV3.SignalIntentParams({
             escrow: address(1),
@@ -62,7 +64,7 @@ contract OrchestratorV4StructLayoutTest is Test {
             data: hex"8899"
         });
         // Positional construction locks V3's field order with both intent hooks and the hook data removed,
-        // then the payer commitment appended.
+        // then the payer commitment and the group id appended.
         IOrchestratorV4.SignalIntentParams memory v4 = IOrchestratorV4.SignalIntentParams(
             v3.escrow,
             v3.depositId,
@@ -74,7 +76,8 @@ contract OrchestratorV4StructLayoutTest is Test {
             v3.referralFees,
             v3.gatingServiceSignature,
             v3.signatureExpiration,
-            hex"0a"
+            hex"0a",
+            bytes32(uint256(11))
         );
         assertEq(v4.escrow, v3.escrow);
         assertEq(v4.depositId, v3.depositId);
@@ -87,6 +90,7 @@ contract OrchestratorV4StructLayoutTest is Test {
         assertEq(v4.gatingServiceSignature, v3.gatingServiceSignature);
         assertEq(v4.signatureExpiration, v3.signatureExpiration);
         assertEq(v4.payerCommitment, hex"0a");
+        assertEq(v4.groupId, bytes32(uint256(11)));
     }
 
     function test_FulfillIntentParamsMatchesV3MinusPostIntentHookData() public pure {

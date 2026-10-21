@@ -113,6 +113,13 @@ abstract contract OrchestratorV4Fixture is Test {
     }
 
     function _createDeposit(address intentGatingService, address depositDelegate) internal returns (uint256 id) {
+        id = _createDeposit(intentGatingService, depositDelegate, address(0));
+    }
+
+    function _createDeposit(address intentGatingService, address depositDelegate, address intentGuardian)
+        internal
+        returns (uint256 id)
+    {
         id = escrow.depositCounter();
         bytes32[] memory methods = new bytes32[](1);
         methods[0] = METHOD;
@@ -133,7 +140,7 @@ abstract contract OrchestratorV4Fixture is Test {
                 paymentMethodData: methodData,
                 currencies: currencies,
                 delegate: depositDelegate,
-                intentGuardian: address(0),
+                intentGuardian: intentGuardian,
                 retainOnEmpty: false
             })
         );
@@ -167,7 +174,8 @@ abstract contract OrchestratorV4Fixture is Test {
             referralFees: referralFees,
             gatingServiceSignature: "",
             signatureExpiration: block.timestamp + 1 days,
-            payerCommitment: ""
+            payerCommitment: "",
+            groupId: bytes32(0)
         });
     }
 
