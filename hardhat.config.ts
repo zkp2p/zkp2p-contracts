@@ -68,10 +68,10 @@ const config: HardhatUserConfig = {
     },
     base_staging: {
       url: "https://base-mainnet.g.alchemy.com/v2/" + process.env.ALCHEMY_API_KEY,
-      // @ts-ignore
-      accounts: [
-        `0x${process.env.BASE_DEPLOY_PRIVATE_KEY}`,
-      ],
+      // Staging shares Base's chain ID, but must never inherit its production key.
+      accounts: process.env.STAGING_DEPLOYER_KEY
+        ? [`0x${process.env.STAGING_DEPLOYER_KEY.replace(/^0x/, "")}`]
+        : [],
       verify: {
         etherscan: {
           apiUrl: "https://api.basescan.org/",

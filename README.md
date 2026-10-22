@@ -661,6 +661,36 @@ contract deployment or duplicate staging artifact is required.
 These are the supported deployment entrypoints and all route through `scripts/deployActive.ts`. Do not invoke
 `hardhat deploy` directly: it bypasses the immutable-lane hash and retirement filter.
 
+### Base staging ownership
+
+Base staging runs on Base mainnet (8453). Its dedicated signer is
+`0x41123d6419C7b8e44157f6F3b0088442116641eC`, loaded only through `STAGING_DEPLOYER_KEY`.
+`base` still uses `BASE_DEPLOY_PRIVATE_KEY`; staging never falls back to that key.
+An unset staging key leaves the staging account list empty.
+
+The 2026-10-22 migration is **partial**. At block 52928293, 26 current/historical
+two-step owners had been redirected from `0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929`
+directly to the dedicated signer and accepted. Their pending owners are zero.
+Another 168 verified staging contracts remain owned by
+`0xdd93E0f5fC32c86A568d87Cb4f08598f55E980F3`: 135 from the earlier handoff plus
+33 pre-existing legacy staging contracts. That historical signer is still unavailable.
+
+Read each target's live `owner()` and `pendingOwner()` before administration.
+Do not run deployment/activation lanes that require a uniform staging owner while
+this migration is incomplete. Existing governance checks must continue to fail closed;
+do not replace their owner assertions globally or edit immutable historical lanes.
+The source change here separates key selection; it does not establish deployment readiness.
+
+All 220 ownership calls passed a pinned fork simulation; only the 52 calls for the
+26 redirectable contracts were broadcast. Bytecode, native balances and 203 getter
+reads were preserved, and both historical signers failed owner-call simulations on
+the 26 migrated contracts. Fee/dust recipients, groups, managers, controllers,
+registry permissions and wiring were not changed. Other authority can still exist.
+
+See the [complete public inventory and receipts](deployments/outputs/staging-ownership-migration-2026-10-22.json).
+Production and unclassified contracts are excluded. Historical constructor arguments,
+deployment senders and dated dispute-stack evidence remain provenance, not current ownership.
+
 ### V3 Groups Cutover
 
 The lifecycle rollout is split into explicit lanes. Production-executed numbered scripts are immutable
