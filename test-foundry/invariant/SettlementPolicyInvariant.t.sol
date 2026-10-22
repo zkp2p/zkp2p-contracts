@@ -15,14 +15,9 @@ contract SettlementPolicyHandler is DisputeProtectionStackV2Fixture {
     function settle(bool enabledAtSignal, bool enableAfterSignal, bool staked, bool zeroWindow, bool manual, bool exempt) external {
         if (escrow.getDeposit(depositId).remainingDeposits < INTENT_AMOUNT) return;
         vm.prank(depositor);
-        whitelist.setEnabled(address(escrow), depositId, METHOD, false);
+        whitelist.setEnabled(address(escrow), depositId, false);
         orchestrator.setSettlementPolicy(enabledAtSignal ? IIntentSettlementPolicy(address(protection)) : IIntentSettlementPolicy(address(0)));
-        if (exempt) {
-            address[] memory allowed = new address[](1);
-            allowed[0] = taker;
-            vm.prank(depositor);
-            whitelist.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), allowed);
-        }
+        if (exempt) _whitelist(taker);
         bytes32 id = _signalDefault();
         orchestrator.setSettlementPolicy(enableAfterSignal ? IIntentSettlementPolicy(address(protection)) : IIntentSettlementPolicy(address(0)));
         if (staked && vault.freeStake(taker) < INTENT_AMOUNT) _stake(vault, taker, INTENT_AMOUNT);

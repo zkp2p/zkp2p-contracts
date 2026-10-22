@@ -129,10 +129,7 @@ contract WhitelistedPayoutFuzzTest is DisputeProtectionStackV2Fixture {
         window = uint64(bound(window, 1, 180 days));
         stake = bound(stake, 0, 2 * INTENT_AMOUNT);
         if (stake != 0) _stake(vault, taker, stake);
-        address[] memory takers = new address[](1);
-        takers[0] = taker;
-        vm.prank(depositor);
-        whitelist.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), takers);
+        _whitelist(taker);
         bytes32 id = _signalDefault();
         vm.recordLogs();
         vm.record();

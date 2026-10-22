@@ -8,6 +8,7 @@ import {IDisputeProtectionPolicyV2 as P} from "contracts/interfaces/IDisputeProt
 import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionPolicy.sol";
 import {IDisputeVerifier} from "contracts/interfaces/IDisputeVerifier.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
+import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {UnifiedPaymentVerifierV4} from "contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol";
@@ -38,7 +39,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
 
     function test_RelayerTakerUsesStakeOwnerCollateral() public {
         relayerRegistry.addRelayer(taker);
-        assertFalse(whitelist.enabled(address(escrow), depositId, METHOD));
+        assertFalse(whitelist.enabled(address(escrow), depositId));
         _stake(vault, delegate, INTENT_AMOUNT);
         vm.prank(delegate);
         vault.setTakerAuthorization(taker, true);
@@ -57,7 +58,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
 
     function test_RelayerTakerDefersUncoveredPayout() public {
         relayerRegistry.addRelayer(taker);
-        assertFalse(whitelist.enabled(address(escrow), depositId, METHOD));
+        assertFalse(whitelist.enabled(address(escrow), depositId));
         bytes32 id = _signalDefault();
         assertFalse(_isOpen(id));
         _assertDeferredSettlement(id);
@@ -120,8 +121,10 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         groups.addMembers(group, members);
         bytes32[] memory ids = new bytes32[](1);
         ids[0] = group;
-        vm.prank(depositor);
-        whitelist.configureDeposit(address(escrow), depositId, METHOD, true, ids, new address[](0));
+        vm.startPrank(depositor);
+        whitelist.setGroups(address(escrow), depositId, ids, true);
+        whitelist.setEnabled(address(escrow), depositId, true);
+        vm.stopPrank();
         takerGroup = group;
     }
 
@@ -167,7 +170,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         _whitelistTaker();
         bytes32 id = _signalDefault();
         vm.prank(depositor);
-        whitelist.setEnabled(address(escrow), depositId, METHOD, false);
+        whitelist.setEnabled(address(escrow), depositId, false);
         _settleWhitelistedWithoutRecord(id);
         assertEq(token.balanceOf(other), NET);
         _assertFees();
@@ -203,7 +206,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
 
     function test_EnabledWhitelistRejectsNonMemberBeforeEscrowLock() public {
         vm.prank(depositor);
-        whitelist.setEnabled(address(escrow), depositId, METHOD, true);
+        whitelist.setEnabled(address(escrow), depositId, true);
         vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker));
         _signalCall(taker, _defaultParams());
         assertEq(escrow.getDeposit(depositId).outstandingIntentAmount, 0);
@@ -346,7 +349,8 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         DisputeProtectionPolicy oldPolicy = new DisputeProtectionPolicy(address(this), oldVault, disputeVerifier, disputeNullifiers);
         oldVault.initializeController(address(oldPolicy));
         oldPolicy.setRiskWindow(METHOD, RISK_WINDOW);
-        IntentLifecycleHookV1 oldHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelist, oldPolicy);
+        WhitelistPolicy oldWhitelist = new WhitelistPolicy(new AddressGroupRegistry(), escrowRegistry, orchestratorRegistry);
+        IntentLifecycleHookV1 oldHook = new IntentLifecycleHookV1(orchestratorRegistry, oldWhitelist, oldPolicy);
         oldPolicy.setLifecycleHookAuthorization(address(oldHook), true);
         disputeNullifiers.addWritePermission(address(oldPolicy));
         v3.setLifecycleHook(oldHook);

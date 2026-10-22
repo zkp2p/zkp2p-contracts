@@ -181,10 +181,7 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
     }
 
     function test_WhitelistAdmissionAppliesWithZeroPolicyAndUsesTakerNotRecipient() public {
-        address[] memory allowed = new address[](1);
-        allowed[0] = other;
-        vm.prank(depositor);
-        whitelist.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), allowed);
+        _whitelist(other);
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.to = other;
         relayerRegistry.addRelayer(taker);
@@ -192,27 +189,22 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         _signalCall(taker, params);
         assertEq(orchestrator.intentCounter(), 0);
         assertEq(escrow.getDeposit(depositId).outstandingIntentAmount, 0);
-        allowed[0] = taker;
-        vm.prank(depositor);
-        whitelist.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), allowed);
+        _whitelist(taker);
         bytes32 id = _signal(taker, params);
         assertEq(orchestrator.getIntent(id).owner, taker);
         vm.prank(depositor);
-        whitelist.setEnabled(address(escrow), depositId, METHOD, false);
+        whitelist.setEnabled(address(escrow), depositId, false);
         _signal(other, params);
     }
 
     function test_TakerWhitelistedAtSignalSkipsPolicy() public {
-        address[] memory allowed = new address[](1);
-        allowed[0] = taker;
-        vm.prank(depositor);
-        whitelist.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), allowed);
+        _whitelist(taker);
         orchestrator.setSettlementPolicy(policyMock);
         policyMock.setRevertOnCallback(true);
         bytes32 id = _signalDefault();
         assertTrue(orchestrator.getIntent(id).takerWhitelisted);
         vm.prank(depositor);
-        whitelist.setEnabled(address(escrow), depositId, METHOD, false);
+        whitelist.setEnabled(address(escrow), depositId, false);
         _fulfill(id, INTENT_AMOUNT, CONVERSION_RATE);
         assertEq(policyMock.settlementCalls(), 0);
         assertEq(token.balanceOf(taker), INTENT_AMOUNT);
@@ -222,10 +214,7 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         orchestrator.setSettlementPolicy(policyMock);
         bytes32 id = _signalDefault();
         assertFalse(orchestrator.getIntent(id).takerWhitelisted);
-        address[] memory allowed = new address[](1);
-        allowed[0] = taker;
-        vm.prank(depositor);
-        whitelist.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), allowed);
+        _whitelist(taker);
         _fulfill(id, INTENT_AMOUNT, CONVERSION_RATE);
         assertEq(policyMock.settlementCalls(), 1);
         assertEq(policyMock.lastIntentHash(), id);
