@@ -55,7 +55,8 @@
     "scripts/test-method-scoped-runner.cjs",
     "scripts/test-opt-in-dispute-lifecycle-deployment.cjs",
     "scripts/test-v3-groups-base-deployment.cjs",
-    "tasks/etherscanVerifyWithDelay.ts"
+    "tasks/etherscanVerifyWithDelay.ts",
+    "scripts/deploy-orchestrator-v4.ts"
   ],
   "include": []
 }
