@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { BigNumber, Contract, ContractFactory, Wallet, constants, providers, utils } from "ethers";
+import { BigNumber, Contract, ContractFactory, VoidSigner, Wallet, constants, providers, utils } from "ethers";
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
 import { SourceVerificationError, verifySources } from "./verify-orchestrator-v4-source";
 import { zeroImmutableValues } from "../deployments/canonicalDeployment";
@@ -129,8 +129,11 @@ export async function inspect(hre: HardhatRuntimeEnvironment, c: ReleaseConfig) 
   };
 }
 
-export function assertBaseline(c: ReleaseConfig, snapshot: Awaited<ReturnType<typeof inspect>>, manifest?: Manifest, completedActivationSteps?: string[]): void {
+function assertRegistryOwnership(snapshot: Awaited<ReturnType<typeof inspect>>): void {
   check(snapshot.requiredOwnershipChanges.length === 0, `Activation ownership missing: ${snapshot.requiredOwnershipChanges.map((x) => `${x.name} owner ${x.owner}; requires ${x.requiredOwner}`).join("; ")}`);
+}
+
+export function assertBaseline(c: ReleaseConfig, snapshot: Awaited<ReturnType<typeof inspect>>, manifest?: Manifest, completedActivationSteps?: string[]): void {
   const a = (name: string): string => c.existing[name].address;
   check(snapshot.escrow.chainId === String(c.chainId) && snapshot.escrow.registered && same(snapshot.escrow.orchestratorRegistry, a("OrchestratorRegistry")) && same(snapshot.escrow.paymentVerifierRegistry, a("PaymentVerifierRegistry")), "Existing escrow is incompatible with reused registries");
   check(snapshot.predecessor.registered && !snapshot.predecessor.paused && same(snapshot.predecessor.lifecycleHook, c.predecessorHook), "O3 registration, pause or lifecycle hook changed");
@@ -162,19 +165,26 @@ export function assertBaseline(c: ReleaseConfig, snapshot: Awaited<ReturnType<ty
 
 /** Write the signed transaction before sending. An interrupted run only rebroadcasts these exact bytes. */
 export class TransactionJournal<M extends Pick<Manifest, "transactions"> & { configuration: Pick<ReleaseConfig, "chainId"> } = Manifest> {
-  constructor(readonly path: string, readonly manifest: M, readonly wallet: Wallet) {}
+  constructor(readonly path: string, readonly manifest: M, readonly wallet: Wallet | VoidSigner) {}
   save(): void { atomicJson(this.path, this.manifest); }
   async execute(step: string, request: providers.TransactionRequest): Promise<Transaction> {
+    const provider = this.wallet.provider; check(provider, "Transaction signer provider is unavailable");
     let transaction = this.manifest.transactions.find((tx) => tx.step === step);
     const to = request.to ? utils.getAddress(String(request.to)) : null, data = String(request.data), value = BigNumber.from(request.value || 0).toString();
     const requestToSign = { ...(to === null ? {} : { to }), data, value };
     if (transaction) check(equal([transaction.to, transaction.data, transaction.value], [to, data, value]), `Resumed transaction differs: ${step}`);
     else {
-      const provider = this.wallet.provider;
       const nonce = await provider.getTransactionCount(this.wallet.address, "latest");
       check(nonce === await provider.getTransactionCount(this.wallet.address, "pending"), "Signer has an unrelated pending transaction");
       const gas = await provider.estimateGas({ ...requestToSign, from: this.wallet.address });
-      const unsigned = await this.wallet.populateTransaction({ ...requestToSign, nonce, gasLimit: gas.mul(12).div(10), chainId: this.manifest.configuration.chainId });
+      const rpc = provider as providers.JsonRpcProvider;
+      check(typeof rpc.send === "function", "Deployment requires a JSON-RPC fee provider");
+      const [block, gasPrice, priority] = await Promise.all([provider.getBlock("latest"), provider.getGasPrice(), rpc.send("eth_maxPriorityFeePerGas", [])]);
+      const maxPriorityFeePerGas = BigNumber.from(priority);
+      check(block.baseFeePerGas && maxPriorityFeePerGas.gte(0) && maxPriorityFeePerGas.lte(gasPrice), "RPC priority fee exceeds its complete gas-price recommendation");
+      // ethers v5's default 1.5 gwei tip is unsuitable for Base; use the RPC's explicit priority quote.
+      const maxFeePerGas = block.baseFeePerGas.mul(2).add(maxPriorityFeePerGas);
+      const unsigned = await this.wallet.populateTransaction({ ...requestToSign, nonce, type: 2, gasLimit: gas.mul(12).div(10), maxFeePerGas, maxPriorityFeePerGas, chainId: this.manifest.configuration.chainId });
       const raw = await this.wallet.signTransaction(unsigned);
       transaction = { step, hash: utils.keccak256(raw), nonce, to, data, value, receipt: null };
       atomicJson(`${this.path}.pending`, { hash: transaction.hash, raw });
@@ -182,24 +192,24 @@ export class TransactionJournal<M extends Pick<Manifest, "transactions"> & { con
       this.save();
     }
     if (!transaction.receipt) {
-      let receipt = await this.wallet.provider.getTransactionReceipt(transaction.hash);
+      let receipt = await provider.getTransactionReceipt(transaction.hash);
       if (!receipt) {
         check(existsSync(`${this.path}.pending`), `Missing signed journal for ${transaction.hash}; recover its receipt before continuing`);
         const pending = JSON.parse(readFileSync(`${this.path}.pending`, "utf8")) as { hash: string; raw: string };
         check(pending.hash === transaction.hash && utils.keccak256(pending.raw) === transaction.hash, "Pending transaction journal hash mismatch");
-        const onchain = await this.wallet.provider.getTransaction(transaction.hash);
+        const onchain = await provider.getTransaction(transaction.hash);
         if (!onchain) {
-          check(await this.wallet.provider.getTransactionCount(this.wallet.address, "latest") === transaction.nonce, `Nonce consumed without expected receipt: ${transaction.hash}`);
-          await this.wallet.provider.sendTransaction(pending.raw);
+          check(await provider.getTransactionCount(this.wallet.address, "latest") === transaction.nonce, `Nonce consumed without expected receipt: ${transaction.hash}`);
+          await provider.sendTransaction(pending.raw);
         }
-        receipt = await this.wallet.provider.waitForTransaction(transaction.hash, 1, 180_000);
+        receipt = await provider.waitForTransaction(transaction.hash, 1, 180_000);
       }
       check(receipt && receipt.status === 1, `Transaction unconfirmed or reverted: ${transaction.hash}`);
       transaction.receipt = { blockNumber: receipt.blockNumber, blockHash: receipt.blockHash, transactionHash: receipt.transactionHash, gasUsed: receipt.gasUsed.toString(), effectiveGasPrice: receipt.effectiveGasPrice.toString() };
       this.save();
       if (existsSync(`${this.path}.pending`)) unlinkSync(`${this.path}.pending`);
     }
-    const confirmed = await this.wallet.provider.getTransactionReceipt(transaction.hash);
+    const confirmed = await provider.getTransactionReceipt(transaction.hash);
     check(confirmed && confirmed.status === 1 && confirmed.blockHash === transaction.receipt.blockHash, `Recorded transaction is no longer canonical: ${transaction.hash}`);
     return transaction;
   }
@@ -217,7 +227,9 @@ async function assertRuntime(hre: HardhatRuntimeEnvironment, address: string, ar
 export async function deploySuite(hre: HardhatRuntimeEnvironment, journal: TransactionJournal): Promise<void> {
   const m = journal.manifest, c = m.configuration;
   check(same(journal.wallet.address, c.signer), "Signer differs from configured migrated deployer");
-  assertBaseline(c, await inspect(hre, c), m);
+  const snapshot = await inspect(hre, c);
+  if (c.environment === "base") assertRegistryOwnership(snapshot);
+  assertBaseline(c, snapshot, m);
   const a = (name: string): string => c.existing[name].address;
   const fresh = (name: NewName): string => { const record = m.contracts[name]; check(record, `${name} has not been deployed`); return record.address; };
   async function deploy(name: NewName, args: unknown[]): Promise<void> {
@@ -277,6 +289,7 @@ export async function activationTransactions(hre: HardhatRuntimeEnvironment, m: 
 export async function activate(hre: HardhatRuntimeEnvironment, journal: TransactionJournal): Promise<void> {
   const c = journal.manifest.configuration;
   check(c.environment === "base_staging" && same(journal.wallet.address, c.governance), "Direct activation is staging-only; production uses its Safe batch");
+  assertRegistryOwnership(await inspect(hre, c));
   await assertDrainEvidence(hre, c, journal.manifest.activationDrainEvidence);
   await assertPrivateDepositsPreserved(hre, journal);
   const transactions = await activationTransactions(hre, journal.manifest);
@@ -294,6 +307,7 @@ export async function activate(hre: HardhatRuntimeEnvironment, journal: Transact
   check(!transactions.slice(completed.length + 1).some((tx) => journal.manifest.transactions.some((entry) => entry.step === tx.step)), "Activation journal is not a contiguous prefix");
   const assertActivationState = async (): Promise<void> => {
     const snapshot = await inspect(hre, c);
+    assertRegistryOwnership(snapshot);
     assertLegacyDrained(c, snapshot);
     assertBaseline(c, snapshot, journal.manifest, completed);
     const o4 = journal.manifest.contracts.OrchestratorV4; check(o4, "O4 is missing");
@@ -390,6 +404,7 @@ function assertLegacyDrained(c: ReleaseConfig, snapshot: Awaited<ReturnType<type
 export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: TransactionJournal, active: boolean): Promise<void> {
   const m = journal.manifest, c = m.configuration;
   const snapshot = await inspect(hre, c);
+  if (active || c.environment === "base") assertRegistryOwnership(snapshot);
   assertBaseline(c, snapshot, m);
   const contracts = {} as Record<NewName, Contract>;
   for (const name of Object.keys(NEW_CONTRACTS) as NewName[]) {
@@ -423,11 +438,12 @@ export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: Trans
   check(registered === active, "O4 registration does not match release phase");
   if (active) {
     assertLegacyDrained(c, snapshot);
+    await assertPrivateDepositsPreserved(hre, journal);
     check(snapshot.paymentMethods.every((method) => same(method.verifier, v.address)), "Not all payment routes select UPV4");
     check(equal(snapshot.nullifierWriters, [v.address]), "UPV4 must be the only payment nullifier writer");
     check(equal(snapshot.disputeWriters, [...c.retainedDisputeWriters, p.address]), "Policy writer missing or predecessor writer changed");
   }
-  m.verification = { ...m.verification, verifiedAtBlock: snapshot.blockNumber, active, bytecode: true, constructors: true, wiring: true, governance: true, paymentCatalog: true, escrowCompatible: true, predecessorPreserved: true };
+  m.verification = { ...m.verification, verifiedAtBlock: snapshot.blockNumber, active, bytecode: true, constructors: true, wiring: true, newContractOwnership: true, governance: snapshot.requiredOwnershipChanges.length === 0, pendingRegistryOwnership: snapshot.requiredOwnershipChanges, paymentCatalog: true, escrowCompatible: true, predecessorPreserved: true };
   journal.save();
 }
 
@@ -441,10 +457,13 @@ async function main(): Promise<void> {
   check(c.environment === environment && c.chainId === 8453, "Live deployment requires the selected environment on Base 8453");
   const manifestPath = resolve(`deployments/outputs/orchestrator-v4-${environment}.json`);
   if (action === "inspect") { const snapshot = await inspect(hre, c); atomicJson(`${manifestPath}.preflight`, snapshot); console.log(JSON.stringify(snapshot, null, 2)); return; }
-  const keyName = environment === "base_staging" ? "STAGING_DEPLOYER_KEY" : "O4_PRODUCTION_DEPLOYER_KEY";
-  const key = process.env[keyName]; check(key, `${keyName} is unavailable; no fallback signer is permitted`);
-  const wallet = new Wallet(key.startsWith("0x") ? key : `0x${key}`, hre.ethers.provider);
-  check(same(wallet.address, c.signer), "Derived signer differs from the verified configuration");
+  let wallet: Wallet | VoidSigner;
+  if (action === "deploy" || action === "activate") {
+    const keyName = environment === "base_staging" ? "STAGING_DEPLOYER_KEY" : "O4_PRODUCTION_DEPLOYER_KEY";
+    const key = process.env[keyName]; check(key, `${keyName} is unavailable; no fallback signer is permitted`);
+    wallet = new Wallet(key.startsWith("0x") ? key : `0x${key}`, hre.ethers.provider);
+    check(same(wallet.address, c.signer), "Derived signer differs from the verified configuration");
+  } else wallet = new VoidSigner(c.signer, hre.ethers.provider);
   const protectedPaths = ["contracts", "hardhat.config.ts", "scripts/deploy-orchestrator-v4.ts", "scripts/verify-orchestrator-v4-source.ts", "deployments/canonicalDeployment.ts", configPath];
   for (const path of ["scripts/deploy-orchestrator-v4.ts", "scripts/verify-orchestrator-v4-source.ts", `deployments/orchestrator-v4/${environment}.json`])
     execFileSync("git", ["cat-file", "-e", `HEAD:${path}`], { stdio: "pipe" });
@@ -462,11 +481,13 @@ async function main(): Promise<void> {
       execFileSync("git", ["diff", "--exit-code", manifest.sourceCommit, "HEAD", "--", ...protectedPaths], { stdio: "pipe" });
     } else {
       check(action === "deploy", "No deployment manifest exists; run deploy first");
-      const baseline = await inspect(hre, c); assertBaseline(c, baseline);
+      const baseline = await inspect(hre, c);
+      if (c.environment === "base") assertRegistryOwnership(baseline);
+      assertBaseline(c, baseline);
       check(baseline.signer.nonce === baseline.signer.pendingNonce, "Signer has pending transactions");
       manifest = { version: 1, sourceCommit, configurationHash: hash(c), configuration: c, baseline, transactions: [], activationDrainEvidence: null, contracts: {}, verification: {}, governanceTransactions: [] };
     }
-    const journal = new TransactionJournal(manifestPath, manifest, wallet);
+    const journal = new TransactionJournal(action === "verify" ? `${manifestPath}.verification` : manifestPath, manifest, wallet);
     if (action === "deploy") await deploySuite(hre, journal);
     if (action === "record-drain") {
       check(evidencePath, "record-drain requires the post-pause indexer evidence JSON");
@@ -487,7 +508,7 @@ async function main(): Promise<void> {
       await verifySuite(hre, journal, manifest.verification.active === true);
       manifest.verification.sources = await verifySources(hre, manifest, apiKey); journal.save();
     }
-    console.log(JSON.stringify({ manifest: manifestPath, sourceCommit: manifest.sourceCommit, contracts: manifest.contracts, verification: manifest.verification }, null, 2));
+    console.log(JSON.stringify({ manifest: journal.path, sourceCommit: manifest.sourceCommit, contracts: manifest.contracts, verification: manifest.verification }, null, 2));
   } finally { closeSync(lock); unlinkSync(lockPath); }
 }
 

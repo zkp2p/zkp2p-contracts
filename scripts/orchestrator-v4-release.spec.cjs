@@ -1,11 +1,11 @@
 require("ts-node/register/transpile-only");
 const assert = require("node:assert/strict");
-const { mkdtempSync, readFileSync, rmSync } = require("node:fs");
+const { existsSync, mkdtempSync, readFileSync, rmSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const { test } = require("node:test");
 const hre = require("hardhat");
-const { ContractFactory, Wallet, utils, constants } = require("ethers");
+const { ContractFactory, VoidSigner, Wallet, utils, constants } = require("ethers");
 const { inspect, assertBaseline, validateConfig, TransactionJournal, deploySuite, activate, verifySuite, activationTransactions, DRAIN_QUERY, recordDrainEvidence, assertPrivateDepositsPreserved } = require("./deploy-orchestrator-v4.ts");
 
 // Public Hardhat fixture account. Never load a service or production signer in these tests.
@@ -80,14 +80,14 @@ async function fixture() {
   return { config, deployed, directory, path, manifest, journal };
 }
 
-test("ownership preflight rejects before the first deployment; RPC and signer pins also fail closed", async () => {
+test("RPC and signer pins fail before the first deployment", async () => {
   const f = await fixture();
   try {
-    await (await f.deployed.OrchestratorRegistry.transferOwnership(other)).wait();
     const nonce = await wallet.getTransactionCount();
-    await assert.rejects(deploySuite(hre, f.journal), /Activation ownership missing: OrchestratorRegistry/);
+    const chainId = f.config.chainId; f.config.chainId = 8453;
+    await assert.rejects(deploySuite(hre, f.journal), /RPC chain ID/);
+    f.config.chainId = chainId;
     assert.equal(await wallet.getTransactionCount(), nonce); assert.equal(f.manifest.transactions.length, 0);
-    await assert.rejects(inspect(hre, { ...f.config, chainId: 8453 }), /RPC chain ID/);
     await assert.rejects(deploySuite(hre, new TransactionJournal(f.path, f.manifest, Wallet.createRandom().connect(hre.ethers.provider))), /Signer differs/);
     assert.throws(() => validateConfig({ ...f.config, signer: null }), /Invalid configured signer/);
   } finally { rmSync(f.directory, { recursive: true, force: true }); }
@@ -125,8 +125,10 @@ test("seven-contract deployment resumes without duplicate addresses or transacti
     assert.equal(await f.deployed.OrchestratorV3.lifecycleHook(), f.config.predecessorHook);
     const finalNonce = await wallet.getTransactionCount();
     await activate(hre, restored); assert.equal(await wallet.getTransactionCount(), finalNonce);
-    await verifySuite(hre, restored, true);
-    assert.equal(restored.manifest.verification.active, true);
+    const inputManifest = readFileSync(f.path, "utf8");
+    await verifySuite(hre, new TransactionJournal(`${f.path}.verification`, JSON.parse(inputManifest), new VoidSigner(wallet.address, hre.ethers.provider)), true);
+    assert.equal(readFileSync(f.path, "utf8"), inputManifest);
+    assert.equal(JSON.parse(readFileSync(`${f.path}.verification`)).verification.active, true);
   } finally { rmSync(f.directory, { recursive: true, force: true }); }
 });
 
@@ -182,7 +184,13 @@ test("an interruption before broadcast reuses the saved signed bytes and nonce",
     const interrupted = new TransactionJournal(f.path, f.manifest, wallet.connect(provider));
     await assert.rejects(interrupted.execute("fixture-transfer", request), /injected transport failure/);
     assert.equal(await wallet.getTransactionCount(), nonce);
-    const originalHash = JSON.parse(readFileSync(`${f.path}.pending`)).hash;
+    const pending = JSON.parse(readFileSync(`${f.path}.pending`));
+    const originalHash = pending.hash;
+    const signed = utils.parseTransaction(pending.raw), block = await hre.ethers.provider.getBlock("latest");
+    const priority = hre.ethers.BigNumber.from(await hre.ethers.provider.send("eth_maxPriorityFeePerGas", []));
+    assert.equal(signed.type, 2);
+    assert.equal(signed.maxPriorityFeePerGas.toString(), priority.toString());
+    assert.equal(signed.maxFeePerGas.toString(), block.baseFeePerGas.mul(2).add(priority).toString());
     const restored = new TransactionJournal(f.path, JSON.parse(readFileSync(f.path)), wallet);
     const completed = await restored.execute("fixture-transfer", request);
     assert.equal(completed.hash, originalHash); assert.equal(await wallet.getTransactionCount(), nonce + 1);
@@ -311,5 +319,55 @@ test("a private deposit on another registered escrow introduced during cutover b
     await (await whitelist.setEnabled(secondEscrow.address, 0, true)).wait();
     await activate(hre, new TransactionJournal(f.path, JSON.parse(readFileSync(f.path)), wallet));
     assert.equal(await f.deployed.OrchestratorRegistry.isOrchestrator(f.manifest.contracts.OrchestratorV4.address), true);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
+
+test("staging can deploy an inactive suite while registry ownership is pending, but cannot activate it", async () => {
+  const f = await fixture();
+  try {
+    for (const name of ["OrchestratorRegistry", "PaymentVerifierRegistry", "NullifierRegistryV2", "DisputeNullifierRegistry"]) await (await f.deployed[name].transferOwnership(other)).wait();
+    const before = await inspect(hre, f.config);
+    assert.equal(before.requiredOwnershipChanges.length, 4);
+    await deploySuite(hre, f.journal);
+    assert.equal(Object.keys(f.manifest.contracts).length, 7);
+    const after = await inspect(hre, f.config);
+    assert.deepEqual(after.requiredOwnershipChanges, before.requiredOwnershipChanges);
+    assert.deepEqual(after.paymentMethods, before.paymentMethods);
+    assert.deepEqual(after.nullifierWriters, before.nullifierWriters);
+    assert.deepEqual(after.disputeWriters, before.disputeWriters);
+    assert.equal(f.manifest.verification.active, false);
+    assert.equal(f.manifest.verification.governance, false);
+    assert.equal(f.manifest.verification.pendingRegistryOwnership.length, 4);
+    assert.equal(await f.deployed.OrchestratorRegistry.isOrchestrator(f.manifest.contracts.OrchestratorV4.address), false);
+    const nonce = await wallet.getTransactionCount();
+    await assert.rejects(activate(hre, f.journal), /Activation ownership missing/);
+    assert.equal(await wallet.getTransactionCount(), nonce);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
+
+test("unavailable or inconsistent priority fee quotes reject before signing without a fallback", async () => {
+  const f = await fixture();
+  try {
+    const nonce = await wallet.getTransactionCount();
+    for (const unavailable of [true, false]) {
+      const provider = new Proxy(hre.ethers.provider, {
+        get(target, property) {
+          if (property === "send") return async (method, params) => {
+            if (method === "eth_maxPriorityFeePerGas") {
+              if (unavailable) throw new Error("unavailable priority quote");
+              return utils.hexValue(utils.parseUnits("1000", "gwei"));
+            }
+            return target.send(method, params);
+          };
+          const value = Reflect.get(target, property); return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      await assert.rejects(new TransactionJournal(f.path, f.manifest, wallet.connect(provider)).execute("fee-probe", { to: other, data: "0x", value: "1" }), unavailable ? /unavailable priority quote/ : /RPC priority fee exceeds/);
+      assert.equal(f.manifest.transactions.length, 0);
+      assert.equal(existsSync(`${f.path}.pending`), false);
+      assert.equal(await wallet.getTransactionCount(), nonce);
+    }
   } finally { rmSync(f.directory, { recursive: true, force: true }); }
 });
