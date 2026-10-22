@@ -23,8 +23,8 @@ their own V2 whitelist; the policy has no owner or bootstrap privilege.
 ### Existing private deposits
 
 The old O3 hook uses method-scoped `WhitelistPolicy` at
-`0xF79aAD1BAaB617fF3Eb299225c80893F22F743Fe`. Its complete indexed checkpoint at
-block `52938360` contains 27 enabled method tuples across 25 deposit IDs; every
+`0xF79aAD1BAaB617fF3Eb299225c80893F22F743Fe`. Its complete indexed checkpoint across every escrow at
+block `52938535` contains 27 enabled method tuples across 25 deposit IDs; every
 tuple was independently checked on-chain at that block. The evidence is in
 `deployments/orchestrator-v4/private-policy-checkpoint.json`.
 
@@ -41,10 +41,13 @@ allowlists this closes O4 admission while leaving old O3 groups and deposit stat
 unchanged. Only the recorded depositor can do this; neither the deployment signer
 nor an escrow delegate has that authority. The runner checks the pinned old
 policy, includes all later `EnabledUpdated` events, reads current enablement,
-skips deleted deposits, and requires new-policy enablement for every remaining
+covers every escrow appearing in those records/events, skips deleted deposits,
+and requires new-policy enablement for every remaining
 private deposit. It runs before the first activation write and again immediately
 before registration. Empty retained deposits are included because they can be
-funded again. The manifest records the checked block and required/deleted IDs.
+funded again. The manifest records the checked block and required/deleted escrow
+and deposit IDs. The shared escrow registry contains five addresses; the guard
+is not limited to the primary EscrowV2 address.
 
 Gating signatures use EIP-191 over a packed message containing the orchestrator
 address; O3 signatures cannot be replayed on O4. This does not substitute for
