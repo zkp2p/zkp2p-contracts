@@ -130,6 +130,7 @@ test("tool-only upgrade needs an exact explicit revision while compiled source a
     mkdirSync(join(directory, "scripts")); mkdirSync(join(directory, "contracts"));
     git("init"); git("config", "user.name", "Fixture"); git("config", "user.email", "fixture@example.test");
     writeFileSync(join(directory, "scripts/deploy-orchestrator-v4.ts"), "original"); writeFileSync(join(directory, "contracts/Contract.sol"), "immutable");
+    for (const wrapper of ["hardhat.readonly.config.ts", "hardhat.canonical.config.ts"]) writeFileSync(join(directory, wrapper), "reviewed execution wrapper");
     git("add", "."); git("commit", "-m", "deployed"); const source = git("rev-parse", "HEAD");
     writeFileSync(join(directory, "scripts/deploy-orchestrator-v4.ts"), "reviewed stronger drain"); git("add", "."); git("commit", "-m", "tool"); const tool = git("rev-parse", "HEAD");
     process.chdir(directory);
@@ -137,6 +138,11 @@ test("tool-only upgrade needs an exact explicit revision while compiled source a
     assert.throws(() => assertReleaseProvenance(source, source, "base_staging"));
     assert.throws(() => assertReleaseProvenance(source, "0".repeat(40), "base_staging"));
     assertReleaseProvenance(source, tool, "base_staging");
+    for (const wrapper of ["hardhat.readonly.config.ts", "hardhat.canonical.config.ts"]) {
+      writeFileSync(join(directory, wrapper), "unreviewed runtime override");
+      assert.throws(() => assertReleaseProvenance(source, tool, "base_staging"));
+      git("restore", wrapper);
+    }
     writeFileSync(join(directory, "scripts/deploy-orchestrator-v4.ts"), "unreviewed dirty change");
     assert.throws(() => assertReleaseProvenance(source, tool, "base_staging"));
     git("restore", "."); writeFileSync(join(directory, "contracts/Contract.sol"), "different deployed source"); git("add", "."); git("commit", "-m", "source drift");
