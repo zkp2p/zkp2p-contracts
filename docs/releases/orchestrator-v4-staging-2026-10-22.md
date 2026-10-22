@@ -32,6 +32,7 @@ separately approved production release.
 ```sh
 yarn deploy:orchestrator-v4 base_staging inspect
 yarn deploy:orchestrator-v4 base_staging deploy
+yarn deploy:orchestrator-v4 base_staging record-drain /path/to/post-pause-drain.json
 yarn deploy:orchestrator-v4 base_staging activate
 yarn deploy:orchestrator-v4 base_staging verify
 yarn deploy:orchestrator-v4 base_staging verify-source
@@ -53,7 +54,9 @@ configures UPV4 methods, selects O4's policy and sets its intent configuration.
 `activate` grants the new writer permissions, removes payment routes in reverse
 order, recreates them in their original order with their original currencies,
 revokes UPV3's payment-nullifier permission and registers O4 last. Each transition
-must match the confirmed transaction prefix. Old dispute writers remain enabled.
+must match the confirmed transaction prefix. Recovery reconciles mined receipts
+first, then validates that prefix before rebroadcasting any pending signed bytes.
+Old dispute writers remain enabled.
 
 This staging cutover temporarily removes payment routes while rebuilding them;
 coordinate a staging maintenance window. O3 retains its existing lifecycle hook
@@ -70,6 +73,23 @@ layout is neither the current V4 interface nor the V2 layout selected by its
 legacy probe. Its zero-open-intent checkpoint at block `52937634`, counter `38`,
 and paused state are required by the same guard. Both old orchestrators remain
 registered so historical cancellations and inspection retain their normal paths.
+
+After both pause transactions are confirmed, record an observation block where
+both report paused. Wait until the staging indexer reaches that block, then run
+this complete query and preserve its unchanged response:
+
+```graphql
+query { Intent(where:{status:{_eq:"SIGNALED"}},limit:1000){intentHash orchestratorAddress status} chain_metadata{latest_processed_block} }
+```
+
+The JSON passed to `record-drain` contains `pausedAtBlock`, `query` and `response`.
+The runner requires the indexer's height to be at least the pause observation,
+checks that neither retired address has a signaled intent, rejects truncated
+results, and reads both pause states/counters at that observation and at latest.
+Any subsequent `Unpaused` event invalidates the evidence and requires another
+post-pause query. `activate` validates this evidence before any write or replay.
+A snapshot taken before pausing cannot authorize activation. The manifest stores
+the full evidence without changing its immutable deployment configuration.
 
 For a future production release the same script deploys under the approved
 production signer and governance configuration, transfers single-step ownership

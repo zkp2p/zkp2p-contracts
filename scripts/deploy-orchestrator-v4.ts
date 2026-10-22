@@ -30,9 +30,14 @@ export type ReleaseConfig = {
 type Receipt = { blockNumber: number; blockHash: string; transactionHash: string; gasUsed: string; effectiveGasPrice: string };
 type Transaction = { step: string; hash: string; nonce: number; to: string | null; data: string; value: string; receipt: Receipt | null };
 type NewContract = { address: string; artifact: string; constructorArguments: unknown[]; transactionHash: string; deploymentBlock: number; runtimeCodeHash: string };
+export const DRAIN_QUERY = 'query { Intent(where:{status:{_eq:"SIGNALED"}},limit:1000){intentHash orchestratorAddress status} chain_metadata{latest_processed_block} }';
+export type DrainEvidence = {
+  pausedAtBlock: number; query: string;
+  response: { data: { Intent: Array<{ intentHash: string; orchestratorAddress: string; status: string }>; chain_metadata: Array<{ latest_processed_block: number }> } };
+};
 export type Manifest = {
   version: 1; sourceCommit: string; configurationHash: string; configuration: ReleaseConfig;
-  baseline: Awaited<ReturnType<typeof inspect>>; transactions: Transaction[];
+  baseline: Awaited<ReturnType<typeof inspect>>; transactions: Transaction[]; activationDrainEvidence: DrainEvidence | null;
   contracts: Partial<Record<NewName, NewContract>>; verification: Record<string, unknown>; governanceTransactions: Array<{ to: string; data: string; value: string }>;
 };
 class ReleaseError extends Error {}
@@ -266,7 +271,7 @@ export async function activationTransactions(hre: HardhatRuntimeEnvironment, m: 
 export async function activate(hre: HardhatRuntimeEnvironment, journal: TransactionJournal): Promise<void> {
   const c = journal.manifest.configuration;
   check(c.environment === "base_staging" && same(journal.wallet.address, c.governance), "Direct activation is staging-only; production uses its Safe batch");
-  assertLegacyDrained(c, await inspect(hre, c));
+  await assertDrainEvidence(hre, c, journal.manifest.activationDrainEvidence);
   const transactions = await activationTransactions(hre, journal.manifest);
   const started = transactions.some((tx) => journal.manifest.transactions.some((entry) => entry.step === tx.step));
   if (!started) await verifySuite(hre, journal, false);
@@ -274,10 +279,12 @@ export async function activate(hre: HardhatRuntimeEnvironment, journal: Transact
   for (const tx of transactions) {
     const recorded = journal.manifest.transactions.find((entry) => entry.step === tx.step);
     if (!recorded) break;
-    await journal.execute(tx.step, tx); // reconcile a broadcast interrupted before its receipt was saved
+    // Reconcile receipts only. A signed-but-unsent transaction must wait for the prefix preflight below.
+    if (!await hre.ethers.provider.getTransactionReceipt(recorded.hash)) break;
+    await journal.execute(tx.step, tx);
     completed.push(tx.step);
   }
-  check(!transactions.slice(completed.length).some((tx) => journal.manifest.transactions.some((entry) => entry.step === tx.step)), "Activation journal is not a contiguous prefix");
+  check(!transactions.slice(completed.length + 1).some((tx) => journal.manifest.transactions.some((entry) => entry.step === tx.step)), "Activation journal is not a contiguous prefix");
   const assertActivationState = async (): Promise<void> => {
     const snapshot = await inspect(hre, c);
     assertLegacyDrained(c, snapshot);
@@ -294,6 +301,36 @@ export async function activate(hre: HardhatRuntimeEnvironment, journal: Transact
     await assertActivationState();
   }
   await verifySuite(hre, journal, true);
+}
+
+export async function assertDrainEvidence(hre: HardhatRuntimeEnvironment, c: ReleaseConfig, value: unknown): Promise<void> {
+  check(typeof value === "object" && value !== null, "Post-pause indexer drain evidence is required before activation");
+  const evidence = value as DrainEvidence;
+  check(Number.isSafeInteger(evidence.pausedAtBlock) && evidence.pausedAtBlock > 0, "Invalid pause observation block");
+  check(typeof evidence.query === "string" && evidence.query.replace(/\s/g, "") === DRAIN_QUERY.replace(/\s/g, ""), "Drain query must enumerate all signaled intents");
+  const data = evidence.response?.data;
+  check(data && Array.isArray(data.Intent) && data.Intent.length < 1000 && Array.isArray(data.chain_metadata) && data.chain_metadata.length === 1, "Drain response is incomplete or paginated");
+  const indexedBlock = data.chain_metadata[0].latest_processed_block;
+  check(Number.isSafeInteger(indexedBlock) && indexedBlock >= evidence.pausedAtBlock, "Indexer drain evidence predates the pause observation");
+  for (const intent of data.Intent) {
+    check(utils.isAddress(intent.orchestratorAddress) && /^0x[\da-f]{64}$/i.test(intent.intentHash) && intent.status === "SIGNALED", "Malformed drain intent row");
+    check(!c.legacyDrainCheckpoints.some((checkpoint) => same(c.existing[checkpoint.contract].address, intent.orchestratorAddress)), "Retired orchestrator still has a signaled intent");
+  }
+  const snapshot = await inspect(hre, c); assertLegacyDrained(c, snapshot);
+  check(indexedBlock <= snapshot.blockNumber, "Indexer drain height is ahead of the selected chain");
+  for (const checkpoint of c.legacyDrainCheckpoints) {
+    const legacy = await existing(hre, c, checkpoint.contract);
+    const at = { blockTag: evidence.pausedAtBlock };
+    check(await legacy.paused(at), `${checkpoint.contract} was not paused at the drain observation block`);
+    check((await legacy.intentCounter(at)).toString() === checkpoint.intentCounter, `${checkpoint.contract} counter differs at the pause observation`);
+    const unpauses = await hre.ethers.provider.getLogs({ address: legacy.address, fromBlock: evidence.pausedAtBlock, toBlock: snapshot.blockNumber, topics: [utils.id("Unpaused(address)")] });
+    check(unpauses.length === 0, `${checkpoint.contract} was unpaused after the drain observation; recheck the indexed drain`);
+  }
+}
+
+export async function recordDrainEvidence(hre: HardhatRuntimeEnvironment, journal: TransactionJournal, evidence: unknown): Promise<void> {
+  await assertDrainEvidence(hre, journal.manifest.configuration, evidence);
+  journal.manifest.activationDrainEvidence = evidence as DrainEvidence; journal.save();
 }
 
 function assertLegacyDrained(c: ReleaseConfig, snapshot: Awaited<ReturnType<typeof inspect>>): void {
@@ -349,8 +386,8 @@ export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: Trans
 }
 
 async function main(): Promise<void> {
-  const [environment, action] = process.argv.slice(2);
-  check(["base_staging", "base"].includes(environment) && ["inspect", "deploy", "activate", "prepare-governance", "verify", "verify-source"].includes(action), "Usage: deploy-orchestrator-v4.ts base_staging|base inspect|deploy|activate|prepare-governance|verify|verify-source");
+  const [environment, action, evidencePath] = process.argv.slice(2);
+  check(["base_staging", "base"].includes(environment) && ["inspect", "deploy", "activate", "prepare-governance", "verify", "verify-source", "record-drain"].includes(action), "Usage: deploy-orchestrator-v4.ts base_staging|base inspect|deploy|activate|prepare-governance|verify|verify-source|record-drain [EVIDENCE_JSON]");
   process.env.HARDHAT_NETWORK = environment;
   const hre = require("hardhat") as HardhatRuntimeEnvironment;
   const configPath = resolve(`deployments/orchestrator-v4/${environment}.json`);
@@ -381,16 +418,19 @@ async function main(): Promise<void> {
       check(action === "deploy", "No deployment manifest exists; run deploy first");
       const baseline = await inspect(hre, c); assertBaseline(c, baseline);
       check(baseline.signer.nonce === baseline.signer.pendingNonce, "Signer has pending transactions");
-      manifest = { version: 1, sourceCommit, configurationHash: hash(c), configuration: c, baseline, transactions: [], contracts: {}, verification: {}, governanceTransactions: [] };
+      manifest = { version: 1, sourceCommit, configurationHash: hash(c), configuration: c, baseline, transactions: [], activationDrainEvidence: null, contracts: {}, verification: {}, governanceTransactions: [] };
     }
     const journal = new TransactionJournal(manifestPath, manifest, wallet);
     if (action === "deploy") await deploySuite(hre, journal);
+    if (action === "record-drain") {
+      check(evidencePath, "record-drain requires the post-pause indexer evidence JSON");
+      await recordDrainEvidence(hre, journal, JSON.parse(readFileSync(evidencePath, "utf8")));
+    }
     if (action === "activate") await activate(hre, journal);
     if (action === "prepare-governance") {
       check(environment === "base", "Governance batch is only for Base production");
       await verifySuite(hre, journal, false);
-      const snapshot = await inspect(hre, c);
-      assertLegacyDrained(c, snapshot);
+      await assertDrainEvidence(hre, c, manifest.activationDrainEvidence);
       manifest.governanceTransactions = await activationTransactions(hre, manifest); journal.save();
       console.log("Unsigned Safe calls recorded; no governance transaction submitted.");
     }
