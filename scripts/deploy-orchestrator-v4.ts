@@ -4,6 +4,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, u
 import { dirname, resolve } from "node:path";
 import { BigNumber, Contract, ContractFactory, Wallet, constants, providers, utils } from "ethers";
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
+import { SourceVerificationError, verifySources } from "./verify-orchestrator-v4-source";
 import { zeroImmutableValues } from "../deployments/canonicalDeployment";
 
 const ZERO = constants.AddressZero;
@@ -149,8 +150,8 @@ export function assertBaseline(c: ReleaseConfig, snapshot: Awaited<ReturnType<ty
 }
 
 /** Write the signed transaction before sending. An interrupted run only rebroadcasts these exact bytes. */
-export class TransactionJournal {
-  constructor(readonly path: string, readonly manifest: Manifest, readonly wallet: Wallet) {}
+export class TransactionJournal<M extends Pick<Manifest, "transactions"> & { configuration: Pick<ReleaseConfig, "chainId"> } = Manifest> {
+  constructor(readonly path: string, readonly manifest: M, readonly wallet: Wallet) {}
   save(): void { atomicJson(this.path, this.manifest); }
   async execute(step: string, request: providers.TransactionRequest): Promise<Transaction> {
     let transaction = this.manifest.transactions.find((tx) => tx.step === step);
@@ -343,13 +344,13 @@ export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: Trans
     check(equal(snapshot.nullifierWriters, [v.address]), "UPV4 must be the only payment nullifier writer");
     check(equal(snapshot.disputeWriters, [...c.retainedDisputeWriters, p.address]), "Policy writer missing or predecessor writer changed");
   }
-  m.verification = { verifiedAtBlock: snapshot.blockNumber, active, bytecode: true, constructors: true, wiring: true, governance: true, paymentCatalog: true, escrowCompatible: true, predecessorPreserved: true };
+  m.verification = { ...m.verification, verifiedAtBlock: snapshot.blockNumber, active, bytecode: true, constructors: true, wiring: true, governance: true, paymentCatalog: true, escrowCompatible: true, predecessorPreserved: true };
   journal.save();
 }
 
 async function main(): Promise<void> {
   const [environment, action] = process.argv.slice(2);
-  check(["base_staging", "base"].includes(environment) && ["inspect", "deploy", "activate", "prepare-governance", "verify"].includes(action), "Usage: deploy-orchestrator-v4.ts base_staging|base inspect|deploy|activate|prepare-governance|verify");
+  check(["base_staging", "base"].includes(environment) && ["inspect", "deploy", "activate", "prepare-governance", "verify", "verify-source"].includes(action), "Usage: deploy-orchestrator-v4.ts base_staging|base inspect|deploy|activate|prepare-governance|verify|verify-source");
   process.env.HARDHAT_NETWORK = environment;
   const hre = require("hardhat") as HardhatRuntimeEnvironment;
   const configPath = resolve(`deployments/orchestrator-v4/${environment}.json`);
@@ -361,8 +362,8 @@ async function main(): Promise<void> {
   const key = process.env[keyName]; check(key, `${keyName} is unavailable; no fallback signer is permitted`);
   const wallet = new Wallet(key.startsWith("0x") ? key : `0x${key}`, hre.ethers.provider);
   check(same(wallet.address, c.signer), "Derived signer differs from the verified configuration");
-  const protectedPaths = ["contracts", "hardhat.config.ts", "scripts/deploy-orchestrator-v4.ts", configPath];
-  for (const path of ["scripts/deploy-orchestrator-v4.ts", `deployments/orchestrator-v4/${environment}.json`])
+  const protectedPaths = ["contracts", "hardhat.config.ts", "scripts/deploy-orchestrator-v4.ts", "scripts/verify-orchestrator-v4-source.ts", "deployments/canonicalDeployment.ts", configPath];
+  for (const path of ["scripts/deploy-orchestrator-v4.ts", "scripts/verify-orchestrator-v4-source.ts", `deployments/orchestrator-v4/${environment}.json`])
     execFileSync("git", ["cat-file", "-e", `HEAD:${path}`], { stdio: "pipe" });
   execFileSync("git", ["diff", "--exit-code", "HEAD", "--", ...protectedPaths], { stdio: "pipe" });
   const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
@@ -394,12 +395,17 @@ async function main(): Promise<void> {
       console.log("Unsigned Safe calls recorded; no governance transaction submitted.");
     }
     if (action === "verify") await verifySuite(hre, journal, true);
+    if (action === "verify-source") {
+      const apiKey = process.env.ETHERSCAN_API_KEY; check(apiKey, "ETHERSCAN_API_KEY is unavailable");
+      await verifySuite(hre, journal, manifest.verification.active === true);
+      manifest.verification.sources = await verifySources(hre, manifest, apiKey); journal.save();
+    }
     console.log(JSON.stringify({ manifest: manifestPath, sourceCommit: manifest.sourceCommit, contracts: manifest.contracts, verification: manifest.verification }, null, 2));
   } finally { closeSync(lock); unlinkSync(lockPath); }
 }
 
 if (require.main === module) main().catch((error: unknown) => {
   // RPC errors may contain authenticated URLs or environment details; only our credential-free boundary errors are printed.
-  console.error(error instanceof ReleaseError ? error.message : "Release failed. Inspect the recorded transaction hashes and rerun inspect; no alternate signer will be used.");
+  console.error(error instanceof ReleaseError || error instanceof SourceVerificationError ? error.message : "Release failed. Inspect the recorded transaction hashes and rerun inspect; no alternate signer will be used.");
   process.exitCode = 1;
 });
