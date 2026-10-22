@@ -95,6 +95,13 @@
       "runtimeCodeHash": "0xacece62784689956be7b22118b5a59c04d420ed5da3c2671e9c211e616785d75",
       "deploymentTransaction": "0x18aeb7b6110ffe9f4547aa72aa4e743b6f67c41f4034bcf9c0182ff6c738798b",
       "deploymentBlock": 52665856
+    },
+    "PredecessorWhitelistPolicy": {
+      "address": "0xF79aAD1BAaB617fF3Eb299225c80893F22F743Fe",
+      "artifact": "WhitelistPolicy",
+      "runtimeCodeHash": "0x1ece96bb7be9cdd2433a2aad66c9b2d710e3e210a65876e0f8c1e43662ee5653",
+      "deploymentTransaction": "0x64cd54cdb5cd077f9a6a06c490fcd44b018476e8c9e31f33c5ed42cccfcc04d5",
+      "deploymentBlock": 50527636
     }
   },
   "stakeToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
@@ -269,5 +276,118 @@
       "intentCounter": "38",
       "indexedBlock": 52937634
     }
-  ]
+  ],
+  "legacyWhitelistCheckpoint": {
+    "indexedBlock": 52938360,
+    "enabled": [
+      {
+        "depositId": "0",
+        "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+      },
+      {
+        "depositId": "1",
+        "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+      },
+      {
+        "depositId": "4",
+        "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+      },
+      {
+        "depositId": "13",
+        "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+      },
+      {
+        "depositId": "13",
+        "paymentMethod": "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f"
+      },
+      {
+        "depositId": "24",
+        "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+      },
+      {
+        "depositId": "25",
+        "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+      },
+      {
+        "depositId": "48",
+        "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+      },
+      {
+        "depositId": "48",
+        "paymentMethod": "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f"
+      },
+      {
+        "depositId": "60",
+        "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+      },
+      {
+        "depositId": "65",
+        "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+      },
+      {
+        "depositId": "66",
+        "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+      },
+      {
+        "depositId": "84",
+        "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+      },
+      {
+        "depositId": "6",
+        "paymentMethod": "0x10940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d"
+      },
+      {
+        "depositId": "18",
+        "paymentMethod": "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f"
+      },
+      {
+        "depositId": "19",
+        "paymentMethod": "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f"
+      },
+      {
+        "depositId": "29",
+        "paymentMethod": "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f"
+      },
+      {
+        "depositId": "97",
+        "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+      },
+      {
+        "depositId": "98",
+        "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+      },
+      {
+        "depositId": "129",
+        "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+      },
+      {
+        "depositId": "130",
+        "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+      },
+      {
+        "depositId": "131",
+        "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+      },
+      {
+        "depositId": "132",
+        "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+      },
+      {
+        "depositId": "133",
+        "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+      },
+      {
+        "depositId": "134",
+        "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+      },
+      {
+        "depositId": "138",
+        "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+      },
+      {
+        "depositId": "139",
+        "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+      }
+    ]
+  }
 }

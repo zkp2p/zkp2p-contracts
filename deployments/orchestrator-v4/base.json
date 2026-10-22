@@ -243,5 +243,6 @@
   ],
   "attestationThreshold": "1",
   "baselineBlock": 52936874,
-  "legacyDrainCheckpoints": null
+  "legacyDrainCheckpoints": null,
+  "legacyWhitelistCheckpoint": null
 }

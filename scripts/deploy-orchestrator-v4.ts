@@ -26,6 +26,7 @@ export type ReleaseConfig = {
   allowMultipleIntents: boolean; predecessorHook: string; paymentMethods: Array<{ method: string; currencies: string[] }>;
   retainedDisputeWriters: string[]; attestationWitnesses: string[]; attestationThreshold: string; baselineBlock: number;
   legacyDrainCheckpoints: Array<{ contract: string; intentCounter: string; indexedBlock: number }>;
+  legacyWhitelistCheckpoint: { indexedBlock: number; enabled: Array<{ depositId: string; paymentMethod: string }> };
 };
 type Receipt = { blockNumber: number; blockHash: string; transactionHash: string; gasUsed: string; effectiveGasPrice: string };
 type Transaction = { step: string; hash: string; nonce: number; to: string | null; data: string; value: string; receipt: Receipt | null };
@@ -63,7 +64,7 @@ export function validateConfig(value: unknown): asserts value is ReleaseConfig {
   check(typeof c.protocolFee === "string" && /^\d+$/.test(c.protocolFee) && BigNumber.from(c.protocolFee).lte("50000000000000000"), "Invalid protocol fee");
   check(typeof c.allowMultipleIntents === "boolean", "Missing allowMultipleIntents setting");
   check(c.existing && typeof c.existing === "object", "Missing reused contract pins");
-  for (const name of ["EscrowV2", "EscrowRegistry", "OrchestratorRegistry", "PaymentVerifierRegistry", "RelayerRegistry", "NullifierRegistryV2", "DisputeNullifierRegistry", "DisputeVerifier", "MultiAttestationVerifier", "OrchestratorV3", "UnifiedPaymentVerifierV3", "Orchestrator"]) {
+  for (const name of ["EscrowV2", "EscrowRegistry", "OrchestratorRegistry", "PaymentVerifierRegistry", "RelayerRegistry", "NullifierRegistryV2", "DisputeNullifierRegistry", "DisputeVerifier", "MultiAttestationVerifier", "OrchestratorV3", "UnifiedPaymentVerifierV3", "Orchestrator", "PredecessorWhitelistPolicy"]) {
     const pin = c.existing[name];
     check(pin && utils.isAddress(pin.address) && !same(pin.address, ZERO) && /^0x[\da-f]{64}$/i.test(pin.runtimeCodeHash), `Invalid ${name} pin`);
     check(typeof pin.artifact === "string" && /^0x[\da-f]{64}$/i.test(pin.deploymentTransaction) && Number.isSafeInteger(pin.deploymentBlock), `Missing ${name} provenance`);
@@ -77,6 +78,10 @@ export function validateConfig(value: unknown): asserts value is ReleaseConfig {
   check(Array.isArray(c.legacyDrainCheckpoints) && c.legacyDrainCheckpoints.length > 0, "Missing reviewed legacy drain checkpoints");
   for (const checkpoint of c.legacyDrainCheckpoints) check(c.existing[checkpoint.contract] && /^\d+$/.test(checkpoint.intentCounter) && Number.isSafeInteger(checkpoint.indexedBlock), "Invalid legacy drain checkpoint");
   check(c.legacyDrainCheckpoints.some((checkpoint) => checkpoint.contract === "Orchestrator"), "V1 drain checkpoint is required");
+  const privacy = c.legacyWhitelistCheckpoint;
+  check(privacy && Number.isSafeInteger(privacy.indexedBlock) && privacy.indexedBlock > 0 && Array.isArray(privacy.enabled), "Missing reviewed private-deposit checkpoint");
+  for (const row of privacy.enabled) check(typeof row.depositId === "string" && /^\d+$/.test(row.depositId) && bytes32(row.paymentMethod), "Invalid private-deposit checkpoint row");
+  check(new Set(privacy.enabled.map((row) => `${row.depositId}:${row.paymentMethod.toLowerCase()}`)).size === privacy.enabled.length, "Duplicate private-deposit checkpoint row");
 }
 
 async function existing(hre: HardhatRuntimeEnvironment, c: ReleaseConfig, name: string): Promise<Contract> {
@@ -115,7 +120,7 @@ export async function inspect(hre: HardhatRuntimeEnvironment, c: ReleaseConfig) 
     nullifierWriters: await (await existing(hre, c, "NullifierRegistryV2")).getWriters(at) as string[],
     disputeWriters: await (await existing(hre, c, "DisputeNullifierRegistry")).getWriters(at) as string[],
     escrow: { chainId: (await escrow.chainId(at)).toString(), orchestratorRegistry: await escrow.orchestratorRegistry(at), paymentVerifierRegistry: await escrow.paymentVerifierRegistry(at), registered: await escrowRegistry.isWhitelistedEscrow(escrow.address, at), intentExpirationPeriod: (await escrow.intentExpirationPeriod(at)).toString() },
-    predecessor: { registered: await (await existing(hre, c, "OrchestratorRegistry")).isOrchestrator(o3.address, at), lifecycleHook: await o3.lifecycleHook(at), escrowRegistry: await o3.escrowRegistry(at), paymentVerifierRegistry: await o3.paymentVerifierRegistry(at), relayerRegistry: await o3.relayerRegistry(at), protocolFee: (await o3.protocolFee(at)).toString(), protocolFeeRecipient: await o3.protocolFeeRecipient(at), allowMultipleIntents: await o3.allowMultipleIntents(at), paused: await o3.paused(at) },
+    predecessor: { registered: await (await existing(hre, c, "OrchestratorRegistry")).isOrchestrator(o3.address, at), lifecycleHook: await o3.lifecycleHook(at), whitelistPolicy: await new Contract(c.predecessorHook, ["function whitelistPolicy() view returns(address)"], provider).whitelistPolicy(at), escrowRegistry: await o3.escrowRegistry(at), paymentVerifierRegistry: await o3.paymentVerifierRegistry(at), relayerRegistry: await o3.relayerRegistry(at), protocolFee: (await o3.protocolFee(at)).toString(), protocolFeeRecipient: await o3.protocolFeeRecipient(at), allowMultipleIntents: await o3.allowMultipleIntents(at), paused: await o3.paused(at) },
     attestation: { witnesses: await attestor.witnesses(at), threshold: (await attestor.requiredSignatures(at)).toString() },
     disputeVerifier: { nullifierRegistry: await disputeVerifier.nullifierRegistry(at), attestationVerifier: await disputeVerifier.attestationVerifier(at) },
     paymentVerifier: { orchestratorRegistry: await verifier.orchestratorRegistry(at), nullifierRegistry: await verifier.nullifierRegistry(at), attestationVerifier: await verifier.attestationVerifier(at) },
@@ -129,6 +134,7 @@ export function assertBaseline(c: ReleaseConfig, snapshot: Awaited<ReturnType<ty
   const a = (name: string): string => c.existing[name].address;
   check(snapshot.escrow.chainId === String(c.chainId) && snapshot.escrow.registered && same(snapshot.escrow.orchestratorRegistry, a("OrchestratorRegistry")) && same(snapshot.escrow.paymentVerifierRegistry, a("PaymentVerifierRegistry")), "Existing escrow is incompatible with reused registries");
   check(snapshot.predecessor.registered && !snapshot.predecessor.paused && same(snapshot.predecessor.lifecycleHook, c.predecessorHook), "O3 registration, pause or lifecycle hook changed");
+  check(same(snapshot.predecessor.whitelistPolicy, a("PredecessorWhitelistPolicy")), "Predecessor whitelist policy changed");
   check(same(snapshot.predecessor.escrowRegistry, a("EscrowRegistry")) && same(snapshot.predecessor.paymentVerifierRegistry, a("PaymentVerifierRegistry")) && same(snapshot.predecessor.relayerRegistry, a("RelayerRegistry")), "O3 reused registry wiring changed");
   for (const verifier of [snapshot.paymentVerifier, snapshot.disputeVerifier]) check(same(verifier.nullifierRegistry, a("NullifierRegistryV2")) && same(verifier.attestationVerifier, a("MultiAttestationVerifier")), "Reused verifier dependency wiring changed");
   check(same(snapshot.paymentVerifier.orchestratorRegistry, a("OrchestratorRegistry")), "Predecessor UPV orchestrator registry changed");
@@ -272,6 +278,7 @@ export async function activate(hre: HardhatRuntimeEnvironment, journal: Transact
   const c = journal.manifest.configuration;
   check(c.environment === "base_staging" && same(journal.wallet.address, c.governance), "Direct activation is staging-only; production uses its Safe batch");
   await assertDrainEvidence(hre, c, journal.manifest.activationDrainEvidence);
+  await assertPrivateDepositsPreserved(hre, journal);
   const transactions = await activationTransactions(hre, journal.manifest);
   const started = transactions.some((tx) => journal.manifest.transactions.some((entry) => entry.step === tx.step));
   if (!started) await verifySuite(hre, journal, false);
@@ -296,11 +303,48 @@ export async function activate(hre: HardhatRuntimeEnvironment, journal: Transact
   await assertActivationState();
   // No writes to the old orchestrator, escrow, deposits, relayer registry or old dispute policies.
   for (const tx of transactions.slice(completed.length)) {
+    if (tx.step === "register-orchestrator") await assertPrivateDepositsPreserved(hre, journal);
     await journal.execute(tx.step, tx);
     completed.push(tx.step);
     await assertActivationState();
   }
   await verifySuite(hre, journal, true);
+}
+
+/** Preserve existing private liquidity even when it is currently empty or not accepting intents. */
+export async function assertPrivateDepositsPreserved(hre: HardhatRuntimeEnvironment, journal: TransactionJournal): Promise<void> {
+  const m = journal.manifest, c = m.configuration, checkpoint = c.legacyWhitelistCheckpoint;
+  const policy = await existing(hre, c, "PredecessorWhitelistPolicy"), escrow = await existing(hre, c, "EscrowV2");
+  const fresh = m.contracts.WhitelistPolicyV2; check(fresh, "Fresh whitelist policy is missing");
+  const whitelist = new Contract(fresh.address, (await hre.artifacts.readArtifact("WhitelistPolicyV2")).abi, hre.ethers.provider);
+  const block = await hre.ethers.provider.getBlockNumber(), at = { blockTag: block };
+  check(checkpoint.indexedBlock <= block, "Private-deposit checkpoint is ahead of the selected chain");
+  const candidates = new Map<string, { depositId: string; paymentMethod: string }>();
+  for (const row of checkpoint.enabled) {
+    check(await policy.enabled(escrow.address, row.depositId, row.paymentMethod, { blockTag: checkpoint.indexedBlock }), "Private-deposit checkpoint differs from on-chain policy");
+    candidates.set(`${row.depositId}:${row.paymentMethod}`, row);
+  }
+  // A depositor may enable another private method while the release waits. Include every later event.
+  for (let fromBlock = checkpoint.indexedBlock + 1; fromBlock <= block; fromBlock += 1000) {
+    const events = await policy.queryFilter(policy.filters.EnabledUpdated(escrow.address), fromBlock, Math.min(fromBlock + 999, block));
+    for (const event of events) {
+      const args = policy.interface.parseLog(event).args;
+      const row = { depositId: args.depositId.toString(), paymentMethod: args.paymentMethod as string };
+      candidates.set(`${row.depositId}:${row.paymentMethod}`, row);
+    }
+  }
+  const privateIds = new Set<string>();
+  for (const row of candidates.values()) if (await policy.enabled(escrow.address, row.depositId, row.paymentMethod, at)) privateIds.add(row.depositId);
+  const required: string[] = [], deleted: string[] = [], missing: string[] = [];
+  for (const id of privateIds) {
+    // Escrow IDs are monotonic. Deleted deposits cannot be re-created or funded again.
+    if (same((await escrow.getDeposit(id, at)).depositor, ZERO)) { deleted.push(id); continue; }
+    required.push(id);
+    if (!await whitelist.enabled(escrow.address, id, at)) missing.push(id);
+  }
+  check(missing.length === 0, `Existing private deposits require their depositors to enable WhitelistPolicyV2: ${missing.join(", ")}`);
+  m.verification.privateDeposits = { checkedAtBlock: block, predecessorPolicy: policy.address, requiredDepositIds: required, deletedDepositIds: deleted };
+  journal.save();
 }
 
 export async function assertDrainEvidence(hre: HardhatRuntimeEnvironment, c: ReleaseConfig, value: unknown): Promise<void> {
@@ -431,6 +475,7 @@ async function main(): Promise<void> {
       check(environment === "base", "Governance batch is only for Base production");
       await verifySuite(hre, journal, false);
       await assertDrainEvidence(hre, c, manifest.activationDrainEvidence);
+      await assertPrivateDepositsPreserved(hre, journal);
       manifest.governanceTransactions = await activationTransactions(hre, manifest); journal.save();
       console.log("Unsigned Safe calls recorded; no governance transaction submitted.");
     }
