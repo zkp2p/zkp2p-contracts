@@ -14,7 +14,7 @@ const other = Wallet.fromMnemonic("test test test test test test test test test 
 
 async function drainEvidence() {
   const block = await hre.ethers.provider.getBlockNumber();
-  return { pausedAtBlock: block, query: DRAIN_QUERY, response: { data: { Intent: [], chain_metadata: [{ latest_processed_block: block }] } } };
+  return { pausedAtBlock: block, query: DRAIN_QUERY, response: { data: { Intent: [], chain_metadata: [{ latest_processed_block: block }] } }, legacySignals: { Orchestrator: [], OrchestratorV4Historical20261016: [] } };
 }
 
 async function createPrivateDeposit(f, retainOnEmpty = true) {
