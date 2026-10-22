@@ -55,6 +55,14 @@ export const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
   IntentLifecycleHookV1:
     "contracts/hooks/IntentLifecycleHookV1.sol/IntentLifecycleHookV1.json",
   StakeVault: "contracts/StakeVault.sol/StakeVault.json",
+  StakeVaultV2: "contracts/StakeVaultV2.sol/StakeVaultV2.json",
+  WhitelistPolicyV2: "contracts/hooks/WhitelistPolicyV2.sol/WhitelistPolicyV2.json",
+  DisputeProtectionPolicyV2:
+    "contracts/hooks/DisputeProtectionPolicyV2.sol/DisputeProtectionPolicyV2.json",
+  UnifiedPaymentVerifierV4:
+    "contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol/UnifiedPaymentVerifierV4.json",
+  OrchestratorV4: "contracts/OrchestratorV4.sol/OrchestratorV4.json",
+  ProtocolViewerV4: "contracts/ProtocolViewerV4.sol/ProtocolViewerV4.json",
 };
 
 function ensureDir(dir: string) {
