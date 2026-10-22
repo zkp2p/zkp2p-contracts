@@ -365,12 +365,14 @@ export async function assertPrivateDepositsPreserved(hre: HardhatRuntimeEnvironm
   journal.save();
 }
 
-export async function assertReleasedLegacyLock(escrow: Contract, signal: utils.Result, unlock: unknown, pausedAtBlock: number, currentBlock: number): Promise<void> {
+export async function assertReleasedLegacyLock(escrow: Contract, signal: utils.Result, unlock: unknown, signalBlock: number, signalLogIndex: number, pausedAtBlock: number, currentBlock: number): Promise<void> {
   check(typeof unlock === "object" && unlock !== null, "Nonempty V1 record requires an authenticated escrow unlock");
   const ref = unlock as { transactionHash: string; logIndex: number };
   check(/^0x[\da-f]{64}$/i.test(ref.transactionHash) && Number.isSafeInteger(ref.logIndex) && ref.logIndex >= 0, "Malformed legacy unlock reference");
   const receipt = await escrow.provider.getTransactionReceipt(ref.transactionHash);
   check(receipt && receipt.status === 1 && receipt.blockHash !== constants.HashZero && receipt.blockNumber <= pausedAtBlock, "Legacy unlock receipt is absent, unsealed, reverted or after pause");
+  check((await escrow.provider.getBlock(receipt.blockNumber)).hash === receipt.blockHash, "Legacy unlock receipt is not canonical");
+  check(receipt.blockNumber > signalBlock || (receipt.blockNumber === signalBlock && ref.logIndex > signalLogIndex), "Legacy unlock does not follow its signal");
   const log = receipt.logs.find((entry) => entry.logIndex === ref.logIndex);
   check(log && same(log.address, escrow.address) && log.topics[0] === escrow.interface.getEventTopic("FundsUnlocked"), "Legacy unlock reference does not identify the expected escrow event");
   const released = escrow.interface.parseLog(log).args;
@@ -389,6 +391,7 @@ export async function assertLegacyIntentInventory(legacy: Contract, signals: unk
       check(signal && /^0x[\da-f]{64}$/i.test(signal.transactionHash) && Number.isSafeInteger(signal.logIndex) && signal.logIndex >= 0, "Malformed legacy signal reference");
       const receipt = await legacy.provider.getTransactionReceipt(signal.transactionHash);
       check(receipt && receipt.status === 1 && receipt.blockHash !== constants.HashZero && receipt.blockNumber <= pausedAtBlock, "Legacy signal receipt is absent, unsealed, reverted or after pause");
+      check((await legacy.provider.getBlock(receipt.blockNumber)).hash === receipt.blockHash, "Legacy signal receipt is not canonical");
       const log = receipt.logs.find((entry) => entry.logIndex === signal.logIndex);
       check(log && same(log.address, legacy.address) && log.topics[0] === legacy.interface.getEventTopic("IntentSignaled"), "Legacy signal reference does not identify the expected event");
       const creation = legacy.interface.parseLog(log).args, intentHash: string = creation.intentHash;
@@ -397,10 +400,10 @@ export async function assertLegacyIntentInventory(legacy: Contract, signals: unk
         // This historical escrow called only its then-current orchestrator when pruning.
         // Authentic unlocked V1 records can remain as orphans after the escrow lock is deleted.
         check(same(legacy.address, "0xF9b9CD27Deea496B960b3cb5221b514705fCaF5e") && same(creation.escrow, "0x5C2a8D9246777eE4501B6C426a8B8C7635C7b5b5"), "Legacy intent remains open on chain");
-        for (const intent of [atPause, current]) check(same(intent.owner, creation.owner) && same(intent.escrow, creation.escrow) && intent.depositId.eq(creation.depositId) && intent.amount.eq(creation.amount), "Nonempty legacy intent differs from its authentic signal");
+        for (const intent of [atPause, current]) if (!same(intent.owner, ZERO)) check(same(intent.owner, creation.owner) && same(intent.escrow, creation.escrow) && intent.depositId.eq(creation.depositId) && intent.amount.eq(creation.amount), "Nonempty legacy intent differs from its authentic signal");
         const record = JSON.parse(readFileSync(resolve("deployments/base_staging/Escrow.json"), "utf8"));
         for (const block of [pausedAtBlock, currentBlock]) check(utils.keccak256(await legacy.provider.getCode(creation.escrow, block)) === "0x2dcb883e6acaf1c3f7499edbdb5126f7cdba47733d1c4adb0caf4e9fd738ce77", "Historical escrow runtime differs from the reviewed deployment");
-        await assertReleasedLegacyLock(new Contract(creation.escrow, record.abi, legacy.provider), creation, signal.unlock, pausedAtBlock, currentBlock);
+        await assertReleasedLegacyLock(new Contract(creation.escrow, record.abi, legacy.provider), creation, signal.unlock, receipt.blockNumber, signal.logIndex, pausedAtBlock, currentBlock);
       }
       return intentHash.toLowerCase();
     }));
@@ -488,7 +491,7 @@ export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: Trans
   const registered = await (await existing(hre, c, "OrchestratorRegistry")).isOrchestrator(o.address);
   check(registered === active, "O4 registration does not match release phase");
   if (active) {
-    assertLegacyDrained(c, snapshot);
+    await assertDrainEvidence(hre, c, m.activationDrainEvidence);
     await assertPrivateDepositsPreserved(hre, journal);
     check(snapshot.paymentMethods.every((method) => same(method.verifier, v.address)), "Not all payment routes select UPV4");
     check(equal(snapshot.nullifierWriters, [v.address]), "UPV4 must be the only payment nullifier writer");
