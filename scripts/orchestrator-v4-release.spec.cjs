@@ -6,11 +6,16 @@ const { join } = require("node:path");
 const { test } = require("node:test");
 const hre = require("hardhat");
 const { ContractFactory, Wallet, utils, constants } = require("ethers");
-const { inspect, assertBaseline, validateConfig, TransactionJournal, deploySuite, activate, verifySuite, activationTransactions } = require("./deploy-orchestrator-v4.ts");
+const { inspect, assertBaseline, validateConfig, TransactionJournal, deploySuite, activate, verifySuite, activationTransactions, DRAIN_QUERY, recordDrainEvidence } = require("./deploy-orchestrator-v4.ts");
 
 // Public Hardhat fixture account. Never load a service or production signer in these tests.
 const wallet = Wallet.fromMnemonic("test test test test test test test test test test test junk").connect(hre.ethers.provider);
 const other = Wallet.fromMnemonic("test test test test test test test test test test test junk", "m/44'/60'/0'/0/1").address;
+
+async function drainEvidence() {
+  const block = await hre.ethers.provider.getBlockNumber();
+  return { pausedAtBlock: block, query: DRAIN_QUERY, response: { data: { Intent: [], chain_metadata: [{ latest_processed_block: block }] } } };
+}
 
 async function fixture() {
   await hre.network.provider.send("hardhat_reset");
@@ -54,8 +59,10 @@ async function fixture() {
   const directory = mkdtempSync(join(tmpdir(), "o4-release-test-"));
   hre.config.paths.deployments = join(directory, "deployments");
   const path = join(directory, "manifest.json");
-  const manifest = { version: 1, sourceCommit: "0".repeat(40), configurationHash: "fixture", configuration: config, baseline: await inspect(hre, config), transactions: [], contracts: {}, verification: {}, governanceTransactions: [] };
-  return { config, deployed, directory, path, manifest, journal: new TransactionJournal(path, manifest, wallet) };
+  const manifest = { version: 1, sourceCommit: "0".repeat(40), configurationHash: "fixture", configuration: config, baseline: await inspect(hre, config), transactions: [], activationDrainEvidence: null, contracts: {}, verification: {}, governanceTransactions: [] };
+  const journal = new TransactionJournal(path, manifest, wallet);
+  await recordDrainEvidence(hre, journal, await drainEvidence());
+  return { config, deployed, directory, path, manifest, journal };
 }
 
 test("ownership preflight rejects before the first deployment; RPC and signer pins also fail closed", async () => {
@@ -94,6 +101,8 @@ test("seven-contract deployment resumes without duplicate addresses or transacti
     await assert.rejects(activate(hre, restored), /OrchestratorV4Historical20261016 must be paused/);
     assert.equal(await wallet.getTransactionCount(), beforeOldO4Rejection);
     await (await f.deployed.OrchestratorV4Historical20261016.pauseOrchestrator()).wait();
+    await assert.rejects(activate(hre, restored), /was unpaused after the drain observation/);
+    await recordDrainEvidence(hre, restored, await drainEvidence());
     await activate(hre, restored);
     assert.deepEqual(await f.deployed.PaymentVerifierRegistry.getPaymentMethods(), f.config.paymentMethods.map((x) => x.method));
     assert.deepEqual(await f.deployed.NullifierRegistryV2.getWriters(), [restored.manifest.contracts.UnifiedPaymentVerifierV4.address]);
@@ -183,5 +192,57 @@ test("production configuration prepares ownership and unsigned Safe calls; direc
     await assert.rejects(activate(hre, f.journal), /staging-only/);
     assert.equal(await f.deployed.OrchestratorRegistry.isOrchestrator(o4.address), false);
     assert.notEqual(f.manifest.contracts.WhitelistPolicyV2.address, constants.AddressZero);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
+
+test("pending activation refuses external registry drift before rebroadcasting its signed bytes", async () => {
+  const f = await fixture();
+  try {
+    await deploySuite(hre, f.journal);
+    const failedProvider = new Proxy(hre.ethers.provider, {
+      get(target, property) {
+        if (property === "sendTransaction") return async () => { throw new Error("injected transport failure"); };
+        const value = Reflect.get(target, property); return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const nonce = await wallet.getTransactionCount();
+    await assert.rejects(activate(hre, new TransactionJournal(f.path, f.manifest, wallet.connect(failedProvider))), /injected transport failure/);
+    const pendingHash = JSON.parse(readFileSync(`${f.path}.pending`)).hash;
+    // Simulate another authority's ownership change without consuming the deployment signer's pending nonce.
+    await hre.network.provider.send("hardhat_setStorageAt", [f.deployed.OrchestratorRegistry.address, "0x0", utils.hexZeroPad(other, 32)]);
+    assert.equal(await f.deployed.OrchestratorRegistry.owner(), other);
+    let sends = 0;
+    const observedProvider = new Proxy(hre.ethers.provider, {
+      get(target, property) {
+        if (property === "sendTransaction") return async (...args) => { sends++; return target.sendTransaction(...args); };
+        const value = Reflect.get(target, property); return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    await assert.rejects(activate(hre, new TransactionJournal(f.path, JSON.parse(readFileSync(f.path)), wallet.connect(observedProvider))), /Activation ownership missing: OrchestratorRegistry/);
+    assert.equal(sends, 0); assert.equal(await wallet.getTransactionCount(), nonce);
+    assert.equal(JSON.parse(readFileSync(`${f.path}.pending`)).hash, pendingHash);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
+test("activation requires complete indexed evidence caught up after the predecessors were paused", async () => {
+  const f = await fixture();
+  try {
+    await deploySuite(hre, f.journal);
+    const nonce = await wallet.getTransactionCount();
+    f.manifest.activationDrainEvidence = null;
+    await assert.rejects(activate(hre, f.journal), /Post-pause indexer drain evidence is required/);
+    const stale = await drainEvidence();
+    stale.response.data.chain_metadata[0].latest_processed_block = stale.pausedAtBlock - 1;
+    await assert.rejects(recordDrainEvidence(hre, f.journal, stale), /predates the pause observation/);
+    const beforePause = await drainEvidence();
+    beforePause.pausedAtBlock = f.config.existing.Orchestrator.deploymentBlock;
+    await assert.rejects(recordDrainEvidence(hre, f.journal, beforePause), /was not paused at the drain observation/);
+    const openIntent = await drainEvidence();
+    openIntent.response.data.Intent.push({ intentHash: utils.id("unsettled legacy intent"), orchestratorAddress: f.deployed.Orchestrator.address, status: "SIGNALED" });
+    await assert.rejects(recordDrainEvidence(hre, f.journal, openIntent), /Retired orchestrator still has a signaled intent/);
+    assert.equal(await wallet.getTransactionCount(), nonce);
+    await recordDrainEvidence(hre, f.journal, await drainEvidence());
+    assert.equal(f.manifest.activationDrainEvidence.query, DRAIN_QUERY);
   } finally { rmSync(f.directory, { recursive: true, force: true }); }
 });
