@@ -1,0 +1,290 @@
+{
+  "configuration": {
+    "chainId": 8453,
+    "startingNonce": 17367,
+    "owner": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+    "escrow": "0x77e8f808FE201075e0bD651CD46fdF239fc83265",
+    "policy": "0xe034B9C59063DBad5F632c38515e75C24F625503",
+    "policyRuntimeCodeHash": "0x3d48ada5dabe50b93df9eed782caa9b444c993afbc5a9fd1700fcf668e472ced",
+    "depositIds": [
+      "0",
+      "1",
+      "4",
+      "6",
+      "24",
+      "25",
+      "84"
+    ],
+    "enabled": true,
+    "sourceCommit": "cd849c5383a274a4c970d7bb6231e032285fd9a2"
+  },
+  "transactions": [
+    {
+      "step": "enable:0",
+      "hash": "0x50336681723b704b8cfa63c3cd79cd83871675e1aacabcd4e9478168edf72052",
+      "nonce": 17367,
+      "to": "0xe034B9C59063DBad5F632c38515e75C24F625503",
+      "data": "0xfe41511000000000000000000000000077e8f808fe201075e0bd651cd46fdf239fc8326500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001",
+      "value": "0",
+      "receipt": {
+        "blockNumber": 52940537,
+        "blockHash": "0xa7afb77eb68a042802a0074cc77607e27b67c07de86a19ba5d64306e0c142570",
+        "transactionHash": "0x50336681723b704b8cfa63c3cd79cd83871675e1aacabcd4e9478168edf72052",
+        "gasUsed": "71239",
+        "effectiveGasPrice": "6000000"
+      }
+    },
+    {
+      "step": "enable:1",
+      "hash": "0xfd56266585454662bb020419a392058506b3eaf00f896a3844977c2823cbc14d",
+      "nonce": 17368,
+      "to": "0xe034B9C59063DBad5F632c38515e75C24F625503",
+      "data": "0xfe41511000000000000000000000000077e8f808fe201075e0bd651cd46fdf239fc8326500000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001",
+      "value": "0",
+      "receipt": {
+        "blockNumber": 52940539,
+        "blockHash": "0xdf2884948cfd06377b4ac66dbd07556c99766bf193dac3065e519808ec506669",
+        "transactionHash": "0xfd56266585454662bb020419a392058506b3eaf00f896a3844977c2823cbc14d",
+        "gasUsed": "71251",
+        "effectiveGasPrice": "6000000"
+      }
+    },
+    {
+      "step": "enable:4",
+      "hash": "0x3e75bd5b0fa9b83f15eff1afaf131db676b085998e10b96570a0788754d4ca28",
+      "nonce": 17369,
+      "to": "0xe034B9C59063DBad5F632c38515e75C24F625503",
+      "data": "0xfe41511000000000000000000000000077e8f808fe201075e0bd651cd46fdf239fc8326500000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000001",
+      "value": "0",
+      "receipt": {
+        "blockNumber": 52940541,
+        "blockHash": "0x0752799ac1b7f61e5a502afd0d5f0262726755be70f5913f35775fff0abf507b",
+        "transactionHash": "0x3e75bd5b0fa9b83f15eff1afaf131db676b085998e10b96570a0788754d4ca28",
+        "gasUsed": "71251",
+        "effectiveGasPrice": "6000000"
+      }
+    },
+    {
+      "step": "enable:6",
+      "hash": "0x404a5379b743554501531f149f3cb3d776cf5d9623717305ea0729a286b440ed",
+      "nonce": 17370,
+      "to": "0xe034B9C59063DBad5F632c38515e75C24F625503",
+      "data": "0xfe41511000000000000000000000000077e8f808fe201075e0bd651cd46fdf239fc8326500000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000001",
+      "value": "0",
+      "receipt": {
+        "blockNumber": 52940544,
+        "blockHash": "0x9a8286ea68921824106c98f8daf1c37a7be9fb66928ba49a4bb70acc8cf4dad5",
+        "transactionHash": "0x404a5379b743554501531f149f3cb3d776cf5d9623717305ea0729a286b440ed",
+        "gasUsed": "71251",
+        "effectiveGasPrice": "6000000"
+      }
+    },
+    {
+      "step": "enable:24",
+      "hash": "0x6a260535cbea181fe07983a452660396c2c1f8f23ee963bc7df0fd66047d9bdb",
+      "nonce": 17371,
+      "to": "0xe034B9C59063DBad5F632c38515e75C24F625503",
+      "data": "0xfe41511000000000000000000000000077e8f808fe201075e0bd651cd46fdf239fc8326500000000000000000000000000000000000000000000000000000000000000180000000000000000000000000000000000000000000000000000000000000001",
+      "value": "0",
+      "receipt": {
+        "blockNumber": 52940546,
+        "blockHash": "0xbfe5f02b2250a376653ca1d8369f7f7a164dce7ce1d8f2ceb5b7fa85cc691f43",
+        "transactionHash": "0x6a260535cbea181fe07983a452660396c2c1f8f23ee963bc7df0fd66047d9bdb",
+        "gasUsed": "71251",
+        "effectiveGasPrice": "6000000"
+      }
+    },
+    {
+      "step": "enable:25",
+      "hash": "0x6cbf6c0ee9fa2d666e9f5b1f3fbc3f6c4c2b05217c6287086c78db7233a68a3b",
+      "nonce": 17372,
+      "to": "0xe034B9C59063DBad5F632c38515e75C24F625503",
+      "data": "0xfe41511000000000000000000000000077e8f808fe201075e0bd651cd46fdf239fc8326500000000000000000000000000000000000000000000000000000000000000190000000000000000000000000000000000000000000000000000000000000001",
+      "value": "0",
+      "receipt": {
+        "blockNumber": 52940548,
+        "blockHash": "0x1ae1b8a49ca3cda4ce18001fb156ed6b58d82459673967af9045e00ac9d4e295",
+        "transactionHash": "0x6cbf6c0ee9fa2d666e9f5b1f3fbc3f6c4c2b05217c6287086c78db7233a68a3b",
+        "gasUsed": "71251",
+        "effectiveGasPrice": "6000000"
+      }
+    },
+    {
+      "step": "enable:84",
+      "hash": "0xa073831614caebb3056842c0dc4a920bd7dd98b1fc6d19c1724490a5744a2b73",
+      "nonce": 17373,
+      "to": "0xe034B9C59063DBad5F632c38515e75C24F625503",
+      "data": "0xfe41511000000000000000000000000077e8f808fe201075e0bd651cd46fdf239fc8326500000000000000000000000000000000000000000000000000000000000000540000000000000000000000000000000000000000000000000000000000000001",
+      "value": "0",
+      "receipt": {
+        "blockNumber": 52940550,
+        "blockHash": "0x199d100d7f575555fb0113644777e2695ae2d8023b9db03b8176918be0dacb98",
+        "transactionHash": "0xa073831614caebb3056842c0dc4a920bd7dd98b1fc6d19c1724490a5744a2b73",
+        "gasUsed": "71251",
+        "effectiveGasPrice": "6000000"
+      }
+    }
+  ],
+  "verification": {
+    "block": 52940551,
+    "enabledDepositIds": [
+      "0",
+      "1",
+      "4",
+      "6",
+      "24",
+      "25",
+      "84"
+    ],
+    "postState": [
+      {
+        "depositId": "0",
+        "owner": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+        "paymentMethods": [
+          "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+        ],
+        "oldEnabled": [
+          true
+        ]
+      },
+      {
+        "depositId": "1",
+        "owner": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+        "paymentMethods": [
+          "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+        ],
+        "oldEnabled": [
+          true
+        ]
+      },
+      {
+        "depositId": "4",
+        "owner": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+        "paymentMethods": [
+          "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+        ],
+        "oldEnabled": [
+          true
+        ]
+      },
+      {
+        "depositId": "6",
+        "owner": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+        "paymentMethods": [
+          "0x10940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d"
+        ],
+        "oldEnabled": [
+          true
+        ]
+      },
+      {
+        "depositId": "24",
+        "owner": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+        "paymentMethods": [
+          "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+        ],
+        "oldEnabled": [
+          true
+        ]
+      },
+      {
+        "depositId": "25",
+        "owner": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+        "paymentMethods": [
+          "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+        ],
+        "oldEnabled": [
+          true
+        ]
+      },
+      {
+        "depositId": "84",
+        "owner": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+        "paymentMethods": [
+          "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+        ],
+        "oldEnabled": [
+          true
+        ]
+      }
+    ],
+    "oldEscrowUnmodifiedBySequence": true,
+    "oldWhitelistUnmodifiedBySequence": true,
+    "allowlistsUnmodifiedBySequence": true
+  },
+  "preState": {
+    "block": 52940535,
+    "deposits": [
+      {
+        "depositId": "0",
+        "owner": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+        "paymentMethods": [
+          "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+        ],
+        "oldEnabled": [
+          true
+        ]
+      },
+      {
+        "depositId": "1",
+        "owner": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+        "paymentMethods": [
+          "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+        ],
+        "oldEnabled": [
+          true
+        ]
+      },
+      {
+        "depositId": "4",
+        "owner": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+        "paymentMethods": [
+          "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+        ],
+        "oldEnabled": [
+          true
+        ]
+      },
+      {
+        "depositId": "6",
+        "owner": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+        "paymentMethods": [
+          "0x10940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d"
+        ],
+        "oldEnabled": [
+          true
+        ]
+      },
+      {
+        "depositId": "24",
+        "owner": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+        "paymentMethods": [
+          "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+        ],
+        "oldEnabled": [
+          true
+        ]
+      },
+      {
+        "depositId": "25",
+        "owner": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+        "paymentMethods": [
+          "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+        ],
+        "oldEnabled": [
+          true
+        ]
+      },
+      {
+        "depositId": "84",
+        "owner": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+        "paymentMethods": [
+          "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+        ],
+        "oldEnabled": [
+          true
+        ]
+      }
+    ]
+  }
+}

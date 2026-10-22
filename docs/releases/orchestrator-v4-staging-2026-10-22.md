@@ -5,7 +5,8 @@ wiring, ownership, payment-catalog and escrow-compatibility verification. The
 suite remains unregistered and inactive. Activation is blocked until the four
 mutable staging registries belong to the migrated staging deployer, both
 incompatible predecessors are paused and drained, and existing private deposits
-enable the fresh whitelist. Production is unchanged.
+enable the fresh whitelist. Seven of eighteen privacy migrations are complete;
+eleven still require their owners. Production is unchanged.
 
 ## Scope and source
 
@@ -67,12 +68,12 @@ separately approved production release.
 ## One release entry point
 
 ```sh
-yarn deploy:orchestrator-v4 base_staging inspect
+HARDHAT_CONFIG=hardhat.readonly.config.ts yarn deploy:orchestrator-v4 base_staging inspect
 HARDHAT_CONFIG=hardhat.canonical.config.ts yarn deploy:orchestrator-v4 base_staging deploy
-yarn deploy:orchestrator-v4 base_staging record-drain /path/to/post-pause-drain.json
+HARDHAT_CONFIG=hardhat.readonly.config.ts yarn deploy:orchestrator-v4 base_staging record-drain /path/to/post-pause-drain.json
 HARDHAT_CONFIG=hardhat.canonical.config.ts yarn deploy:orchestrator-v4 base_staging activate
 HARDHAT_CONFIG=hardhat.readonly.config.ts yarn deploy:orchestrator-v4 base_staging verify
-yarn deploy:orchestrator-v4 base_staging verify-source
+HARDHAT_CONFIG=hardhat.readonly.config.ts yarn deploy:orchestrator-v4 base_staging verify-source
 ```
 
 Use only the dedicated `STAGING_DEPLOYER_KEY`; it must derive
@@ -339,3 +340,54 @@ is canonical at block 52939787, block hash
 Initial preconfirmation metadata was reconciled from this same transaction with
 read-only receipt/block/transaction queries; no second transfer was signed.
 The journal is `deployments/orchestrator-v4/pay-curator-funding.json`.
+
+### Confirmed staging policy configuration
+
+Execution tool `41812410896bc7ec86009c5a4774ec16beb364fd` passed complete
+[Foundry CI](https://github.com/zkp2p/zkp2p-contracts/actions/runs/39773715203) and
+[full Release readiness](https://github.com/zkp2p/zkp2p-contracts/actions/runs/39773706706),
+including all four coverage lanes and Codecov, before these calls.
+
+Depositor `0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929` enabled the fresh whitelist
+for escrow `0x77e8f808FE201075e0bD651CD46fdF239fc83265`, IDs
+`0, 1, 4, 6, 24, 25, 84`, in seven zero-value calls. Canonical receipts and matching
+`EnabledUpdated` events span blocks 52940537–52940550, nonces 17367–17373.
+The sampled old depositors and method-scoped enablement flags were identical
+before/after at blocks 52940535/52940551. This sequence did not write old escrow,
+old whitelist, or new allowlists. Its total fee was 0.000003005382105212 ETH,
+including L1 data. Full calls/pre/post state are in `owned-privacy-migration.json`;
+independent receipt/event/cost checks are in `privacy-receipt-verification.json`,
+both under `deployments/orchestrator-v4/`.
+
+At block 52940573, eleven of eighteen existing private deposits still needed
+owner action. Each call targets fresh `WhitelistPolicyV2`
+`0xe034B9C59063DBad5F632c38515e75C24F625503`, chain 8453, value zero,
+`setEnabled(0x77e8f808FE201075e0bD651CD46fdF239fc83265, depositId, true)`.
+`deployments/orchestrator-v4/remaining-private-deposit-calls.json` contains every
+exact sender and calldata. Existing privacy must remain protected before activation.
+
+| Required sender | Deposit IDs |
+|---|---|
+| `0x2374a24E7424E322D48063BE799b7ac343FbBa20` | 13, 97 |
+| `0xA2f8958F9D734250c12031bFCd67e487c55Cec11` | 18, 19, 29 |
+| `0xA51cBE781F835dEC4783cDC7b4326f41cA00CD2A` | 48, 60 |
+| `0xabfAF04b4410040C1DaeD4a69a017617d1d05c78` | 65 |
+| `0xaBD9C80B7F76F08b92f33fF9c14941b678eaAA50` | 66 |
+| `0xEBF303a227A04d79faBB957beaaFeE68C1092BD9` | 138, 139 |
+
+The fresh group registry also received five confirmed calls, blocks
+52940542–52940551. Both groups are private with no resolver; the canonical Peer
+Pay group retains a zero arbitrator, and only the dedicated QA group has
+arbitrator `0x7f0F7c170Eb3f7C9B7a8E494397d7EF94a2bEE8D`. Complete membership,
+configuration, calls and verification are in `pay-group-bootstrap.json`.
+
+| Group | Actual group ID | Creation transaction | Block |
+|---|---|---|---|
+| Peer Pay | `0xa725a5f76683fa31ae337276fe536e24ab173010c72b82ffaac488dac63bd9bf` | [transaction](https://basescan.org/tx/0x6d6466b346fc081a34b424a6900cabbeec96c789a01ef0dc11829c70c8197fbb) | 52940542 |
+| QA | `0x028ae58f6d13720f199a23d3cc034a1aee6b8d7d855282003ed866216ce6b3b8` | [transaction](https://basescan.org/tx/0xc316849623be0cbc449db7f49b9a7a5a313d6827f5bde5ea09141e7a0e30f934) | 52940547 |
+
+Live read-only calls at block 52940592 returned exact `NotDepositor`,
+`TakerNotWhitelisted` and `UnauthorizedOrchestrator` rejections for an unauthorized
+policy edit, a signal against newly protected deposit 0 and passive O4 settlement,
+respectively. The O4 intent counter stayed zero. `passive-contract-smoke.json`
+records these checks explicitly as read-only, not end-to-end payment fulfillment.
