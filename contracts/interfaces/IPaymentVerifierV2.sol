@@ -27,6 +27,7 @@ interface IPaymentVerifierV2 {
         uint256 signalTimestamp;
         uint256 timestampBuffer;
         bytes32 payerCommitmentHash;  // keccak256 of the O4 intent's payer commitment, zero if empty; the attestor checked the payer
+        address owner;                // Intent owner, i.e. the signaler; settlement data may depend on it (e.g. a relayer's zero window)
     }
 
     /// @dev Fully static so OrchestratorV3 can keep reading the V1 three-word prefix.

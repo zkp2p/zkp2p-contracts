@@ -79,7 +79,7 @@ contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
         returns (bytes memory)
     {
         IOrchestratorV4.Intent memory intent = orchestrator.getIntent(id);
-        string[] memory command = new string[](11);
+        string[] memory command = new string[](12);
         command[0] = "node";
         command[1] = string.concat(attestor, "/node_modules/tsx/dist/cli.mjs");
         command[2] = "--tsconfig";
@@ -91,6 +91,7 @@ contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
         command[8] = vm.toString(intent.timestamp);
         command[9] = mode;
         command[10] = vm.toString(paymentId);
+        command[11] = vm.toString(intent.owner);
         return vm.ffi(command);
     }
 }

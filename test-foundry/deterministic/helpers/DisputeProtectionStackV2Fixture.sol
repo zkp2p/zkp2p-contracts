@@ -84,7 +84,7 @@ abstract contract DisputeProtectionStackV2Fixture is OrchestratorV4Fixture {
             IPaymentVerifierV2.PaymentDetails(intent.paymentMethod, PAYEE, amount / 10000, USD, block.timestamp * 1000, _paymentId(id)),
             IPaymentVerifierV2.IntentSnapshot(
                 id, intent.amount, intent.paymentMethod, USD, PAYEE, CONVERSION_RATE, intent.timestamp, 0,
-                intent.payerCommitment.length == 0 ? bytes32(0) : keccak256(intent.payerCommitment)
+                intent.payerCommitment.length == 0 ? bytes32(0) : keccak256(intent.payerCommitment), intent.owner
             ),
             settlementData
         );
