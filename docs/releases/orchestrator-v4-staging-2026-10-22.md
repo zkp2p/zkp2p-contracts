@@ -34,6 +34,7 @@ yarn deploy:orchestrator-v4 base_staging inspect
 yarn deploy:orchestrator-v4 base_staging deploy
 yarn deploy:orchestrator-v4 base_staging activate
 yarn deploy:orchestrator-v4 base_staging verify
+yarn deploy:orchestrator-v4 base_staging verify-source
 ```
 
 Use only the dedicated `STAGING_DEPLOYER_KEY`; it must derive
@@ -108,8 +109,13 @@ confirm that no release process is running, then remove only its stale `.lock`
 file before retrying the same command. These local files contain no private key;
 they are excluded from commits. Confirmed manifests are committed.
 
-After deployment, verify each standard Hardhat record on Basescan with the
-repository's `etherscan-verify-with-delay` task and its exact constructor args.
+After deployment, `verify-source` submits the exact Hardhat standard JSON compiler
+input to [Etherscan V2](https://docs.etherscan.io/api-reference/endpoint/verifysourcecode)
+with Base chain ID on every request, polls completion and checks exact compiler,
+contract name and constructor arguments on Basescan. It requires an injected
+`ETHERSCAN_API_KEY`; it never prints API response text or authenticated URLs.
+The older repository Etherscan plugin drops V2 chain selection while polling and
+is not used for this release. Confirmed source results are saved in the manifest.
 `verify` independently compares on-chain runtime against compiled runtime (only
 compiler-declared immutable locations are normalized), deployment transaction
 calldata against encoded constructors, and every new dependency, owner,
