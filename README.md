@@ -2,20 +2,22 @@
 
 [![Coverage](https://codecov.io/gh/zkp2p/zkp2p-contracts/branch/main/graph/badge.svg?precision=2)](https://codecov.io/gh/zkp2p/zkp2p-contracts)
 
-Smart contracts for the ZKP2P fiat on/off-ramp, with the current repository centered on the v2 system.
-The pristine deployed pre-cut `OrchestratorV2` source is archived outside the compilation tree.
-Superseded sources that executed deployment lanes and tests still need are in `contracts/archive/`; see
-`contracts/archive/README.md` before assuming a contract is current.
+Smart contracts for the ZKP2P fiat on/off-ramp. The current Base production settlement path is
+`EscrowV2`, `OrchestratorV3` and `UnifiedPaymentVerifierV3`, with the method-scoped staked lifecycle stack.
 
-- `EscrowV2`: maker liquidity, per-deposit payment configuration, oracle-backed pricing, delegated rate managers.
-- `OrchestratorV2`: intent lifecycle, fee handling, pre-intent hooks, whitelist hooks, post-intent execution, and unrestricted account-level concurrency.
-- `UnifiedPaymentVerifierV2`: shared attestation-based verifier registered across supported payment methods.
-- `ProtocolViewerV2`: batched read model for deposits, intents, supported payment methods, and effective rates.
+See the [deployment support and retirement register](docs/deployment-status/README.md) before choosing a deployment,
+rotating an old role or treating a historical contract as unsupported. It records the current production
+surface, funded/connected legacy exceptions and the dated address inventory. Source archives and package
+exports are not live-state evidence. Historical V2 sections below describe that architecture, not the
+current production routing.
 
-The repository still contains legacy v1 contracts and deploy scripts because v2 is deployed on top of shared protocol infrastructure, but the active development work over the last month has been concentrated in the v2 contracts, periphery, and deployment pipeline.
+Superseded sources required by immutable deployment lanes and historical tests remain in
+[contracts/archive](contracts/archive/README.md). Do not create new work on those paths or reactivate retired
+payment verifiers. Preserve required fund recovery, settlement and replay-protection dependencies.
 
 ## Table of Contents
 
+- [Deployment Support and Retirement](docs/deployment-status/README.md)
 - [What Landed Recently](#what-landed-recently)
 - [System Overview](#system-overview)
 - [V3 Lifecycle Risk and Maker Groups](#v3-lifecycle-risk-and-maker-groups)
