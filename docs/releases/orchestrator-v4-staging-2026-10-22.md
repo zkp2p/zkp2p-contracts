@@ -320,7 +320,10 @@ remains enforced by the canonical runner.
 Base RPC preconfirmations can expose successful execution with an all-zero block
 hash before the transaction belongs to a sealed block. The execution entry point
 uses `hardhat.canonical.config.ts`, which preserves the canonical compiler/network
-configuration and normalizes only those receipt responses to pending. Standalone
+configuration and normalizes only those receipt responses to pending. It clears
+unused remote Hardhat accounts: the runner derives its explicit scoped wallet
+directly, so unrelated network signing keys are unnecessary. Local rehearsal
+accounts retain the canonical configuration. Standalone
 transaction-journal users import `CanonicalJsonRpcProvider` from
 `scripts/canonical-receipts.ts`. All other responses and errors remain unchanged.
 A regression replays the actual funding receipt: the zero-hash observation cannot
