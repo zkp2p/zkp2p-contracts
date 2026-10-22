@@ -48,3 +48,4 @@ deployments/outputs/orchestrator-v4-*.json.lock
 deployments/outputs/orchestrator-v4-*.json.preflight
 deployments/outputs/orchestrator-v4-*.json.verification
 deployments/hardhat/
+deployments/outputs/orchestrator-v4-historical-owner.json

@@ -56,7 +56,8 @@
     "scripts/test-opt-in-dispute-lifecycle-deployment.cjs",
     "scripts/test-v3-groups-base-deployment.cjs",
     "tasks/etherscanVerifyWithDelay.ts",
-    "scripts/deploy-orchestrator-v4.ts"
+    "scripts/deploy-orchestrator-v4.ts",
+    "scripts/handoff-staging-owner.ts"
   ],
   "include": []
 }

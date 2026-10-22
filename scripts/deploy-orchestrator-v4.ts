@@ -6,6 +6,7 @@ import { BigNumber, Contract, ContractFactory, VoidSigner, Wallet, constants, pr
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
 import { SourceVerificationError, verifySources } from "./verify-orchestrator-v4-source";
 import { zeroImmutableValues } from "../deployments/canonicalDeployment";
+import { assertReleaseProvenance, releasePaths } from "./orchestrator-v4-provenance";
 
 const ZERO = constants.AddressZero;
 const REQUIRED_REGISTRY_OWNERS = ["OrchestratorRegistry", "PaymentVerifierRegistry", "NullifierRegistryV2", "DisputeNullifierRegistry"] as const;
@@ -35,9 +36,10 @@ export const DRAIN_QUERY = 'query { Intent(where:{status:{_eq:"SIGNALED"}},limit
 export type DrainEvidence = {
   pausedAtBlock: number; query: string;
   response: { data: { Intent: Array<{ intentHash: string; orchestratorAddress: string; status: string }>; chain_metadata: Array<{ latest_processed_block: number }> } };
+  legacySignals: Record<string, Array<{ transactionHash: string; logIndex: number; unlock?: { transactionHash: string; logIndex: number } }>>;
 };
 export type Manifest = {
-  version: 1; sourceCommit: string; configurationHash: string; configuration: ReleaseConfig;
+  version: 1; sourceCommit: string; executionToolCommit?: string; configurationHash: string; configuration: ReleaseConfig;
   baseline: Awaited<ReturnType<typeof inspect>>; transactions: Transaction[]; activationDrainEvidence: DrainEvidence | null;
   contracts: Partial<Record<NewName, NewContract>>; verification: Record<string, unknown>; governanceTransactions: Array<{ to: string; data: string; value: string }>;
 };
@@ -363,6 +365,49 @@ export async function assertPrivateDepositsPreserved(hre: HardhatRuntimeEnvironm
   journal.save();
 }
 
+export async function assertReleasedLegacyLock(escrow: Contract, signal: utils.Result, unlock: unknown, pausedAtBlock: number, currentBlock: number): Promise<void> {
+  check(typeof unlock === "object" && unlock !== null, "Nonempty V1 record requires an authenticated escrow unlock");
+  const ref = unlock as { transactionHash: string; logIndex: number };
+  check(/^0x[\da-f]{64}$/i.test(ref.transactionHash) && Number.isSafeInteger(ref.logIndex) && ref.logIndex >= 0, "Malformed legacy unlock reference");
+  const receipt = await escrow.provider.getTransactionReceipt(ref.transactionHash);
+  check(receipt && receipt.status === 1 && receipt.blockHash !== constants.HashZero && receipt.blockNumber <= pausedAtBlock, "Legacy unlock receipt is absent, unsealed, reverted or after pause");
+  const log = receipt.logs.find((entry) => entry.logIndex === ref.logIndex);
+  check(log && same(log.address, escrow.address) && log.topics[0] === escrow.interface.getEventTopic("FundsUnlocked"), "Legacy unlock reference does not identify the expected escrow event");
+  const released = escrow.interface.parseLog(log).args;
+  check(released.intentHash === signal.intentHash && released.depositId.eq(signal.depositId) && released.amount.eq(signal.amount), "Legacy unlock differs from the authentic signal");
+  for (const blockTag of [pausedAtBlock, currentBlock]) {
+    const [lock, hashes] = await Promise.all([escrow.getDepositIntent(signal.depositId, signal.intentHash, { blockTag }), escrow.getDepositIntentHashes(signal.depositId, { blockTag })]);
+    check(lock.intentHash === constants.HashZero && lock.amount.isZero() && lock.timestamp.isZero() && lock.expiryTime.isZero() && !hashes.includes(signal.intentHash), "Legacy escrow still has an intent lock");
+  }
+}
+
+export async function assertLegacyIntentInventory(legacy: Contract, signals: unknown, counter: string, pausedAtBlock: number, currentBlock: number): Promise<void> {
+  check(Array.isArray(signals) && BigNumber.from(counter).eq(signals.length), "Legacy signal inventory does not cover the full on-chain counter");
+  const hashes = new Set<string>();
+  for (let offset = 0; offset < signals.length; offset += 16) {
+    const batch = await Promise.all(signals.slice(offset, offset + 16).map(async (signal: { transactionHash: string; logIndex: number; unlock?: unknown }) => {
+      check(signal && /^0x[\da-f]{64}$/i.test(signal.transactionHash) && Number.isSafeInteger(signal.logIndex) && signal.logIndex >= 0, "Malformed legacy signal reference");
+      const receipt = await legacy.provider.getTransactionReceipt(signal.transactionHash);
+      check(receipt && receipt.status === 1 && receipt.blockHash !== constants.HashZero && receipt.blockNumber <= pausedAtBlock, "Legacy signal receipt is absent, unsealed, reverted or after pause");
+      const log = receipt.logs.find((entry) => entry.logIndex === signal.logIndex);
+      check(log && same(log.address, legacy.address) && log.topics[0] === legacy.interface.getEventTopic("IntentSignaled"), "Legacy signal reference does not identify the expected event");
+      const creation = legacy.interface.parseLog(log).args, intentHash: string = creation.intentHash;
+      const [atPause, current] = await Promise.all([legacy.getIntent(intentHash, { blockTag: pausedAtBlock }), legacy.getIntent(intentHash, { blockTag: currentBlock })]);
+      if (!same(atPause.owner, ZERO) || !same(current.owner, ZERO)) {
+        // This historical escrow called only its then-current orchestrator when pruning.
+        // Authentic unlocked V1 records can remain as orphans after the escrow lock is deleted.
+        check(same(legacy.address, "0xF9b9CD27Deea496B960b3cb5221b514705fCaF5e") && same(creation.escrow, "0x5C2a8D9246777eE4501B6C426a8B8C7635C7b5b5"), "Legacy intent remains open on chain");
+        for (const intent of [atPause, current]) check(same(intent.owner, creation.owner) && same(intent.escrow, creation.escrow) && intent.depositId.eq(creation.depositId) && intent.amount.eq(creation.amount), "Nonempty legacy intent differs from its authentic signal");
+        const record = JSON.parse(readFileSync(resolve("deployments/base_staging/Escrow.json"), "utf8"));
+        for (const block of [pausedAtBlock, currentBlock]) check(utils.keccak256(await legacy.provider.getCode(creation.escrow, block)) === "0x2dcb883e6acaf1c3f7499edbdb5126f7cdba47733d1c4adb0caf4e9fd738ce77", "Historical escrow runtime differs from the reviewed deployment");
+        await assertReleasedLegacyLock(new Contract(creation.escrow, record.abi, legacy.provider), creation, signal.unlock, pausedAtBlock, currentBlock);
+      }
+      return intentHash.toLowerCase();
+    }));
+    for (const intentHash of batch) { check(!hashes.has(intentHash), "Duplicate legacy intent in drain inventory"); hashes.add(intentHash); }
+  }
+}
+
 export async function assertDrainEvidence(hre: HardhatRuntimeEnvironment, c: ReleaseConfig, value: unknown): Promise<void> {
   check(typeof value === "object" && value !== null, "Post-pause indexer drain evidence is required before activation");
   const evidence = value as DrainEvidence;
@@ -385,6 +430,12 @@ export async function assertDrainEvidence(hre: HardhatRuntimeEnvironment, c: Rel
     check((await legacy.intentCounter(at)).toString() === checkpoint.intentCounter, `${checkpoint.contract} counter differs at the pause observation`);
     const unpauses = await hre.ethers.provider.getLogs({ address: legacy.address, fromBlock: evidence.pausedAtBlock, toBlock: snapshot.blockNumber, topics: [utils.id("Unpaused(address)")] });
     check(unpauses.length === 0, `${checkpoint.contract} was unpaused after the drain observation; recheck the indexed drain`);
+    // The existing staging indexer never indexed the obsolete Oct16 O4. Authenticate every
+    // distinct signal against receipts and the monotonic counter, then read each actual intent.
+    check(evidence.legacySignals && typeof evidence.legacySignals === "object", "Complete on-chain legacy signal inventories are required");
+    const record = JSON.parse(readFileSync(resolve(`deployments/${c.environment}/${checkpoint.contract}.json`), "utf8"));
+    const historical = new Contract(legacy.address, record.abi, hre.ethers.provider);
+    await assertLegacyIntentInventory(historical, evidence.legacySignals[checkpoint.contract], checkpoint.intentCounter, evidence.pausedAtBlock, snapshot.blockNumber);
   }
 }
 
@@ -464,7 +515,7 @@ async function main(): Promise<void> {
     wallet = new Wallet(key.startsWith("0x") ? key : `0x${key}`, hre.ethers.provider);
     check(same(wallet.address, c.signer), "Derived signer differs from the verified configuration");
   } else wallet = new VoidSigner(c.signer, hre.ethers.provider);
-  const protectedPaths = ["contracts", "hardhat.config.ts", "scripts/deploy-orchestrator-v4.ts", "scripts/verify-orchestrator-v4-source.ts", "deployments/canonicalDeployment.ts", configPath];
+  const paths = releasePaths(environment), protectedPaths = [...paths.deployed, ...paths.execution];
   for (const path of ["scripts/deploy-orchestrator-v4.ts", "scripts/verify-orchestrator-v4-source.ts", `deployments/orchestrator-v4/${environment}.json`])
     execFileSync("git", ["cat-file", "-e", `HEAD:${path}`], { stdio: "pipe" });
   execFileSync("git", ["diff", "--exit-code", "HEAD", "--", ...protectedPaths], { stdio: "pipe" });
@@ -478,7 +529,7 @@ async function main(): Promise<void> {
     if (existsSync(manifestPath)) {
       manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Manifest;
       check(manifest.version === 1 && manifest.configurationHash === hash(c), "Manifest configuration differs; do not overwrite or start a duplicate release");
-      execFileSync("git", ["diff", "--exit-code", manifest.sourceCommit, "HEAD", "--", ...protectedPaths], { stdio: "pipe" });
+      assertReleaseProvenance(manifest.sourceCommit, manifest.executionToolCommit, environment);
     } else {
       check(action === "deploy", "No deployment manifest exists; run deploy first");
       const baseline = await inspect(hre, c);
@@ -488,6 +539,7 @@ async function main(): Promise<void> {
       manifest = { version: 1, sourceCommit, configurationHash: hash(c), configuration: c, baseline, transactions: [], activationDrainEvidence: null, contracts: {}, verification: {}, governanceTransactions: [] };
     }
     const journal = new TransactionJournal(action === "verify" ? `${manifestPath}.verification` : manifestPath, manifest, wallet);
+    manifest.verification.executionToolCommit = manifest.executionToolCommit === undefined ? manifest.sourceCommit : manifest.executionToolCommit;
     if (action === "deploy") await deploySuite(hre, journal);
     if (action === "record-drain") {
       check(evidencePath, "record-drain requires the post-pause indexer evidence JSON");
