@@ -5,6 +5,7 @@ import {OrchestratorV4Fixture} from "../helpers/OrchestratorV4Fixture.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
+import {SignalPolicyMock} from "../../mocks/SignalPolicyMock.sol";
 
 contract OrchestratorV4SurfaceTest is OrchestratorV4Fixture {
     event EscrowRegistryUpdated(address indexed registry);
@@ -12,10 +13,15 @@ contract OrchestratorV4SurfaceTest is OrchestratorV4Fixture {
     event AllowMultipleIntentsUpdated(bool allowMultiple);
     event ProtocolFeeUpdated(uint256 fee);
     event ProtocolFeeRecipientUpdated(address indexed recipient);
+    event SignalPolicyUpdated(address indexed previousPolicy, address indexed newPolicy);
 
     function test_GovernanceUpdatesRegistriesFeesAndPauseState() public virtual {
         EscrowRegistry newRegistry = new EscrowRegistry();
         RelayerRegistry newRelayerRegistry = new RelayerRegistry();
+        SignalPolicyMock newSignalPolicy = new SignalPolicyMock();
+        vm.expectEmit(true, true, false, true, address(orchestrator));
+        emit SignalPolicyUpdated(address(signalPolicy), address(newSignalPolicy));
+        orchestrator.setSignalPolicy(newSignalPolicy);
         vm.expectEmit(true, false, false, true, address(orchestrator));
         emit EscrowRegistryUpdated(address(newRegistry));
         orchestrator.setEscrowRegistry(address(newRegistry));
@@ -36,7 +42,7 @@ contract OrchestratorV4SurfaceTest is OrchestratorV4Fixture {
         assertEq(address(orchestrator.relayerRegistry()), address(newRelayerRegistry));
         assertEq(orchestrator.protocolFee(), 1e16);
         assertEq(orchestrator.protocolFeeRecipient(), other);
-        assertEq(orchestrator.chainId(), CHAIN_ID);
+        assertEq(address(orchestrator.signalPolicy()), address(newSignalPolicy));
         assertEq(orchestrator.owner(), address(this));
         assertFalse(orchestrator.allowMultipleIntents());
         orchestrator.pauseOrchestrator();
@@ -72,6 +78,8 @@ contract OrchestratorV4SurfaceTest is OrchestratorV4Fixture {
         orchestrator.setAllowMultipleIntents(false);
         vm.expectRevert(bytes("Ownable: caller is not the owner"));
         orchestrator.setRelayerRegistry(address(relayerRegistry));
+        vm.expectRevert(bytes("Ownable: caller is not the owner"));
+        orchestrator.setSignalPolicy(signalPolicy);
         vm.stopPrank();
     }
 

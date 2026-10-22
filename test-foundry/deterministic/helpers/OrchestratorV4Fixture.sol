@@ -9,6 +9,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {EscrowV2} from "contracts/EscrowV2.sol";
 import {OrchestratorV4} from "contracts/OrchestratorV4.sol";
 import {OrchestratorMock} from "../../mocks/OrchestratorMock.sol";
+import {SignalPolicyMock} from "../../mocks/SignalPolicyMock.sol";
 import {PaymentVerifierV2Mock} from "../../mocks/PaymentVerifierV2Mock.sol";
 import {PostIntentHookV2Mock} from "../../mocks/PostIntentHookV2Mock.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
@@ -51,6 +52,7 @@ abstract contract OrchestratorV4Fixture is Test {
     PaymentVerifierV2Mock internal verifier;
     PostIntentHookV2Mock internal postIntentHook;
     OrchestratorMock internal orchestratorMock;
+    SignalPolicyMock internal signalPolicy;
     uint256 internal depositId;
 
     function setUp() public virtual {
@@ -86,7 +88,6 @@ abstract contract OrchestratorV4Fixture is Test {
         whitelist = new WhitelistPolicyV2(new AddressGroupRegistry());
         orchestrator = new OrchestratorV4(
             address(this),
-            CHAIN_ID,
             address(escrowRegistry),
             address(paymentVerifierRegistry),
             address(relayerRegistry),
@@ -95,6 +96,8 @@ abstract contract OrchestratorV4Fixture is Test {
             whitelist
         );
         orchestrator.setAllowMultipleIntents(true);
+        signalPolicy = new SignalPolicyMock();
+        orchestrator.setSignalPolicy(signalPolicy);
         postIntentHook = new PostIntentHookV2Mock(address(token), address(orchestrator));
         orchestratorMock = new OrchestratorMock(address(escrow));
 
@@ -270,7 +273,7 @@ abstract contract OrchestratorV4Fixture is Test {
                 params.conversionRate,
                 _referralHash(params.referralFees),
                 expiration,
-                CHAIN_ID,
+                block.chainid,
                 params.payerCommitment
             )
         );
@@ -279,18 +282,12 @@ abstract contract OrchestratorV4Fixture is Test {
         return abi.encodePacked(r, s, v);
     }
 
-    function _gatedParams(uint256 gatedDepositId, uint256 signerKey, address signedCaller, uint256 expiration)
+    function _gatedParams(uint256 signerKey, address signedCaller, uint256 expiration)
         internal
         view
         returns (IOrchestratorV4.SignalIntentParams memory params)
     {
-        params = _params(
-            gatedDepositId,
-            taker,
-            INTENT_AMOUNT,
-            CONVERSION_RATE,
-            _emptyReferralFees()
-        );
+        params = _defaultParams();
         params.signatureExpiration = expiration;
         params.gatingServiceSignature = _gatingSignature(signerKey, signedCaller, params, expiration);
     }

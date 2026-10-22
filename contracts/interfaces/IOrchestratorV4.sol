@@ -4,6 +4,7 @@ pragma solidity ^0.8.18;
 
 import { IReferralFee } from "./IReferralFee.sol";
 import { IIntentSettlementPolicy } from "./IIntentSettlementPolicy.sol";
+import { IIntentSignalPolicy } from "./IIntentSignalPolicy.sol";
 
 /**
  * @title IOrchestratorV4
@@ -41,7 +42,7 @@ interface IOrchestratorV4 {
         bytes32 fiatCurrency;                       // The currency code for offchain payment
         uint256 conversionRate;                     // The conversion rate agreed offchain
         IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker
-        bytes gatingServiceSignature;               // Signature from the deposit's gating service
+        bytes gatingServiceSignature;               // Signature from the gating service, checked by the signal policy
         uint256 signatureExpiration;                // Timestamp when the gating service signature expires
         bytes payerCommitment;                      // Signed by the gating service; UPV4 requires the attestor to sign its hash
         bytes32 groupId;                            // Allowed group the taker is a member of; its arbitrator rules the intent; zero = none; ignored when the whitelist is off
@@ -88,6 +89,7 @@ interface IOrchestratorV4 {
     );
     event IntentManagerFeeSnapshotted(bytes32 indexed intentHash, address indexed feeRecipient, uint256 fee);
     event SettlementPolicyUpdated(address indexed previousPolicy, address indexed newPolicy);
+    event SignalPolicyUpdated(address indexed previousPolicy, address indexed newPolicy);
     event AllowMultipleIntentsUpdated(bool allowMultiple);
 
     event RelayerRegistryUpdated(address indexed relayerRegistry);
@@ -126,9 +128,6 @@ interface IOrchestratorV4 {
 
     // Validation errors
     error AccountHasActiveIntent(address account, bytes32 existingIntent);
-    error InvalidSignature();
-    error PayerCommitmentRequiresGatingService();
-    error SignatureExpired(uint256 expiration, uint256 currentTime);
 
     // Verification errors
     error PaymentVerificationFailed();
@@ -143,11 +142,15 @@ interface IOrchestratorV4 {
     function getIntent(bytes32 intentHash) external view returns (Intent memory);
     function getAccountIntents(address account) external view returns (bytes32[] memory);
     function settlementPolicy() external view returns (IIntentSettlementPolicy);
+    function signalPolicy() external view returns (IIntentSignalPolicy);
 
     /* ============ External Functions for Users ============ */
 
-    /// @notice Signals an intent and locks its escrow funds.
+    /// @notice Signals an intent the current signal policy accepts and locks its escrow funds.
     function signalIntent(SignalIntentParams calldata params) external;
+
+    /// @notice Sets the signal policy that validates every later signal.
+    function setSignalPolicy(IIntentSignalPolicy policy) external;
 
     /// @notice Sets the settlement policy applied to every later settlement; zero disables protection.
     function setSettlementPolicy(IIntentSettlementPolicy policy) external;
