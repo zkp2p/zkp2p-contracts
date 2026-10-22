@@ -10,4 +10,12 @@ extendProvider(async (provider) => new class extends ProviderWrapper {
   }
 }(provider));
 
-export default config;
+if (!config.networks) throw new Error("Canonical Hardhat networks are unavailable");
+
+// The release runner constructs its explicit Wallet; remote network accounts are unused.
+// Preserve Hardhat's local fixture accounts for deployment rehearsals.
+export default {
+  ...config,
+  networks: Object.fromEntries(Object.entries(config.networks).map(([name, network]) =>
+    [name, name === "hardhat" ? network : { ...network, accounts: [] }])),
+};

@@ -37,7 +37,7 @@ test('Base staging accepts only its scoped setting, with or without a prefix', (
   }
 });
 
-test('read-only Hardhat loads from a clean directory without any network signing key', () => {
+test('release Hardhat configs load from a clean directory without remote signing keys', () => {
   const root = path.resolve(__dirname, '..');
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'o4-keyless-'));
   try {
@@ -54,11 +54,16 @@ test('read-only Hardhat loads from a clean directory without any network signing
     });
     assert.notEqual(original.status, 0);
     assert.match(original.stderr, /Invalid account: #0 for network: (goerli|base)/);
-    const readonly = spawnSync(process.execPath, args, {
-      cwd: directory, env: { ...env, HARDHAT_CONFIG: path.join(root, 'hardhat.readonly.config.ts') }, encoding: 'utf8',
-    });
-    assert.equal(readonly.status, 0, readonly.stderr);
-    for (const accounts of Object.values(JSON.parse(readonly.stdout))) assert.deepEqual(accounts, []);
+    for (const configName of ['hardhat.readonly.config.ts', 'hardhat.canonical.config.ts']) {
+      const readonly = spawnSync(process.execPath, args, {
+        cwd: directory, env: { ...env, HARDHAT_CONFIG: path.join(root, configName) }, encoding: 'utf8',
+      });
+      assert.equal(readonly.status, 0, readonly.stderr);
+      for (const [network, accounts] of Object.entries(JSON.parse(readonly.stdout))) {
+        if (configName === 'hardhat.canonical.config.ts' && network === 'hardhat') continue;
+        assert.deepEqual(accounts, []);
+      }
+    }
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
