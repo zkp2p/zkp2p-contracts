@@ -46,4 +46,5 @@ audits/_scratch/
 deployments/outputs/orchestrator-v4-*.json.pending
 deployments/outputs/orchestrator-v4-*.json.lock
 deployments/outputs/orchestrator-v4-*.json.preflight
+deployments/outputs/orchestrator-v4-*.json.verification
 deployments/hardhat/
