@@ -3,7 +3,8 @@
 Status: implementation prepared; no new live contracts deployed yet. The four
 mutable staging registries still need their owner to transfer control to the
 verified staging deployer. The deploy command rejects this state before its
-first transaction. Production is unchanged.
+first transaction. Existing private deposits also need their depositors to enable
+the fresh whitelist before activation. Production is unchanged.
 
 ## Scope and source
 
@@ -19,12 +20,44 @@ deployment lacks the group-arbitrator field used by O4. Groups, members and
 deposit whitelist settings are not silently copied. A depositor must enable
 their own V2 whitelist; the policy has no owner or bootstrap privilege.
 
+### Existing private deposits
+
+The old O3 hook uses method-scoped `WhitelistPolicy` at
+`0xF79aAD1BAaB617fF3Eb299225c80893F22F743Fe`. Its complete indexed checkpoint at
+block `52938360` contains 27 enabled method tuples across 25 deposit IDs; every
+tuple was independently checked on-chain at that block. The evidence is in
+`deployments/orchestrator-v4/private-policy-checkpoint.json`.
+
+Eighteen deposits still exist: `0, 1, 4, 6, 13, 18, 19, 24, 25, 29, 48, 60, 65,
+66, 84, 97, 138, 139`. Deposits `98, 129, 130, 131, 132, 133, 134` have been
+irreversibly deleted. Deposits 65 and 66 hold 37.5 and 4 USDC respectively, accept
+intents and have no gating signer. Their intent guardian only controls expiry
+extensions; it does not restrict `lockFunds`. A newly registered O4 would accept
+these rows while its fresh whitelist remains disabled.
+
+Before activation, each existing private deposit's depositor must call
+`setEnabled(escrow, depositId, true)` on the fresh `WhitelistPolicyV2`. With no new
+allowlists this closes O4 admission while leaving old O3 groups and deposit state
+unchanged. Only the recorded depositor can do this; neither the deployment signer
+nor an escrow delegate has that authority. The runner checks the pinned old
+policy, includes all later `EnabledUpdated` events, reads current enablement,
+skips deleted deposits, and requires new-policy enablement for every remaining
+private deposit. It runs before the first activation write and again immediately
+before registration. Empty retained deposits are included because they can be
+funded again. The manifest records the checked block and required/deleted IDs.
+
+Gating signatures use EIP-191 over a packed message containing the orchestrator
+address; O3 signatures cannot be replayed on O4. This does not substitute for
+migrating private-policy settings. Coordinate deposit/policy mutations during
+cutover, and use the new policy for subsequent O4 privacy settings.
+
 The environment's escrow, escrow registry, orchestrator registry, payment
 registry, relayer registry, replay registries, dispute verifier and attestation
 verifier are reused. `deployments/orchestrator-v4/base_staging.json` records every
 reused address, deployment transaction, deployment block, runtime hash, payment
 method/currency, witness, fee and predecessor hook. The Base configuration is a
-future template: its signer is deliberately unset and must be supplied by a
+future template: its signer and privacy/drain checkpoints are deliberately unset.
+The predecessor-policy pin and reviewed checkpoints must be supplied by a
 separately approved production release.
 
 ## One release entry point

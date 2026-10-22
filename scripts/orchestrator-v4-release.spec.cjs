@@ -6,7 +6,7 @@ const { join } = require("node:path");
 const { test } = require("node:test");
 const hre = require("hardhat");
 const { ContractFactory, Wallet, utils, constants } = require("ethers");
-const { inspect, assertBaseline, validateConfig, TransactionJournal, deploySuite, activate, verifySuite, activationTransactions, DRAIN_QUERY, recordDrainEvidence } = require("./deploy-orchestrator-v4.ts");
+const { inspect, assertBaseline, validateConfig, TransactionJournal, deploySuite, activate, verifySuite, activationTransactions, DRAIN_QUERY, recordDrainEvidence, assertPrivateDepositsPreserved } = require("./deploy-orchestrator-v4.ts");
 
 // Public Hardhat fixture account. Never load a service or production signer in these tests.
 const wallet = Wallet.fromMnemonic("test test test test test test test test test test test junk").connect(hre.ethers.provider);
@@ -15,6 +15,20 @@ const other = Wallet.fromMnemonic("test test test test test test test test test 
 async function drainEvidence() {
   const block = await hre.ethers.provider.getBlockNumber();
   return { pausedAtBlock: block, query: DRAIN_QUERY, response: { data: { Intent: [], chain_metadata: [{ latest_processed_block: block }] } } };
+}
+
+async function createPrivateDeposit(f, retainOnEmpty = true) {
+  const token = f.deployed.USDCMock, escrow = f.deployed.EscrowV2;
+  const method = f.config.paymentMethods[0].method, id = (await escrow.depositCounter()).toString();
+  await (await token.approve(escrow.address, 100)).wait();
+  await (await escrow.createDeposit({
+    token: token.address, amount: 100, intentAmountRange: { min: 1, max: 100 }, paymentMethods: [method],
+    paymentMethodData: [{ intentGatingService: constants.AddressZero, payeeDetails: utils.id("fixture payee"), data: "0x" }],
+    currencies: [[{ code: utils.id("USD"), minConversionRate: utils.parseEther("1"), oracleRateConfig: { adapter: constants.AddressZero, adapterConfig: "0x", spreadBps: 0, maxStaleness: 0 } }]],
+    delegate: constants.AddressZero, intentGuardian: other, retainOnEmpty,
+  })).wait();
+  await (await f.deployed.PredecessorWhitelistPolicy.setEnabled(escrow.address, id, method, true)).wait();
+  return { depositId: id, paymentMethod: method };
 }
 
 async function fixture() {
@@ -50,12 +64,13 @@ async function fixture() {
   for (const { method, currencies } of paymentMethods) {
     await (await uv.addPaymentMethod(method)).wait(); await (await pvr.addPaymentMethod(method, uv.address, currencies)).wait();
   }
+  deployed.PredecessorWhitelistPolicy = whitelist;
   const existing = {};
-  for (const name of ["EscrowV2", "EscrowRegistry", "OrchestratorRegistry", "PaymentVerifierRegistry", "RelayerRegistry", "NullifierRegistryV2", "DisputeNullifierRegistry", "DisputeVerifier", "MultiAttestationVerifier", "OrchestratorV3", "UnifiedPaymentVerifierV3", "Orchestrator", "OrchestratorV4Historical20261016"]) {
+  for (const name of ["EscrowV2", "EscrowRegistry", "OrchestratorRegistry", "PaymentVerifierRegistry", "RelayerRegistry", "NullifierRegistryV2", "DisputeNullifierRegistry", "DisputeVerifier", "MultiAttestationVerifier", "OrchestratorV3", "UnifiedPaymentVerifierV3", "Orchestrator", "OrchestratorV4Historical20261016", "PredecessorWhitelistPolicy"]) {
     const contract = deployed[name], receipt = await contract.deployTransaction.wait();
-    existing[name] = { address: contract.address, artifact: name === "DisputeNullifierRegistry" ? "NullifierRegistry" : name === "OrchestratorV4Historical20261016" ? "OrchestratorV4" : name, runtimeCodeHash: utils.keccak256(await hre.ethers.provider.getCode(contract.address)), deploymentTransaction: receipt.transactionHash, deploymentBlock: receipt.blockNumber };
+    existing[name] = { address: contract.address, artifact: name === "PredecessorWhitelistPolicy" ? "WhitelistPolicy" : name === "DisputeNullifierRegistry" ? "NullifierRegistry" : name === "OrchestratorV4Historical20261016" ? "OrchestratorV4" : name, runtimeCodeHash: utils.keccak256(await hre.ethers.provider.getCode(contract.address)), deploymentTransaction: receipt.transactionHash, deploymentBlock: receipt.blockNumber };
   }
-  const config = { version: 1, environment: "base_staging", chainId, signer: wallet.address, governance: wallet.address, existing, stakeToken: token.address, protocolFee: "0", protocolFeeRecipient: wallet.address, allowMultipleIntents: false, predecessorHook: hook.address, paymentMethods, retainedDisputeWriters: [dv.address], attestationWitnesses: [other], attestationThreshold: "1", baselineBlock: await hre.ethers.provider.getBlockNumber(), legacyDrainCheckpoints: ["Orchestrator", "OrchestratorV4Historical20261016"].map((contract) => ({ contract, intentCounter: "0", indexedBlock: existing[contract].deploymentBlock })) };
+  const config = { version: 1, environment: "base_staging", chainId, signer: wallet.address, governance: wallet.address, existing, stakeToken: token.address, protocolFee: "0", protocolFeeRecipient: wallet.address, allowMultipleIntents: false, predecessorHook: hook.address, paymentMethods, retainedDisputeWriters: [dv.address], attestationWitnesses: [other], attestationThreshold: "1", baselineBlock: await hre.ethers.provider.getBlockNumber(), legacyWhitelistCheckpoint: { indexedBlock: await hre.ethers.provider.getBlockNumber(), enabled: [] }, legacyDrainCheckpoints: ["Orchestrator", "OrchestratorV4Historical20261016"].map((contract) => ({ contract, intentCounter: "0", indexedBlock: existing[contract].deploymentBlock })) };
   const directory = mkdtempSync(join(tmpdir(), "o4-release-test-"));
   hre.config.paths.deployments = join(directory, "deployments");
   const path = join(directory, "manifest.json");
@@ -244,5 +259,54 @@ test("activation requires complete indexed evidence caught up after the predeces
     assert.equal(await wallet.getTransactionCount(), nonce);
     await recordDrainEvidence(hre, f.journal, await drainEvidence());
     assert.equal(f.manifest.activationDrainEvidence.query, DRAIN_QUERY);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
+
+test("private-deposit activation covers retained empty liquidity and later events, but excludes deleted deposits", async () => {
+  const f = await fixture();
+  try {
+    const empty = await createPrivateDeposit(f), deleted = await createPrivateDeposit(f, false);
+    await (await f.deployed.EscrowV2.withdrawDeposit(empty.depositId)).wait();
+    await (await f.deployed.EscrowV2.withdrawDeposit(deleted.depositId)).wait();
+    f.config.legacyWhitelistCheckpoint = { indexedBlock: await hre.ethers.provider.getBlockNumber(), enabled: [empty, deleted] };
+    const funded = await createPrivateDeposit(f);
+    await deploySuite(hre, f.journal);
+    const nonce = await wallet.getTransactionCount();
+    await assert.rejects(activate(hre, f.journal), /depositors to enable WhitelistPolicyV2: 0, 2/);
+    assert.equal(await wallet.getTransactionCount(), nonce);
+    assert.equal(await f.deployed.DisputeNullifierRegistry.isWriter(f.manifest.contracts.DisputeProtectionPolicyV2.address), false);
+    const whitelist = await hre.ethers.getContractAt("WhitelistPolicyV2", f.manifest.contracts.WhitelistPolicyV2.address, wallet);
+    await (await whitelist.setEnabled(f.deployed.EscrowV2.address, empty.depositId, true)).wait();
+    await assert.rejects(assertPrivateDepositsPreserved(hre, f.journal), /depositors to enable WhitelistPolicyV2: 2/);
+    await (await whitelist.setEnabled(f.deployed.EscrowV2.address, funded.depositId, true)).wait();
+    await assertPrivateDepositsPreserved(hre, f.journal);
+    assert.deepEqual(f.manifest.verification.privateDeposits.requiredDepositIds, ["0", "2"]);
+    assert.deepEqual(f.manifest.verification.privateDeposits.deletedDepositIds, ["1"]);
+    // Enabling the new policy with no groups/takers makes existing private rows inaccessible through O4.
+    assert.equal(await whitelist.isWhitelisted(f.deployed.EscrowV2.address, funded.depositId, other, constants.HashZero), false);
+    await activate(hre, f.journal);
+    assert.equal(await f.deployed.PredecessorWhitelistPolicy.enabled(f.deployed.EscrowV2.address, funded.depositId, funded.paymentMethod), true);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
+test("a private deposit introduced during route cutover blocks the final orchestrator registration", async () => {
+  const f = await fixture();
+  try {
+    await deploySuite(hre, f.journal);
+    class IntroducePrivateDepositJournal extends TransactionJournal {
+      async execute(step, request) {
+        const result = await super.execute(step, request);
+        if (step === "authorize-policy-writer") await createPrivateDeposit(f);
+        return result;
+      }
+    }
+    await assert.rejects(activate(hre, new IntroducePrivateDepositJournal(f.path, f.manifest, wallet)), /depositors to enable WhitelistPolicyV2: 0/);
+    assert.equal(await f.deployed.OrchestratorRegistry.isOrchestrator(f.manifest.contracts.OrchestratorV4.address), false);
+    assert.equal(f.manifest.transactions.some((tx) => tx.step === "register-orchestrator"), false);
+    const whitelist = await hre.ethers.getContractAt("WhitelistPolicyV2", f.manifest.contracts.WhitelistPolicyV2.address, wallet);
+    await (await whitelist.setEnabled(f.deployed.EscrowV2.address, 0, true)).wait();
+    await activate(hre, new TransactionJournal(f.path, JSON.parse(readFileSync(f.path)), wallet));
+    assert.equal(await f.deployed.OrchestratorRegistry.isOrchestrator(f.manifest.contracts.OrchestratorV4.address), true);
   } finally { rmSync(f.directory, { recursive: true, force: true }); }
 });
