@@ -1,0 +1,885 @@
+{
+  "address": "0xE138653725e3602d596ae388D2B2FD05ed1148f3",
+  "abi": [
+    {
+      "inputs": [],
+      "name": "EmptyArray",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "groupId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "GroupDoesNotExist",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "groupId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "GroupNotPublic",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "groupId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "NoPendingTransfer",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "resolver",
+          "type": "address"
+        }
+      ],
+      "name": "ResolverNotContract",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "caller",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "curator",
+          "type": "address"
+        }
+      ],
+      "name": "UnauthorizedGroupCurator",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "caller",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "pendingCurator",
+          "type": "address"
+        }
+      ],
+      "name": "UnauthorizedPendingCurator",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ZeroAddress",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "groupId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "oldArbitrator",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newArbitrator",
+          "type": "address"
+        }
+      ],
+      "name": "ArbitratorSet",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "groupId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "curator",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        }
+      ],
+      "name": "GroupCreated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "groupId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "cancelledPendingCurator",
+          "type": "address"
+        }
+      ],
+      "name": "GroupCuratorTransferCancelled",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "groupId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "curator",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "pendingCurator",
+          "type": "address"
+        }
+      ],
+      "name": "GroupCuratorTransferStarted",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "groupId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousCurator",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newCurator",
+          "type": "address"
+        }
+      ],
+      "name": "GroupCuratorTransferred",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "groupId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "bool",
+          "name": "isPublic",
+          "type": "bool"
+        }
+      ],
+      "name": "GroupVisibilityChanged",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "groupId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "member",
+          "type": "address"
+        }
+      ],
+      "name": "MemberAdded",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "groupId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "member",
+          "type": "address"
+        }
+      ],
+      "name": "MemberRemoved",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "groupId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "oldResolver",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newResolver",
+          "type": "address"
+        }
+      ],
+      "name": "ResolverSet",
+      "type": "event"
+    },
+    {
+      "inputs": [],
+      "name": "RESOLVER_GAS_LIMIT",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_groupId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "acceptGroupCurator",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_groupId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "address[]",
+          "name": "_members",
+          "type": "address[]"
+        }
+      ],
+      "name": "addMembers",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_groupId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "cancelGroupCuratorTransfer",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "_name",
+          "type": "string"
+        }
+      ],
+      "name": "createGroup",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "groupId",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_groupId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "getGroup",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "curator",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "pendingCurator",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "resolver",
+          "type": "address"
+        },
+        {
+          "internalType": "bool",
+          "name": "isPublic",
+          "type": "bool"
+        },
+        {
+          "internalType": "bool",
+          "name": "exists",
+          "type": "bool"
+        },
+        {
+          "internalType": "address",
+          "name": "arbitrator",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "groupCount",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_groupId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "groupExists",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_groupId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "address",
+          "name": "_account",
+          "type": "address"
+        }
+      ],
+      "name": "isMember",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_groupId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "joinGroup",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_groupId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "leaveGroup",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "members",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_groupId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "address[]",
+          "name": "_members",
+          "type": "address[]"
+        }
+      ],
+      "name": "removeMembers",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_groupId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "address",
+          "name": "_arbitrator",
+          "type": "address"
+        }
+      ],
+      "name": "setArbitrator",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_groupId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bool",
+          "name": "_isPublic",
+          "type": "bool"
+        }
+      ],
+      "name": "setGroupVisibility",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_groupId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "address",
+          "name": "_resolver",
+          "type": "address"
+        }
+      ],
+      "name": "setResolver",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_groupId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "address",
+          "name": "_newCurator",
+          "type": "address"
+        }
+      ],
+      "name": "transferGroupCurator",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "transactionHash": "0x1f3d44ba9332ffde45d70ba3dbee34a3b806a0e785baf5f8d48f4bf46503e9f3",
+  "receipt": {
+    "to": null,
+    "from": "0x41123d6419C7b8e44157f6F3b0088442116641eC",
+    "contractAddress": "0xE138653725e3602d596ae388D2B2FD05ed1148f3",
+    "transactionIndex": 84,
+    "gasUsed": "722846",
+    "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "blockHash": "0x53ab4ba8cead3dcc4133063971088b74b793b228c5c6ff29a4aa92894f28337f",
+    "transactionHash": "0x1f3d44ba9332ffde45d70ba3dbee34a3b806a0e785baf5f8d48f4bf46503e9f3",
+    "logs": [],
+    "blockNumber": 52939287,
+    "cumulativeGasUsed": "13909851",
+    "status": 1,
+    "byzantium": true
+  },
+  "args": [],
+  "numDeployments": 1,
+  "solcInputHash": "21e450a32582f63e12f6ddcaf1c3114e",
+  "metadata": "{\"compiler\":{\"version\":\"0.8.18+commit.87f61d96\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[],\"name\":\"EmptyArray\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"groupId\",\"type\":\"bytes32\"}],\"name\":\"GroupDoesNotExist\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"groupId\",\"type\":\"bytes32\"}],\"name\":\"GroupNotPublic\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"groupId\",\"type\":\"bytes32\"}],\"name\":\"NoPendingTransfer\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"resolver\",\"type\":\"address\"}],\"name\":\"ResolverNotContract\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"caller\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"curator\",\"type\":\"address\"}],\"name\":\"UnauthorizedGroupCurator\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"caller\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"pendingCurator\",\"type\":\"address\"}],\"name\":\"UnauthorizedPendingCurator\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroAddress\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"groupId\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"oldArbitrator\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newArbitrator\",\"type\":\"address\"}],\"name\":\"ArbitratorSet\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"groupId\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"curator\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"}],\"name\":\"GroupCreated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"groupId\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"cancelledPendingCurator\",\"type\":\"address\"}],\"name\":\"GroupCuratorTransferCancelled\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"groupId\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"curator\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"pendingCurator\",\"type\":\"address\"}],\"name\":\"GroupCuratorTransferStarted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"groupId\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousCurator\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newCurator\",\"type\":\"address\"}],\"name\":\"GroupCuratorTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"groupId\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"bool\",\"name\":\"isPublic\",\"type\":\"bool\"}],\"name\":\"GroupVisibilityChanged\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"groupId\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"member\",\"type\":\"address\"}],\"name\":\"MemberAdded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"groupId\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"member\",\"type\":\"address\"}],\"name\":\"MemberRemoved\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"groupId\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"oldResolver\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newResolver\",\"type\":\"address\"}],\"name\":\"ResolverSet\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"RESOLVER_GAS_LIMIT\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_groupId\",\"type\":\"bytes32\"}],\"name\":\"acceptGroupCurator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_groupId\",\"type\":\"bytes32\"},{\"internalType\":\"address[]\",\"name\":\"_members\",\"type\":\"address[]\"}],\"name\":\"addMembers\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_groupId\",\"type\":\"bytes32\"}],\"name\":\"cancelGroupCuratorTransfer\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"_name\",\"type\":\"string\"}],\"name\":\"createGroup\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"groupId\",\"type\":\"bytes32\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_groupId\",\"type\":\"bytes32\"}],\"name\":\"getGroup\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"curator\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"pendingCurator\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"resolver\",\"type\":\"address\"},{\"internalType\":\"bool\",\"name\":\"isPublic\",\"type\":\"bool\"},{\"internalType\":\"bool\",\"name\":\"exists\",\"type\":\"bool\"},{\"internalType\":\"address\",\"name\":\"arbitrator\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"groupCount\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_groupId\",\"type\":\"bytes32\"}],\"name\":\"groupExists\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_groupId\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"_account\",\"type\":\"address\"}],\"name\":\"isMember\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_groupId\",\"type\":\"bytes32\"}],\"name\":\"joinGroup\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_groupId\",\"type\":\"bytes32\"}],\"name\":\"leaveGroup\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"members\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_groupId\",\"type\":\"bytes32\"},{\"internalType\":\"address[]\",\"name\":\"_members\",\"type\":\"address[]\"}],\"name\":\"removeMembers\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_groupId\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"_arbitrator\",\"type\":\"address\"}],\"name\":\"setArbitrator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_groupId\",\"type\":\"bytes32\"},{\"internalType\":\"bool\",\"name\":\"_isPublic\",\"type\":\"bool\"}],\"name\":\"setGroupVisibility\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_groupId\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"_resolver\",\"type\":\"address\"}],\"name\":\"setResolver\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_groupId\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"_newCurator\",\"type\":\"address\"}],\"name\":\"transferGroupCurator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"details\":\"The id is only unique within one registry deployment on one chain \\u2014 off-chain consumers must key groups by (chainId, registryAddress, groupId). TRUST MODEL: attaching a group to a maker's admission policy via WhitelistPolicyV2.setGroups delegates ongoing admission policy to the group's controller set: the current curator, any future curator after transfer, and the current and any future resolver. Any of these can admit arbitrary accounts at any time. It also accepts the group's arbitrator, current or future, for intents a member signals through the group on OrchestratorV4: the arbitrator can release, partially release or cancel them without a payment proof.\",\"kind\":\"dev\",\"methods\":{\"acceptGroupCurator(bytes32)\":{\"params\":{\"_groupId\":\"Group id.\"}},\"addMembers(bytes32,address[])\":{\"params\":{\"_groupId\":\"Group id.\",\"_members\":\"Members to add.\"}},\"cancelGroupCuratorTransfer(bytes32)\":{\"params\":{\"_groupId\":\"Group id.\"}},\"createGroup(string)\":{\"params\":{\"_name\":\"Human-readable label, emitted in the event only (not stored).\"}},\"getGroup(bytes32)\":{\"params\":{\"_groupId\":\"Group id.\"}},\"groupExists(bytes32)\":{\"params\":{\"_groupId\":\"Group id.\"}},\"isMember(bytes32,address)\":{\"params\":{\"_account\":\"Account to check.\",\"_groupId\":\"Group id.\"}},\"joinGroup(bytes32)\":{\"params\":{\"_groupId\":\"Group id.\"}},\"leaveGroup(bytes32)\":{\"params\":{\"_groupId\":\"Group id.\"}},\"removeMembers(bytes32,address[])\":{\"params\":{\"_groupId\":\"Group id.\",\"_members\":\"Members to remove.\"}},\"setArbitrator(bytes32,address)\":{\"params\":{\"_arbitrator\":\"Arbitrator for new intents signaled through the group (address(0) to clear).\",\"_groupId\":\"Group id.\"}},\"setGroupVisibility(bytes32,bool)\":{\"params\":{\"_groupId\":\"Group id.\",\"_isPublic\":\"Whether the group is public.\"}},\"setResolver(bytes32,address)\":{\"params\":{\"_groupId\":\"Group id.\",\"_resolver\":\"Resolver contract (address(0) to clear).\"}},\"transferGroupCurator(bytes32,address)\":{\"params\":{\"_groupId\":\"Group id.\",\"_newCurator\":\"Proposed new curator (must be nonzero; cancellation is a dedicated function).\"}}},\"title\":\"AddressGroupRegistry\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{\"acceptGroupCurator(bytes32)\":{\"notice\":\"Completes a pending curator transfer. Callable only by the pending curator. The previous curator retains no access after acceptance.\"},\"addMembers(bytes32,address[])\":{\"notice\":\"Adds members to a group. Idempotent: already-present members are skipped (no event).\"},\"cancelGroupCuratorTransfer(bytes32)\":{\"notice\":\"Cancels a pending curator transfer.\"},\"createGroup(string)\":{\"notice\":\"Creates a new group curated by the caller, with an id derived from the curator and global counter.\"},\"getGroup(bytes32)\":{\"notice\":\"Returns a group's governance state for atomic inspection.\"},\"groupCount()\":{\"notice\":\"Number of groups created (the counter used to derive group ids).\"},\"groupExists(bytes32)\":{\"notice\":\"Returns whether a group exists (input validation only \\u2014 not a trust guarantee).\"},\"isMember(bytes32,address)\":{\"notice\":\"Returns whether an account is a member of a group (curated OR resolver). Returns false for nonexistent groups. Resolver failures fail closed for that resolver only \\u2014 they never revert this call.\"},\"joinGroup(bytes32)\":{\"notice\":\"Joins a public group as the caller.\"},\"leaveGroup(bytes32)\":{\"notice\":\"Leaves a public group's curated membership as the caller.\"},\"removeMembers(bytes32,address[])\":{\"notice\":\"Removes members from a group. Idempotent: absent members are skipped (no event).\"},\"setArbitrator(bytes32,address)\":{\"notice\":\"Sets or clears the group's arbitrator. Intents keep the arbitrator they were signaled with.\"},\"setGroupVisibility(bytes32,bool)\":{\"notice\":\"Sets whether a group permits self-service membership.\"},\"setResolver(bytes32,address)\":{\"notice\":\"Sets or clears the group's resolver. A nonzero resolver must have code; note this does not make upgradeable or malicious resolvers safe \\u2014 the resolver is part of the group's trust surface.\"},\"transferGroupCurator(bytes32,address)\":{\"notice\":\"Starts a two-step curator transfer. Replaces any existing pending curator.\"}},\"notice\":\"Permissionless registry of curator-managed address groups. Groups are identified by a bytes32 id derived as keccak256(abi.encode(curator, groupCount)) and are never deleted. Only the group curator mutates members and the resolver; shared control is achieved by using a multisig as the curator.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"contracts/registries/AddressGroupRegistry.sol\":\"AddressGroupRegistry\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[],\"viaIR\":true},\"sources\":{\"contracts/interfaces/IAddressGroupRegistry.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IAddressGroupRegistry\\n * @notice Permissionless registry of curator-managed address groups with optional resolvers.\\n */\\ninterface IAddressGroupRegistry {\\n    /**\\n     * @notice Creates a new group curated by the caller; its id is derived from the curator and global counter.\\n     */\\n    function createGroup(string calldata _name) external returns (bytes32 groupId);\\n\\n    /**\\n     * @notice Starts a two-step curator transfer; replaces any existing pending curator.\\n     */\\n    function transferGroupCurator(bytes32 _groupId, address _newCurator) external;\\n\\n    /**\\n     * @notice Cancels a pending curator transfer.\\n     */\\n    function cancelGroupCuratorTransfer(bytes32 _groupId) external;\\n\\n    /**\\n     * @notice Completes a pending curator transfer; callable only by the pending curator.\\n     */\\n    function acceptGroupCurator(bytes32 _groupId) external;\\n\\n    /**\\n     * @notice Adds members to a group (curator only; idempotent).\\n     */\\n    function addMembers(bytes32 _groupId, address[] calldata _members) external;\\n\\n    /**\\n     * @notice Removes members from a group (curator only; idempotent).\\n     */\\n    function removeMembers(bytes32 _groupId, address[] calldata _members) external;\\n\\n    /**\\n     * @notice Sets whether a group permits self-service membership (curator only).\\n     */\\n    function setGroupVisibility(bytes32 _groupId, bool _isPublic) external;\\n\\n    /**\\n     * @notice Joins a public group as the caller.\\n     */\\n    function joinGroup(bytes32 _groupId) external;\\n\\n    /**\\n     * @notice Leaves a public group's curated membership as the caller.\\n     */\\n    function leaveGroup(bytes32 _groupId) external;\\n\\n    /**\\n     * @notice Sets or clears the group's resolver (curator only; nonzero resolver must have code).\\n     */\\n    function setResolver(bytes32 _groupId, address _resolver) external;\\n\\n    /**\\n     * @notice Sets or clears the arbitrator for intents signaled through the group (curator only).\\n     */\\n    function setArbitrator(bytes32 _groupId, address _arbitrator) external;\\n\\n    /**\\n     * @notice Returns whether an account is a member (curated OR resolver; fail-closed).\\n     */\\n    function isMember(bytes32 _groupId, address _account) external view returns (bool);\\n\\n    /**\\n     * @notice Returns whether a group exists (input validation only, not a trust guarantee).\\n     */\\n    function groupExists(bytes32 _groupId) external view returns (bool);\\n\\n    /**\\n     * @notice Returns a group's governance state for atomic inspection.\\n     */\\n    function getGroup(bytes32 _groupId)\\n        external\\n        view\\n        returns (\\n            address curator,\\n            address pendingCurator,\\n            address resolver,\\n            bool isPublic,\\n            bool exists,\\n            address arbitrator\\n        );\\n\\n    /**\\n     * @notice Returns the number of groups created (the counter used to derive group ids).\\n     */\\n    function groupCount() external view returns (uint256);\\n}\\n\",\"keccak256\":\"0xddb669990c636b4bb1b03c0825b6accbe885a31bde3cfce37842ca95d9f85273\",\"license\":\"MIT\"},\"contracts/interfaces/IWhitelistResolver.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IWhitelistResolver\\n * @notice Optional programmatic membership source for an AddressGroupRegistry group.\\n * @dev Called by the registry via a gas-capped staticcall with bounded returndata handling.\\n * Implementations MUST be view and return true only for members.\\n */\\ninterface IWhitelistResolver {\\n    /**\\n     * @notice Returns whether an account is a member of a group.\\n     * @param _groupId    Group id in the calling registry.\\n     * @param _account    Account to check.\\n     */\\n    function isMember(bytes32 _groupId, address _account) external view returns (bool);\\n}\\n\",\"keccak256\":\"0x9efa204c40024499fc6fb896c8d3f29cc78a48956df60b9e9d713af0bf6378f9\",\"license\":\"MIT\"},\"contracts/registries/AddressGroupRegistry.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IAddressGroupRegistry } from \\\"../interfaces/IAddressGroupRegistry.sol\\\";\\nimport { IWhitelistResolver } from \\\"../interfaces/IWhitelistResolver.sol\\\";\\n\\n/**\\n * @title AddressGroupRegistry\\n * @notice Permissionless registry of curator-managed address groups. Groups are identified by a\\n * bytes32 id derived as keccak256(abi.encode(curator, groupCount)) and are never deleted. Only\\n * the group curator mutates members and the resolver; shared control is achieved by using a\\n * multisig as the curator.\\n * @dev The id is only unique within one registry deployment on one chain \\u2014 off-chain\\n * consumers must key groups by (chainId, registryAddress, groupId).\\n *\\n * TRUST MODEL: attaching a group to a maker's admission policy via WhitelistPolicyV2.setGroups\\n * delegates ongoing admission policy to the group's controller set: the current curator, any future\\n * curator after transfer, and the current and any future resolver. Any of these can admit arbitrary\\n * accounts at any time. It also accepts the group's arbitrator, current or future, for intents a member\\n * signals through the group on OrchestratorV4: the arbitrator can release, partially release or cancel\\n * them without a payment proof.\\n */\\ncontract AddressGroupRegistry is IAddressGroupRegistry {\\n\\n    /* ============ Structs ============ */\\n\\n    struct Group {\\n        address curator;\\n        address pendingCurator;\\n        address resolver;\\n        bool isPublic;\\n        address arbitrator;\\n    }\\n\\n    /* ============ Events ============ */\\n\\n    event GroupCreated(bytes32 indexed groupId, address indexed curator, string name);\\n    event GroupCuratorTransferStarted(bytes32 indexed groupId, address indexed curator, address indexed pendingCurator);\\n    event GroupCuratorTransferCancelled(bytes32 indexed groupId, address indexed cancelledPendingCurator);\\n    event GroupCuratorTransferred(bytes32 indexed groupId, address indexed previousCurator, address indexed newCurator);\\n    event MemberAdded(bytes32 indexed groupId, address indexed member);\\n    event MemberRemoved(bytes32 indexed groupId, address indexed member);\\n    event ResolverSet(bytes32 indexed groupId, address indexed oldResolver, address indexed newResolver);\\n    event GroupVisibilityChanged(bytes32 indexed groupId, bool isPublic);\\n    event ArbitratorSet(bytes32 indexed groupId, address indexed oldArbitrator, address indexed newArbitrator);\\n\\n    /* ============ Errors ============ */\\n\\n    error GroupDoesNotExist(bytes32 groupId);\\n    error UnauthorizedGroupCurator(address caller, address curator);\\n    error UnauthorizedPendingCurator(address caller, address pendingCurator);\\n    error NoPendingTransfer(bytes32 groupId);\\n    error ZeroAddress();\\n    error EmptyArray();\\n    error ResolverNotContract(address resolver);\\n    error GroupNotPublic(bytes32 groupId);\\n\\n    /* ============ Constants ============ */\\n\\n    // Gas forwarded to resolver staticcalls. Sized so mapping- or balanceOf-style checks fit\\n    // comfortably while bounding the cost a malicious resolver can impose on callers.\\n    uint256 public constant RESOLVER_GAS_LIMIT = 50_000;\\n\\n    /* ============ State Variables ============ */\\n\\n    /// @notice Number of groups created (the counter used to derive group ids).\\n    uint256 public override groupCount;\\n\\n    mapping(bytes32 => Group) internal groups;\\n    // groupId => account => curated membership\\n    mapping(bytes32 => mapping(address => bool)) public members;\\n\\n    /* ============ External Functions ============ */\\n\\n    /**\\n     * @notice Creates a new group curated by the caller, with an id derived from the curator\\n     * and global counter.\\n     * @param _name    Human-readable label, emitted in the event only (not stored).\\n     */\\n    function createGroup(string calldata _name) external override returns (bytes32 groupId) {\\n        return _createGroup(msg.sender, false, _name);\\n    }\\n\\n    /**\\n     * @notice Starts a two-step curator transfer. Replaces any existing pending curator.\\n     * @param _groupId    Group id.\\n     * @param _newCurator   Proposed new curator (must be nonzero; cancellation is a dedicated function).\\n     */\\n    function transferGroupCurator(bytes32 _groupId, address _newCurator) external override {\\n        Group storage group = _requireGroupCurator(_groupId);\\n        if (_newCurator == address(0)) revert ZeroAddress();\\n\\n        group.pendingCurator = _newCurator;\\n        emit GroupCuratorTransferStarted(_groupId, msg.sender, _newCurator);\\n    }\\n\\n    /**\\n     * @notice Cancels a pending curator transfer.\\n     * @param _groupId    Group id.\\n     */\\n    function cancelGroupCuratorTransfer(bytes32 _groupId) external override {\\n        Group storage group = _requireGroupCurator(_groupId);\\n        address pendingCurator = group.pendingCurator;\\n        if (pendingCurator == address(0)) revert NoPendingTransfer(_groupId);\\n\\n        delete group.pendingCurator;\\n        emit GroupCuratorTransferCancelled(_groupId, pendingCurator);\\n    }\\n\\n    /**\\n     * @notice Completes a pending curator transfer. Callable only by the pending curator.\\n     * The previous curator retains no access after acceptance.\\n     * @param _groupId    Group id.\\n     */\\n    function acceptGroupCurator(bytes32 _groupId) external override {\\n        Group storage group = groups[_groupId];\\n        if (group.curator == address(0)) revert GroupDoesNotExist(_groupId);\\n        if (msg.sender != group.pendingCurator) revert UnauthorizedPendingCurator(msg.sender, group.pendingCurator);\\n\\n        address previousCurator = group.curator;\\n        group.curator = msg.sender;\\n        delete group.pendingCurator;\\n        emit GroupCuratorTransferred(_groupId, previousCurator, msg.sender);\\n    }\\n\\n    /**\\n     * @notice Adds members to a group. Idempotent: already-present members are skipped (no event).\\n     * @param _groupId    Group id.\\n     * @param _members    Members to add.\\n     */\\n    function addMembers(bytes32 _groupId, address[] calldata _members) external override {\\n        _requireGroupCurator(_groupId);\\n        if (_members.length == 0) revert EmptyArray();\\n\\n        for (uint256 i = 0; i < _members.length; i++) {\\n            _addMember(_groupId, _members[i]);\\n        }\\n    }\\n\\n    /**\\n     * @notice Removes members from a group. Idempotent: absent members are skipped (no event).\\n     * @param _groupId    Group id.\\n     * @param _members    Members to remove.\\n     */\\n    function removeMembers(bytes32 _groupId, address[] calldata _members) external override {\\n        _requireGroupCurator(_groupId);\\n        if (_members.length == 0) revert EmptyArray();\\n\\n        for (uint256 i = 0; i < _members.length; i++) {\\n            address member = _members[i];\\n            if (member == address(0)) revert ZeroAddress();\\n            if (members[_groupId][member]) {\\n                members[_groupId][member] = false;\\n                emit MemberRemoved(_groupId, member);\\n            }\\n        }\\n    }\\n\\n    /**\\n     * @notice Sets whether a group permits self-service membership.\\n     * @param _groupId    Group id.\\n     * @param _isPublic   Whether the group is public.\\n     */\\n    function setGroupVisibility(bytes32 _groupId, bool _isPublic) external override {\\n        Group storage group = _requireGroupCurator(_groupId);\\n        group.isPublic = _isPublic;\\n        emit GroupVisibilityChanged(_groupId, _isPublic);\\n    }\\n\\n    /**\\n     * @notice Joins a public group as the caller.\\n     * @param _groupId    Group id.\\n     */\\n    function joinGroup(bytes32 _groupId) external override {\\n        _requirePublicGroup(_groupId);\\n        _addMember(_groupId, msg.sender);\\n    }\\n\\n    /**\\n     * @notice Leaves a public group's curated membership as the caller.\\n     * @param _groupId    Group id.\\n     */\\n    function leaveGroup(bytes32 _groupId) external override {\\n        _requirePublicGroup(_groupId);\\n        if (members[_groupId][msg.sender]) {\\n            members[_groupId][msg.sender] = false;\\n            emit MemberRemoved(_groupId, msg.sender);\\n        }\\n    }\\n\\n    /**\\n     * @notice Sets or clears the group's resolver. A nonzero resolver must have code; note this\\n     * does not make upgradeable or malicious resolvers safe \\u2014 the resolver is part of the\\n     * group's trust surface.\\n     * @param _groupId    Group id.\\n     * @param _resolver   Resolver contract (address(0) to clear).\\n     */\\n    function setResolver(bytes32 _groupId, address _resolver) external override {\\n        Group storage group = _requireGroupCurator(_groupId);\\n        if (_resolver != address(0) && _resolver.code.length == 0) revert ResolverNotContract(_resolver);\\n\\n        emit ResolverSet(_groupId, group.resolver, _resolver);\\n        group.resolver = _resolver;\\n    }\\n\\n    /**\\n     * @notice Sets or clears the group's arbitrator. Intents keep the arbitrator they were signaled with.\\n     * @param _groupId      Group id.\\n     * @param _arbitrator   Arbitrator for new intents signaled through the group (address(0) to clear).\\n     */\\n    function setArbitrator(bytes32 _groupId, address _arbitrator) external override {\\n        Group storage group = _requireGroupCurator(_groupId);\\n\\n        emit ArbitratorSet(_groupId, group.arbitrator, _arbitrator);\\n        group.arbitrator = _arbitrator;\\n    }\\n\\n    /* ============ External View Functions ============ */\\n\\n    /**\\n     * @notice Returns whether an account is a member of a group (curated OR resolver).\\n     * Returns false for nonexistent groups. Resolver failures fail closed for that resolver\\n     * only \\u2014 they never revert this call.\\n     * @param _groupId    Group id.\\n     * @param _account    Account to check.\\n     */\\n    function isMember(bytes32 _groupId, address _account) public view override returns (bool) {\\n        if (members[_groupId][_account]) return true;\\n\\n        address resolver = groups[_groupId].resolver;\\n        if (resolver == address(0)) return false;\\n\\n        return _resolverSaysYes(resolver, _groupId, _account);\\n    }\\n\\n    /**\\n     * @notice Returns whether a group exists (input validation only \\u2014 not a trust guarantee).\\n     * @param _groupId    Group id.\\n     */\\n    function groupExists(bytes32 _groupId) external view override returns (bool) {\\n        return groups[_groupId].curator != address(0);\\n    }\\n\\n    /**\\n     * @notice Returns a group's governance state for atomic inspection.\\n     * @param _groupId    Group id.\\n     */\\n    function getGroup(bytes32 _groupId)\\n        external\\n        view\\n        override\\n        returns (\\n            address curator,\\n            address pendingCurator,\\n            address resolver,\\n            bool isPublic,\\n            bool exists,\\n            address arbitrator\\n        )\\n    {\\n        Group storage group = groups[_groupId];\\n        return (\\n            group.curator,\\n            group.pendingCurator,\\n            group.resolver,\\n            group.isPublic,\\n            group.curator != address(0),\\n            group.arbitrator\\n        );\\n    }\\n\\n    /* ============ Internal Functions ============ */\\n\\n    function _createGroup(address _curator, bool _isPublic, string memory _name) internal returns (bytes32 groupId) {\\n        groupId = keccak256(abi.encode(_curator, groupCount));\\n        ++groupCount;\\n        groups[groupId].curator = _curator;\\n        groups[groupId].isPublic = _isPublic;\\n        emit GroupCreated(groupId, _curator, _name);\\n    }\\n\\n    function _addMember(bytes32 _groupId, address _member) internal {\\n        if (_member == address(0)) revert ZeroAddress();\\n        if (!members[_groupId][_member]) {\\n            members[_groupId][_member] = true;\\n            emit MemberAdded(_groupId, _member);\\n        }\\n    }\\n\\n    function _requireGroupCurator(bytes32 _groupId) internal view returns (Group storage group) {\\n        group = groups[_groupId];\\n        if (group.curator == address(0)) revert GroupDoesNotExist(_groupId);\\n        if (msg.sender != group.curator) revert UnauthorizedGroupCurator(msg.sender, group.curator);\\n    }\\n\\n    function _requirePublicGroup(bytes32 _groupId) internal view {\\n        Group storage group = groups[_groupId];\\n        if (group.curator == address(0)) revert GroupDoesNotExist(_groupId);\\n        if (!group.isPublic) revert GroupNotPublic(_groupId);\\n    }\\n\\n    /**\\n     * @dev Invokes the resolver with a fixed gas stipend and bounded returndata handling.\\n     * Uses the 0x00-0x3f scratch space as the 32-byte output buffer; never copies\\n     * attacker-controlled returndata sizes. Success requires the call to succeed, at least\\n     * 32 bytes of returndata, and the first word to be exactly 1. Any failure (revert,\\n     * out-of-gas, short or malformed return, no code at call time) evaluates to false.\\n     */\\n    function _resolverSaysYes(address _resolver, bytes32 _groupId, address _account) internal view returns (bool result) {\\n        bytes memory callData = abi.encodeWithSelector(IWhitelistResolver.isMember.selector, _groupId, _account);\\n        uint256 gasLimit = _resolverGasLimit();\\n        assembly (\\\"memory-safe\\\") {\\n            let success := staticcall(gasLimit, _resolver, add(callData, 0x20), mload(callData), 0x00, 0x20)\\n            if and(success, gt(returndatasize(), 0x1f)) {\\n                result := eq(mload(0x00), 1)\\n            }\\n        }\\n    }\\n\\n    /**\\n     * @dev Virtual so the gas-harness mock can raise the limit for the bounded-copy proof test.\\n     */\\n    function _resolverGasLimit() internal view virtual returns (uint256) {\\n        return RESOLVER_GAS_LIMIT;\\n    }\\n}\\n\",\"keccak256\":\"0x7f4a631045a9860e357f137ad2c11739a01e973c8d3fe6b59bab990fdabed32f\",\"license\":\"MIT\"}},\"version\":1}",
+  "bytecode": "0x6080806040523461001657610c19908161001c8239f35b600080fdfe6040608081526004908136101561001557600080fd5b600091823560e01c90816310ad56b3146108be578163162037e4146107ed5781631896f70a146107525781635063f361146106ed5781635e3a23a8146106855781637e1cb5591461064a5781638f23b3261461062d578163b16d33e8146105f8578163b567d4ba14610589578163cc91c9ae14610505578163dc2ddcae14610387578163e0cf1e4c1461029f578163eaba927714610227578163efecc235146101b1578163f931544b14610128578163fb0135d1146100fd575063fbe95bed146100de57600080fd5b346100f957816003193601126100f9576020905161c3508152f35b5080fd5b8390346100f95760203660031901126100f957610125903561011e81610b82565b3390610a84565b80f35b9050346101ad5760203660031901126101ad57359061014682610b82565b818352600260205280832033845260205260ff8184205416610166578280f35b8183526002602052808320338452602052822060ff19815416905533907f0b83470ddeea5a3c2a6523cb7d745b1aa0a33648a7ad9d2c02681b4de1577d2d8380a338808280f35b8280fd5b9050346101ad57816003193601126101ad57359060243590811515809203610223577f4b20d3bde3059a25b24df91aa842115b4b2276f9f8922f260a2f867bce7e4cef91602091600261020386610b15565b01805460ff60a01b191660a084901b60ff60a01b1617905551908152a280f35b8380fd5b9050346101ad57610237366108e3565b909161024283610b15565b6001600160a01b0390921693841561029257505060010180546001600160a01b0319168317905533907f8db50c30ee27dfad03e1563a7489fa22c85bb173a05d44e3b1893a0dc2a3e6648480a480f35b5163d92e233d60e01b8152fd5b919050346101ad576102b03661090e565b92906102bb83610b15565b50831561037757855b8481106102cf578680f35b6001600160a01b036102ea6102e5838886610983565b6109a9565b168015610367579061031d918589526002602090808252868b20838c52825260ff878c205416610322575b50505061095e565b6102c4565b878b528152858a20828b529052848920805460ff19169055857f0b83470ddeea5a3c2a6523cb7d745b1aa0a33648a7ad9d2c02681b4de1577d2d8a80a3388080610315565b835163d92e233d60e01b81528790fd5b815163521299a960e01b81528590fd5b8383346100f957602092836003193601126101ad5767ffffffffffffffff9281358481116100f957366023820112156100f95780830135928584116101ad5736602485840101116101ad57845193601f1992601f82018416603f0184168601888111878210176104f257918060248b9388958b52828a520183890137860101528254958551908882019233845288888401528783526060830191838310908311176104df5750865251902094909185916104409061095e565b81558181526001875284812080546001600160a01b03191633178155600201805460ff60a01b1916905584518781528451818901819052949091869189825b8881106104c6575050507f4776bb5dba13be979db246c94401749a30950726f3bd5afc4259aa667a0aa1b993948391838884010152601f339701168101030190a351908152f35b8281018201518682018b01528a9650899450810161047f565b634e487b7160e01b865260419052602485fd5b634e487b7160e01b865260418452602486fd5b9050346101ad5760203660031901126101ad57803590600161052683610b15565b0180546001600160a01b038116949192909185156105735750506001600160a01b03191690557f3cd9ac5e3c8027019b61d4f367d7bf552ccc4dc6de89b5d25edbd8218e173bc88380a380f35b51630535910d60e31b8152908101849052602490fd5b9050346101ad5760203660031901126101ad5760c092829135815260016020522060018060a01b039060ff8282541691836001820154169484600360028401549301541694815196858852602088015282169086015260a01c16151560608401521515608083015260a0820152f35b9050346101ad5760203660031901126101ad5735825260016020908152918190205490516001600160a01b0390911615158152f35b5050346100f957816003193601126100f957602091549051908152f35b5050346100f95760ff81602093610660366108e3565b908252600286528282206001600160a01b039091168252855220549151911615158152f35b83346106ea57610694366108e3565b9060036106a082610b15565b01805490926001600160a01b039081169283918316907f5262941a87030995c06b5898479ff2babc4916401ce5a8889542a46ad2d2d36a8780a46001600160a01b03191617905580f35b80fd5b9050346101ad576106fd3661090e565b9192909361070a84610b15565b508215610745575050835b818110610720578480f35b8061073b6107356102e5610740948689610983565b85610a84565b61095e565b610715565b5163521299a960e01b8152fd5b919050346101ad57610763366108e3565b91909261076f84610b15565b9060018060a01b03928385169485151590816107e3575b506107cd5750506002839101938454928316907fe1d1f6746b91e9dd407465e932660da09bf5b3276dd25f7da5f3f8adc18905b58780a46001600160a01b03191617905580f35b5163e5018bcd60e01b8152908101849052602490fd5b90503b1538610786565b919050346101ad5760203660031901126101ad57813591828452600160205281842080549060018060a01b03908183169485156108a857600182019485549384169182330361087d575050506bffffffffffffffffffffffff60a01b928333911617905516905533917f171d76f2130da5049efd3efb551f340b25b0c590ae7e228f084d0a7a001073868480a480f35b5163633bd3ab60e01b8152339181019182526001600160a01b03909216602082015281906040010390fd5b51636742e58360e01b8152808501879052602490fd5b5050346100f9576020906108da6108d4366108e3565b906109bd565b90519015158152f35b604090600319011261090957600435906024356001600160a01b03811681036109095790565b600080fd5b6040600319820112610909576004359160243567ffffffffffffffff9283821161090957806023830112156109095781600401359384116109095760248460051b83010111610909576024019190565b600019811461096d5760010190565b634e487b7160e01b600052601160045260246000fd5b91908110156109935760051b0190565b634e487b7160e01b600052603260045260246000fd5b356001600160a01b03811681036109095790565b6000908082526002602052604082209260018060a01b038091169384845260205260ff604084205416610a7b578183526001602052600260408420015416908115610a745782936040519060208201926310ad56b360e01b845260248301526044820152604481526080810181811067ffffffffffffffff821117610a60576040525160209284929061c350fa601f3d1116610a57575090565b60019150511490565b634e487b7160e01b85526041600452602485fd5b5050905090565b50505050600190565b6001600160a01b03909116908115610b0357600081815260026020526040812083825260205260ff60408220541615610abc57505050565b80827fc35a658cae4be07e567f54239b7d58105ebfe0f270f017b04df5957adcb26aad925260026020526040812084825260205260408120600160ff1982541617905580a3565b60405163d92e233d60e01b8152600490fd5b9081600052600160205260406000209160018060a01b03835416908115610b6a5750803303610b415750565b604051631ae0892f60e31b81523360048201526001600160a01b03919091166024820152604490fd5b60249060405190636742e58360e01b82526004820152fd5b600081815260016020526040902080546001600160a01b031615610bca576002015460a01c60ff1615610bb25750565b602490604051906328bba47960e01b82526004820152fd5b604051636742e58360e01b815260048101839052602490fdfea2646970667358221220f503451834defda7ff99a7c268e531f2c70e455434f5fb423cffd35d9aaeee1764736f6c63430008120033",
+  "deployedBytecode": "0x6040608081526004908136101561001557600080fd5b600091823560e01c90816310ad56b3146108be578163162037e4146107ed5781631896f70a146107525781635063f361146106ed5781635e3a23a8146106855781637e1cb5591461064a5781638f23b3261461062d578163b16d33e8146105f8578163b567d4ba14610589578163cc91c9ae14610505578163dc2ddcae14610387578163e0cf1e4c1461029f578163eaba927714610227578163efecc235146101b1578163f931544b14610128578163fb0135d1146100fd575063fbe95bed146100de57600080fd5b346100f957816003193601126100f9576020905161c3508152f35b5080fd5b8390346100f95760203660031901126100f957610125903561011e81610b82565b3390610a84565b80f35b9050346101ad5760203660031901126101ad57359061014682610b82565b818352600260205280832033845260205260ff8184205416610166578280f35b8183526002602052808320338452602052822060ff19815416905533907f0b83470ddeea5a3c2a6523cb7d745b1aa0a33648a7ad9d2c02681b4de1577d2d8380a338808280f35b8280fd5b9050346101ad57816003193601126101ad57359060243590811515809203610223577f4b20d3bde3059a25b24df91aa842115b4b2276f9f8922f260a2f867bce7e4cef91602091600261020386610b15565b01805460ff60a01b191660a084901b60ff60a01b1617905551908152a280f35b8380fd5b9050346101ad57610237366108e3565b909161024283610b15565b6001600160a01b0390921693841561029257505060010180546001600160a01b0319168317905533907f8db50c30ee27dfad03e1563a7489fa22c85bb173a05d44e3b1893a0dc2a3e6648480a480f35b5163d92e233d60e01b8152fd5b919050346101ad576102b03661090e565b92906102bb83610b15565b50831561037757855b8481106102cf578680f35b6001600160a01b036102ea6102e5838886610983565b6109a9565b168015610367579061031d918589526002602090808252868b20838c52825260ff878c205416610322575b50505061095e565b6102c4565b878b528152858a20828b529052848920805460ff19169055857f0b83470ddeea5a3c2a6523cb7d745b1aa0a33648a7ad9d2c02681b4de1577d2d8a80a3388080610315565b835163d92e233d60e01b81528790fd5b815163521299a960e01b81528590fd5b8383346100f957602092836003193601126101ad5767ffffffffffffffff9281358481116100f957366023820112156100f95780830135928584116101ad5736602485840101116101ad57845193601f1992601f82018416603f0184168601888111878210176104f257918060248b9388958b52828a520183890137860101528254958551908882019233845288888401528783526060830191838310908311176104df5750865251902094909185916104409061095e565b81558181526001875284812080546001600160a01b03191633178155600201805460ff60a01b1916905584518781528451818901819052949091869189825b8881106104c6575050507f4776bb5dba13be979db246c94401749a30950726f3bd5afc4259aa667a0aa1b993948391838884010152601f339701168101030190a351908152f35b8281018201518682018b01528a9650899450810161047f565b634e487b7160e01b865260419052602485fd5b634e487b7160e01b865260418452602486fd5b9050346101ad5760203660031901126101ad57803590600161052683610b15565b0180546001600160a01b038116949192909185156105735750506001600160a01b03191690557f3cd9ac5e3c8027019b61d4f367d7bf552ccc4dc6de89b5d25edbd8218e173bc88380a380f35b51630535910d60e31b8152908101849052602490fd5b9050346101ad5760203660031901126101ad5760c092829135815260016020522060018060a01b039060ff8282541691836001820154169484600360028401549301541694815196858852602088015282169086015260a01c16151560608401521515608083015260a0820152f35b9050346101ad5760203660031901126101ad5735825260016020908152918190205490516001600160a01b0390911615158152f35b5050346100f957816003193601126100f957602091549051908152f35b5050346100f95760ff81602093610660366108e3565b908252600286528282206001600160a01b039091168252855220549151911615158152f35b83346106ea57610694366108e3565b9060036106a082610b15565b01805490926001600160a01b039081169283918316907f5262941a87030995c06b5898479ff2babc4916401ce5a8889542a46ad2d2d36a8780a46001600160a01b03191617905580f35b80fd5b9050346101ad576106fd3661090e565b9192909361070a84610b15565b508215610745575050835b818110610720578480f35b8061073b6107356102e5610740948689610983565b85610a84565b61095e565b610715565b5163521299a960e01b8152fd5b919050346101ad57610763366108e3565b91909261076f84610b15565b9060018060a01b03928385169485151590816107e3575b506107cd5750506002839101938454928316907fe1d1f6746b91e9dd407465e932660da09bf5b3276dd25f7da5f3f8adc18905b58780a46001600160a01b03191617905580f35b5163e5018bcd60e01b8152908101849052602490fd5b90503b1538610786565b919050346101ad5760203660031901126101ad57813591828452600160205281842080549060018060a01b03908183169485156108a857600182019485549384169182330361087d575050506bffffffffffffffffffffffff60a01b928333911617905516905533917f171d76f2130da5049efd3efb551f340b25b0c590ae7e228f084d0a7a001073868480a480f35b5163633bd3ab60e01b8152339181019182526001600160a01b03909216602082015281906040010390fd5b51636742e58360e01b8152808501879052602490fd5b5050346100f9576020906108da6108d4366108e3565b906109bd565b90519015158152f35b604090600319011261090957600435906024356001600160a01b03811681036109095790565b600080fd5b6040600319820112610909576004359160243567ffffffffffffffff9283821161090957806023830112156109095781600401359384116109095760248460051b83010111610909576024019190565b600019811461096d5760010190565b634e487b7160e01b600052601160045260246000fd5b91908110156109935760051b0190565b634e487b7160e01b600052603260045260246000fd5b356001600160a01b03811681036109095790565b6000908082526002602052604082209260018060a01b038091169384845260205260ff604084205416610a7b578183526001602052600260408420015416908115610a745782936040519060208201926310ad56b360e01b845260248301526044820152604481526080810181811067ffffffffffffffff821117610a60576040525160209284929061c350fa601f3d1116610a57575090565b60019150511490565b634e487b7160e01b85526041600452602485fd5b5050905090565b50505050600190565b6001600160a01b03909116908115610b0357600081815260026020526040812083825260205260ff60408220541615610abc57505050565b80827fc35a658cae4be07e567f54239b7d58105ebfe0f270f017b04df5957adcb26aad925260026020526040812084825260205260408120600160ff1982541617905580a3565b60405163d92e233d60e01b8152600490fd5b9081600052600160205260406000209160018060a01b03835416908115610b6a5750803303610b415750565b604051631ae0892f60e31b81523360048201526001600160a01b03919091166024820152604490fd5b60249060405190636742e58360e01b82526004820152fd5b600081815260016020526040902080546001600160a01b031615610bca576002015460a01c60ff1615610bb25750565b602490604051906328bba47960e01b82526004820152fd5b604051636742e58360e01b815260048101839052602490fdfea2646970667358221220f503451834defda7ff99a7c268e531f2c70e455434f5fb423cffd35d9aaeee1764736f6c63430008120033",
+  "devdoc": {
+    "details": "The id is only unique within one registry deployment on one chain — off-chain consumers must key groups by (chainId, registryAddress, groupId). TRUST MODEL: attaching a group to a maker's admission policy via WhitelistPolicyV2.setGroups delegates ongoing admission policy to the group's controller set: the current curator, any future curator after transfer, and the current and any future resolver. Any of these can admit arbitrary accounts at any time. It also accepts the group's arbitrator, current or future, for intents a member signals through the group on OrchestratorV4: the arbitrator can release, partially release or cancel them without a payment proof.",
+    "kind": "dev",
+    "methods": {
+      "acceptGroupCurator(bytes32)": {
+        "params": {
+          "_groupId": "Group id."
+        }
+      },
+      "addMembers(bytes32,address[])": {
+        "params": {
+          "_groupId": "Group id.",
+          "_members": "Members to add."
+        }
+      },
+      "cancelGroupCuratorTransfer(bytes32)": {
+        "params": {
+          "_groupId": "Group id."
+        }
+      },
+      "createGroup(string)": {
+        "params": {
+          "_name": "Human-readable label, emitted in the event only (not stored)."
+        }
+      },
+      "getGroup(bytes32)": {
+        "params": {
+          "_groupId": "Group id."
+        }
+      },
+      "groupExists(bytes32)": {
+        "params": {
+          "_groupId": "Group id."
+        }
+      },
+      "isMember(bytes32,address)": {
+        "params": {
+          "_account": "Account to check.",
+          "_groupId": "Group id."
+        }
+      },
+      "joinGroup(bytes32)": {
+        "params": {
+          "_groupId": "Group id."
+        }
+      },
+      "leaveGroup(bytes32)": {
+        "params": {
+          "_groupId": "Group id."
+        }
+      },
+      "removeMembers(bytes32,address[])": {
+        "params": {
+          "_groupId": "Group id.",
+          "_members": "Members to remove."
+        }
+      },
+      "setArbitrator(bytes32,address)": {
+        "params": {
+          "_arbitrator": "Arbitrator for new intents signaled through the group (address(0) to clear).",
+          "_groupId": "Group id."
+        }
+      },
+      "setGroupVisibility(bytes32,bool)": {
+        "params": {
+          "_groupId": "Group id.",
+          "_isPublic": "Whether the group is public."
+        }
+      },
+      "setResolver(bytes32,address)": {
+        "params": {
+          "_groupId": "Group id.",
+          "_resolver": "Resolver contract (address(0) to clear)."
+        }
+      },
+      "transferGroupCurator(bytes32,address)": {
+        "params": {
+          "_groupId": "Group id.",
+          "_newCurator": "Proposed new curator (must be nonzero; cancellation is a dedicated function)."
+        }
+      }
+    },
+    "title": "AddressGroupRegistry",
+    "version": 1
+  },
+  "userdoc": {
+    "kind": "user",
+    "methods": {
+      "acceptGroupCurator(bytes32)": {
+        "notice": "Completes a pending curator transfer. Callable only by the pending curator. The previous curator retains no access after acceptance."
+      },
+      "addMembers(bytes32,address[])": {
+        "notice": "Adds members to a group. Idempotent: already-present members are skipped (no event)."
+      },
+      "cancelGroupCuratorTransfer(bytes32)": {
+        "notice": "Cancels a pending curator transfer."
+      },
+      "createGroup(string)": {
+        "notice": "Creates a new group curated by the caller, with an id derived from the curator and global counter."
+      },
+      "getGroup(bytes32)": {
+        "notice": "Returns a group's governance state for atomic inspection."
+      },
+      "groupCount()": {
+        "notice": "Number of groups created (the counter used to derive group ids)."
+      },
+      "groupExists(bytes32)": {
+        "notice": "Returns whether a group exists (input validation only — not a trust guarantee)."
+      },
+      "isMember(bytes32,address)": {
+        "notice": "Returns whether an account is a member of a group (curated OR resolver). Returns false for nonexistent groups. Resolver failures fail closed for that resolver only — they never revert this call."
+      },
+      "joinGroup(bytes32)": {
+        "notice": "Joins a public group as the caller."
+      },
+      "leaveGroup(bytes32)": {
+        "notice": "Leaves a public group's curated membership as the caller."
+      },
+      "removeMembers(bytes32,address[])": {
+        "notice": "Removes members from a group. Idempotent: absent members are skipped (no event)."
+      },
+      "setArbitrator(bytes32,address)": {
+        "notice": "Sets or clears the group's arbitrator. Intents keep the arbitrator they were signaled with."
+      },
+      "setGroupVisibility(bytes32,bool)": {
+        "notice": "Sets whether a group permits self-service membership."
+      },
+      "setResolver(bytes32,address)": {
+        "notice": "Sets or clears the group's resolver. A nonzero resolver must have code; note this does not make upgradeable or malicious resolvers safe — the resolver is part of the group's trust surface."
+      },
+      "transferGroupCurator(bytes32,address)": {
+        "notice": "Starts a two-step curator transfer. Replaces any existing pending curator."
+      }
+    },
+    "notice": "Permissionless registry of curator-managed address groups. Groups are identified by a bytes32 id derived as keccak256(abi.encode(curator, groupCount)) and are never deleted. Only the group curator mutates members and the resolver; shared control is achieved by using a multisig as the curator.",
+    "version": 1
+  },
+  "storageLayout": {
+    "storage": [
+      {
+        "astId": 44644,
+        "contract": "contracts/registries/AddressGroupRegistry.sol:AddressGroupRegistry",
+        "label": "groupCount",
+        "offset": 0,
+        "slot": "0",
+        "type": "t_uint256"
+      },
+      {
+        "astId": 44649,
+        "contract": "contracts/registries/AddressGroupRegistry.sol:AddressGroupRegistry",
+        "label": "groups",
+        "offset": 0,
+        "slot": "1",
+        "type": "t_mapping(t_bytes32,t_struct(Group)44541_storage)"
+      },
+      {
+        "astId": 44655,
+        "contract": "contracts/registries/AddressGroupRegistry.sol:AddressGroupRegistry",
+        "label": "members",
+        "offset": 0,
+        "slot": "2",
+        "type": "t_mapping(t_bytes32,t_mapping(t_address,t_bool))"
+      }
+    ],
+    "types": {
+      "t_address": {
+        "encoding": "inplace",
+        "label": "address",
+        "numberOfBytes": "20"
+      },
+      "t_bool": {
+        "encoding": "inplace",
+        "label": "bool",
+        "numberOfBytes": "1"
+      },
+      "t_bytes32": {
+        "encoding": "inplace",
+        "label": "bytes32",
+        "numberOfBytes": "32"
+      },
+      "t_mapping(t_address,t_bool)": {
+        "encoding": "mapping",
+        "key": "t_address",
+        "label": "mapping(address => bool)",
+        "numberOfBytes": "32",
+        "value": "t_bool"
+      },
+      "t_mapping(t_bytes32,t_mapping(t_address,t_bool))": {
+        "encoding": "mapping",
+        "key": "t_bytes32",
+        "label": "mapping(bytes32 => mapping(address => bool))",
+        "numberOfBytes": "32",
+        "value": "t_mapping(t_address,t_bool)"
+      },
+      "t_mapping(t_bytes32,t_struct(Group)44541_storage)": {
+        "encoding": "mapping",
+        "key": "t_bytes32",
+        "label": "mapping(bytes32 => struct AddressGroupRegistry.Group)",
+        "numberOfBytes": "32",
+        "value": "t_struct(Group)44541_storage"
+      },
+      "t_struct(Group)44541_storage": {
+        "encoding": "inplace",
+        "label": "struct AddressGroupRegistry.Group",
+        "members": [
+          {
+            "astId": 44532,
+            "contract": "contracts/registries/AddressGroupRegistry.sol:AddressGroupRegistry",
+            "label": "curator",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_address"
+          },
+          {
+            "astId": 44534,
+            "contract": "contracts/registries/AddressGroupRegistry.sol:AddressGroupRegistry",
+            "label": "pendingCurator",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_address"
+          },
+          {
+            "astId": 44536,
+            "contract": "contracts/registries/AddressGroupRegistry.sol:AddressGroupRegistry",
+            "label": "resolver",
+            "offset": 0,
+            "slot": "2",
+            "type": "t_address"
+          },
+          {
+            "astId": 44538,
+            "contract": "contracts/registries/AddressGroupRegistry.sol:AddressGroupRegistry",
+            "label": "isPublic",
+            "offset": 20,
+            "slot": "2",
+            "type": "t_bool"
+          },
+          {
+            "astId": 44540,
+            "contract": "contracts/registries/AddressGroupRegistry.sol:AddressGroupRegistry",
+            "label": "arbitrator",
+            "offset": 0,
+            "slot": "3",
+            "type": "t_address"
+          }
+        ],
+        "numberOfBytes": "128"
+      },
+      "t_uint256": {
+        "encoding": "inplace",
+        "label": "uint256",
+        "numberOfBytes": "32"
+      }
+    }
+  }
+}

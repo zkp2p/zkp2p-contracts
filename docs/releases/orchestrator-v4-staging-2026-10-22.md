@@ -1,11 +1,11 @@
 # Orchestrator V4 staging release
 
-Status: implementation prepared; no new live contracts deployed yet. Staging
-may deploy and verify the fresh, unregistered suite while recording pending
-registry ownership. Activation remains blocked until the four mutable staging
-registries belong to the verified staging deployer, both incompatible predecessors
-are paused/drained, and existing private deposits enable the fresh whitelist.
-Production is unchanged.
+Status: all seven fresh contracts are deployed and pass bytecode, constructor,
+wiring, ownership, payment-catalog and escrow-compatibility verification. The
+suite remains unregistered and inactive. Activation is blocked until the four
+mutable staging registries belong to the migrated staging deployer, both
+incompatible predecessors are paused and drained, and existing private deposits
+enable the fresh whitelist. Production is unchanged.
 
 ## Scope and source
 
@@ -246,6 +246,54 @@ an executed deployment; future production governance must simulate its exact
 unsigned calls before authorization. Historical executed lanes and records are
 unchanged. The independent ownership inventory PRs are not closed by this work.
 
+## Confirmed passive deployment
+
+Deployment source: `cd849c5383a274a4c970d7bb6231e032285fd9a2`. All 23 transactions
+(nonces 26–48) succeeded at blocks 52939285–52939333. Independent receipt readback
+confirmed canonical block hashes, signer and nonce, 13,279,823 execution gas,
+0.000079678938 ETH execution fees and 0.000000656081824076 ETH L1 data fees.
+The total 0.000080335019824076 ETH exactly equals the signer balance decrease.
+The confirmed manifest is `deployments/outputs/orchestrator-v4-base_staging.json`.
+The seven ordinary Hardhat records are under `deployments/base_staging/`.
+
+| Contract | Address / Basescan | Deployment transaction | Block |
+|---|---|---|---|
+| StakeVaultV2 | [`0xa33dE1C8eD627fF5D6d94ABaC462A86b315cFb4e`](https://basescan.org/address/0xa33dE1C8eD627fF5D6d94ABaC462A86b315cFb4e#code) | [transaction](https://basescan.org/tx/0xbd800d5ece6987ea042c20110b7b9f415cf3b04f0c3ca94fca9df178621ba228) | 52939285 |
+| AddressGroupRegistryV4 | [`0xE138653725e3602d596ae388D2B2FD05ed1148f3`](https://basescan.org/address/0xE138653725e3602d596ae388D2B2FD05ed1148f3#code) | [transaction](https://basescan.org/tx/0x1f3d44ba9332ffde45d70ba3dbee34a3b806a0e785baf5f8d48f4bf46503e9f3) | 52939287 |
+| WhitelistPolicyV2 | [`0xe034B9C59063DBad5F632c38515e75C24F625503`](https://basescan.org/address/0xe034B9C59063DBad5F632c38515e75C24F625503#code) | [transaction](https://basescan.org/tx/0xb4f612d98e5f1e199650622460e23164c511f41828225361da6e76608bf85681) | 52939289 |
+| DisputeProtectionPolicyV2 | [`0x3C536cD642cF0ca989899D392fb2c41Bff7A94b1`](https://basescan.org/address/0x3C536cD642cF0ca989899D392fb2c41Bff7A94b1#code) | [transaction](https://basescan.org/tx/0x993696ace583b1e1d4b92055b2afeb0a69ceb109d494748277d8bfeba2c8f4f9) | 52939292 |
+| UnifiedPaymentVerifierV4 | [`0x7b1598b98cAC2930DD8D3174C329416848771748`](https://basescan.org/address/0x7b1598b98cAC2930DD8D3174C329416848771748#code) | [transaction](https://basescan.org/tx/0x994b14c6b22114d9bc455c8213c2a91f6a9d20223d5f4b43698cfba4e7776a72) | 52939296 |
+| OrchestratorV4 | [`0x7222027313D6D8D7e9BCdD7d2411a228B998C180`](https://basescan.org/address/0x7222027313D6D8D7e9BCdD7d2411a228B998C180#code) | [transaction](https://basescan.org/tx/0xdb508c7f882918a6a7a37f6a0087d124c9ef85e0d3e104f9d7fd80e1899e89db) | 52939329 |
+| ProtocolViewerV4 | [`0xEC0131D535160f32601BFca3DfA4B8043eefB56a`](https://basescan.org/address/0xEC0131D535160f32601BFca3DfA4B8043eefB56a#code) | [transaction](https://basescan.org/tx/0x7f4463265990bbadd92ebdac1d42c528b4cbf245cbd0a9bc96b636e4e521d0ca) | 52939333 |
+
+The deployment source passed [complete Foundry CI](https://github.com/zkp2p/zkp2p-contracts/actions/runs/39768499783)
+and [full manual Release readiness](https://github.com/zkp2p/zkp2p-contracts/actions/runs/39768543477),
+including build/package/localhost, four coverage lanes, floors and Codecov.
+Explorer verification is a separate operation: its exact-source results are
+recorded in the manifest after the explorer API exposes matching source and
+constructor metadata. Deployed bytecode and constructor transaction checks already
+passed independently of explorer indexing.
+
+### Immutable package and activation evidence
+
+`0.4.4-rc.8` is an immutable branch tarball containing the seven confirmed passive
+addresses and source ABIs. All 41 pre-existing staging exports remain semantically
+unchanged; historical aliases retain their deployed ABIs. No npm tag is changed.
+The package's record/export commit differs from `manifest.sourceCommit`, which
+remains the exact deployment and compilation source above.
+
+Services may build against this passive artifact while activation is pending.
+Before starting them, use a clean checkout of that exact record/export commit and
+run `yarn deploy:orchestrator-v4 base_staging verify` without a signing key. It
+accepts the committed passive manifest as input, independently requires live
+active registration, routes, writers, privacy and paused predecessor state, and
+writes `orchestrator-v4-base_staging.json.verification` with `active=true`. That
+ignored receipt does not dirty the checkout. Do not reject the passive input's
+`active=false` before running the verifier. Later activation receipts and drain
+evidence belong to the deployment record; they do not require rebuilding every
+consumer solely to change an activation flag. Protected source-path equivalence
+remains enforced by the canonical runner.
+
 ## Release checklist
 
 - [x] Identify merged contract source and affected ABI changes.
@@ -256,10 +304,11 @@ unchanged. The independent ownership inventory PRs are not closed by this work.
 - [ ] Required staging registry ownership migrated.
 - [ ] V1 and October 16 O4 paused with reviewed zero-open-intent checkpoints and unchanged counters.
 - [ ] Fresh Pay signal relayer registered before concurrent Pay testing.
-- [ ] Exact release SHA complete Foundry and Release readiness checks green.
-- [ ] Fresh staging suite deployed, activated and independently verified.
+- [x] Exact deployment SHA complete Foundry and Release readiness checks green.
+- [x] Fresh staging suite passively deployed and independently verified.
+- [ ] Fresh staging suite activated after ownership, drain and privacy gates.
 - [ ] Basescan source and constructor verification complete.
 - [ ] Confirmed manifest, addresses, transactions and blocks recorded in PR.
 - [ ] Downstream services deployed against the fresh addresses and start blocks.
 - [ ] Real staging quote/signal/payment verification/fulfillment traced end to end.
-- [ ] Canonical PR remains open; superseded deployment PR linked and closed.
+- [x] Canonical PR #362 remains open; superseded deployment PR #356 linked and closed.

@@ -1,0 +1,248 @@
+{
+  "status": "PASSIVE_DEPLOYMENT_CONFIRMED_NOT_ACTIVE",
+  "chainId": 8453,
+  "sourceCommit": "cd849c5383a274a4c970d7bb6231e032285fd9a2",
+  "verifiedAtBlock": 52939368,
+  "signer": "0x41123d6419C7b8e44157f6F3b0088442116641eC",
+  "nonce": 49,
+  "pendingNonce": 49,
+  "balanceWei": "114190722713289186",
+  "gasUsed": "13279823",
+  "l2ExecutionFeeWei": "79678938000000",
+  "l1DataFeeWei": "656081824076",
+  "receiptTotalFeeWei": "80335019824076",
+  "signerBalanceDeltaWei": "80335019824076",
+  "allReceiptsCanonical": true,
+  "transactions": [
+    {
+      "step": "deploy:StakeVaultV2",
+      "hash": "0xbd800d5ece6987ea042c20110b7b9f415cf3b04f0c3ca94fca9df178621ba228",
+      "block": 52939285,
+      "nonce": 26,
+      "gasUsed": "1635653",
+      "effectiveGasPriceWei": "6000000",
+      "l2ExecutionFeeWei": "9813918000000",
+      "l1FeeWei": "93580291568"
+    },
+    {
+      "step": "deploy:AddressGroupRegistryV4",
+      "hash": "0x1f3d44ba9332ffde45d70ba3dbee34a3b806a0e785baf5f8d48f4bf46503e9f3",
+      "block": 52939287,
+      "nonce": 27,
+      "gasUsed": "722846",
+      "effectiveGasPriceWei": "6000000",
+      "l2ExecutionFeeWei": "4337076000000",
+      "l1FeeWei": "43090976131"
+    },
+    {
+      "step": "deploy:WhitelistPolicyV2",
+      "hash": "0xb4f612d98e5f1e199650622460e23164c511f41828225361da6e76608bf85681",
+      "block": 52939289,
+      "nonce": 28,
+      "gasUsed": "574258",
+      "effectiveGasPriceWei": "6000000",
+      "l2ExecutionFeeWei": "3445548000000",
+      "l1FeeWei": "30991925199"
+    },
+    {
+      "step": "deploy:DisputeProtectionPolicyV2",
+      "hash": "0x993696ace583b1e1d4b92055b2afeb0a69ceb109d494748277d8bfeba2c8f4f9",
+      "block": 52939292,
+      "nonce": 29,
+      "gasUsed": "1264111",
+      "effectiveGasPriceWei": "6000000",
+      "l2ExecutionFeeWei": "7584666000000",
+      "l1FeeWei": "67391423217"
+    },
+    {
+      "step": "StakeVaultV2:setController",
+      "hash": "0x8fb7914de40014039cfd9c41c2ba1852f48eee6ee14fe80b8f78309c66ef81d1",
+      "block": 52939294,
+      "nonce": 30,
+      "gasUsed": "48308",
+      "effectiveGasPriceWei": "6000000",
+      "l2ExecutionFeeWei": "289848000000",
+      "l1FeeWei": "1901837598"
+    },
+    {
+      "step": "deploy:UnifiedPaymentVerifierV4",
+      "hash": "0x994b14c6b22114d9bc455c8213c2a91f6a9d20223d5f4b43698cfba4e7776a72",
+      "block": 52939296,
+      "nonce": 31,
+      "gasUsed": "2017456",
+      "effectiveGasPriceWei": "6000000",
+      "l2ExecutionFeeWei": "12104736000000",
+      "l1FeeWei": "99590918858"
+    },
+    {
+      "step": "verifier-method:0xe99a5081226cbbff9440a63da5caa04fa30f210c12c4dd9976132ac075054cd9",
+      "hash": "0x85a96c098a93351ef577a725bae4686545871eabed61e8cb43483b8a0e7c7842",
+      "block": 52939299,
+      "nonce": 32,
+      "gasUsed": "91858",
+      "effectiveGasPriceWei": "6000000",
+      "l2ExecutionFeeWei": "551148000000",
+      "l1FeeWei": "1897290290"
+    },
+    {
+      "step": "verifier-method:0xf752c7d19698ecb0bb8988abf9b9a53a4c3657f3bc8850a6fb59fdf3e3ce8cd3",
+      "hash": "0x5c44f68ba9e3bd5da1959e54640194fc60506cd2fb5b764b0a149533a8572132",
+      "block": 52939301,
+      "nonce": 33,
+      "gasUsed": "74758",
+      "effectiveGasPriceWei": "6000000",
+      "l2ExecutionFeeWei": "448548000000",
+      "l1FeeWei": "1913841794"
+    },
+    {
+      "step": "verifier-method:0x62c7ed738ad3e7618111348af32691b5767777fbaf46a2d8943237625552645c",
+      "hash": "0xd92e1441c972414ae9a84f613c277bb05b8d1ab901c6fc37a5a7fcb1ed46bdbd",
+      "block": 52939303,
+      "nonce": 34,
+      "gasUsed": "74758",
+      "effectiveGasPriceWei": "6000000",
+      "l2ExecutionFeeWei": "448548000000",
+      "l1FeeWei": "1913841794"
+    },
+    {
+      "step": "verifier-method:0xcac9daea62d7b89d75ac73af4ee14dcf25721012ae82b568c2ea5c808eaa04ff",
+      "hash": "0x3e52509fc79d36ed5908a6bee3a893630b409e65a8104d4d33fb06aa770b56f9",
+      "block": 52939305,
+      "nonce": 35,
+      "gasUsed": "74758",
+      "effectiveGasPriceWei": "6000000",
+      "l2ExecutionFeeWei": "448548000000",
+      "l1FeeWei": "1913841794"
+    },
+    {
+      "step": "verifier-method:0x5908bb0c9b87763ac6171d4104847667e7f02b4c47b574fe890c1f439ed128bb",
+      "hash": "0x0421fb80966acde3d57d99b379a91a78222b9d03a8a2f5a39babb28b57ba5c85",
+      "block": 52939307,
+      "nonce": 36,
+      "gasUsed": "74758",
+      "effectiveGasPriceWei": "6000000",
+      "l2ExecutionFeeWei": "448548000000",
+      "l1FeeWei": "1977487101"
+    },
+    {
+      "step": "verifier-method:0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
+      "hash": "0xe5d1cf207810425350eb4d6c14703f72d274da02dc92c8a06ec81318960244a3",
+      "block": 52939309,
+      "nonce": 37,
+      "gasUsed": "74758",
+      "effectiveGasPriceWei": "6000000",
+      "l2ExecutionFeeWei": "448548000000",
+      "l1FeeWei": "1977487101"
+    },
+    {
+      "step": "verifier-method:0x617f88ab82b5c1b014c539f7e75121427f0bb50a4c58b187a238531e7d58605d",
+      "hash": "0x3724dcbc6d1d50b664b9d843c60f706e2e2a5786984921d799588367c89436c9",
+      "block": 52939312,
+      "nonce": 38,
+      "gasUsed": "74758",
+      "effectiveGasPriceWei": "6000000",
+      "l2ExecutionFeeWei": "448548000000",
+      "l1FeeWei": "1977487101"
+    },
+    {
+      "step": "verifier-method:0x10940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d",
+      "hash": "0x226a6c41570389dbff5022632ad5c810647a3a8ebbec3c2026cb0aacb15e5f3c",
+      "block": 52939314,
+      "nonce": 39,
+      "gasUsed": "74758",
+      "effectiveGasPriceWei": "6000000",
+      "l2ExecutionFeeWei": "448548000000",
+      "l1FeeWei": "2029175047"
+    },
+    {
+      "step": "verifier-method:0x554a007c2217df766b977723b276671aee5ebb4adaea0edb6433c88b3e61dac5",
+      "hash": "0x5ca410576631892258cd7cb0bd498fede07f278fdc65e551d3c625f6917e23c2",
+      "block": 52939316,
+      "nonce": 40,
+      "gasUsed": "74746",
+      "effectiveGasPriceWei": "6000000",
+      "l2ExecutionFeeWei": "448476000000",
+      "l1FeeWei": "2029175047"
+    },
+    {
+      "step": "verifier-method:0xa5418819c024239299ea32e09defae8ec412c03e58f5c75f1b2fe84c857f5483",
+      "hash": "0x2ad94dd2bb621d58d8ddaacccb589baa26653be652701bdaa86a091432cc9209",
+      "block": 52939318,
+      "nonce": 41,
+      "gasUsed": "74758",
+      "effectiveGasPriceWei": "6000000",
+      "l2ExecutionFeeWei": "448548000000",
+      "l1FeeWei": "2029175047"
+    },
+    {
+      "step": "verifier-method:0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f",
+      "hash": "0x67eaf216b93018adb344fd16c15cf8cc22f5066e241407e51087d1fb97958925",
+      "block": 52939320,
+      "nonce": 42,
+      "gasUsed": "74758",
+      "effectiveGasPriceWei": "6000000",
+      "l2ExecutionFeeWei": "448548000000",
+      "l1FeeWei": "2033988719"
+    },
+    {
+      "step": "verifier-method:0x1d966dbd6aeb8674d7c05174bd0ded7b56a798672bfb862ef20bbe8c2bbfce18",
+      "hash": "0x7aeee9470e4ac13decbca753f26797a2ba4e01d4a6f53768c129b5f111563040",
+      "block": 52939322,
+      "nonce": 43,
+      "gasUsed": "74758",
+      "effectiveGasPriceWei": "6000000",
+      "l2ExecutionFeeWei": "448548000000",
+      "l1FeeWei": "2033988719"
+    },
+    {
+      "step": "verifier-method:0xf81480907d808d639ad3230869e4b05a3b01b2d34e323af40f2efab807effd32",
+      "hash": "0xe3c2a4691f135417a4082d7d4957178a11536348a4dd367ed61f81c16134776d",
+      "block": 52939325,
+      "nonce": 44,
+      "gasUsed": "74758",
+      "effectiveGasPriceWei": "6000000",
+      "l2ExecutionFeeWei": "448548000000",
+      "l1FeeWei": "1858909650"
+    },
+    {
+      "step": "verifier-method:0x790dd0cc68b6e7f474649a6c0a5463a964be9d2589e2076b6dc99f5701543f51",
+      "hash": "0x0ae892c7f79d08126daabbe9dff9483466798e1b7a4ad8fc2d8543bb080f4edd",
+      "block": 52939327,
+      "nonce": 45,
+      "gasUsed": "74758",
+      "effectiveGasPriceWei": "6000000",
+      "l2ExecutionFeeWei": "448548000000",
+      "l1FeeWei": "1858909650"
+    },
+    {
+      "step": "deploy:OrchestratorV4",
+      "hash": "0xdb508c7f882918a6a7a37f6a0087d124c9ef85e0d3e104f9d7fd80e1899e89db",
+      "block": 52939329,
+      "nonce": 46,
+      "gasUsed": "4288363",
+      "effectiveGasPriceWei": "6000000",
+      "l2ExecutionFeeWei": "25730178000000",
+      "l1FeeWei": "212193698219"
+    },
+    {
+      "step": "OrchestratorV4:setSettlementPolicy",
+      "hash": "0x999e856ab553ea2ec3d35a0182e66e0593211800e80c1e4fd7a26cc098bdc4b4",
+      "block": 52939331,
+      "nonce": 47,
+      "gasUsed": "47553",
+      "effectiveGasPriceWei": "6000000",
+      "l2ExecutionFeeWei": "285318000000",
+      "l1FeeWei": "1821839808"
+    },
+    {
+      "step": "deploy:ProtocolViewerV4",
+      "hash": "0x7f4463265990bbadd92ebdac1d42c528b4cbf245cbd0a9bc96b636e4e521d0ca",
+      "block": 52939333,
+      "nonce": 48,
+      "gasUsed": "1617575",
+      "effectiveGasPriceWei": "6000000",
+      "l2ExecutionFeeWei": "9705450000000",
+      "l1FeeWei": "78074314624"
+    }
+  ]
+}
