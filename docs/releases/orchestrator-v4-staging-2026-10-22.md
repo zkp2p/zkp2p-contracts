@@ -57,8 +57,18 @@ must match the confirmed transaction prefix. Old dispute writers remain enabled.
 This staging cutover temporarily removes payment routes while rebuilding them;
 coordinate a staging maintenance window. O3 retains its existing lifecycle hook
 and pending O3 intents can fulfill through UPV4. UPV4 rejects O1: check that no
-O1 intent still needs proof fulfillment before activation. The model regression
-explicitly demonstrates this compatibility boundary.
+O1 intent still needs proof fulfillment before activation. The recorded indexer
+checkpoint has no signaled V1 intents at block `52937634`; the corresponding
+monotonic V1 counter is `290`. Activation requires V1 to be paused and its counter
+to remain `290`, before the first shared write and every following transition.
+The historical owner must call `pauseOrchestrator()` before cutover. A changed
+counter requires a new drain review and configuration, never a bypass. The model
+regression explicitly demonstrates the V1 compatibility boundary. The executed
+October 16 O4 is also incompatible with the new verifier: its old 12-field intent
+layout is neither the current V4 interface nor the V2 layout selected by its
+legacy probe. Its zero-open-intent checkpoint at block `52937634`, counter `38`,
+and paused state are required by the same guard. Both old orchestrators remain
+registered so historical cancellations and inspection retain their normal paths.
 
 For a future production release the same script deploys under the approved
 production signer and governance configuration, transfers single-step ownership
@@ -67,6 +77,17 @@ to the configured Safe, and nominates the Safe on the two-step owners.
 Direct production activation is rejected. Production Safe simulation, proposal
 and execution are separate governance operations, never authorized by this
 staging release.
+
+The reused relayer registry remains at
+`0xB214650b424E6b5fdcB1259566eB7A512D8Bd25E`, owned by
+`0xdd93E0f5fC32c86A568d87Cb4f08598f55E980F3` at block `52937550`.
+The fresh Pay signal relayer `0xBC6Ca58369853D77a9A2f33358334BF9E9B9094F`
+is not whitelisted. Its owner must submit zero-value
+`addRelayer(0xBC6Ca58369853D77a9A2f33358334BF9E9B9094F)` to that registry,
+calldata `0xdd39f00d000000000000000000000000bc6ca58369853d77a9a2f33358334bf9e9b9094f`,
+before concurrent Pay intents are exercised. `allowMultipleIntents` stays false;
+serial staging tests do not require this permission. Fulfillment is permissionless
+and the isolated fulfillment signer needs no relayer registration.
 
 ## Recovery and evidence
 
@@ -98,7 +119,12 @@ The source ABI package includes the six merged V4/V2 artifacts under
 `@zkp2p/contracts-v2/abis/contracts`. A local `npm pack --ignore-scripts` tarball
 supports branch consumers while the PR remains unmerged. Do not publish from a
 branch: the repository's trusted publisher requires canonical `main`. No stale
-deployed address is aliased to a new ABI.
+deployed address is aliased to a new ABI. Executed October 16 records removed
+from main by the source rollback are preserved: the bypass stack and
+`WhitelistPolicyV4` retain their original names; the old O4, UPV4, DPPV2 and
+StakeVaultV2 records use the explicit `Historical20261016` suffix. Each historical
+address and source export uses its original deployed ABI. These aliases preserve
+existing obligations without presenting the old suite as this release.
 
 ## Rollback
 
@@ -140,6 +166,8 @@ unchanged. The independent ownership inventory PRs are not closed by this work.
 - [x] Implement one resumable environment-configured release runner.
 - [x] Exercise permission rejection and partial-deployment/activation recovery locally.
 - [ ] Required staging registry ownership migrated.
+- [ ] V1 and October 16 O4 paused with reviewed zero-open-intent checkpoints and unchanged counters.
+- [ ] Fresh Pay signal relayer registered before concurrent Pay testing.
 - [ ] Exact release SHA complete Foundry and Release readiness checks green.
 - [ ] Fresh staging suite deployed, activated and independently verified.
 - [ ] Basescan source and constructor verification complete.

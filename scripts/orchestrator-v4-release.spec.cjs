@@ -5,7 +5,7 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const { test } = require("node:test");
 const hre = require("hardhat");
-const { Wallet, utils, constants } = require("ethers");
+const { ContractFactory, Wallet, utils, constants } = require("ethers");
 const { inspect, assertBaseline, validateConfig, TransactionJournal, deploySuite, activate, verifySuite, activationTransactions } = require("./deploy-orchestrator-v4.ts");
 
 // Public Hardhat fixture account. Never load a service or production signer in these tests.
@@ -29,7 +29,14 @@ async function fixture() {
   const uv = await deploy("UnifiedPaymentVerifierV3", [or.address, nr.address, av.address]);
   const escrow = await deploy("EscrowV2", [wallet.address, chainId, or.address, pvr.address, rr.address, 1, 100, 3600]);
   const o3 = await deploy("OrchestratorV3", [wallet.address, chainId, er.address, pvr.address, rr.address, 0, wallet.address]);
+  const hooks = await deploy("PostIntentHookRegistry");
+  const o1 = await deploy("Orchestrator", [wallet.address, chainId, er.address, pvr.address, hooks.address, rr.address, 0, wallet.address]);
+  await (await o1.pauseOrchestrator()).wait();
   const groups = await deploy("AddressGroupRegistry"), whitelist = await deploy("WhitelistPolicy", [groups.address, er.address, or.address]);
+  const historical = require("../deployments/base_staging/OrchestratorV4Historical20261016.json");
+  const oldO4 = await new ContractFactory(historical.abi, historical.bytecode, wallet).deploy(wallet.address, chainId, er.address, pvr.address, rr.address, 0, wallet.address, whitelist.address);
+  await oldO4.deployed(); await (await oldO4.pauseOrchestrator()).wait();
+  deployed.OrchestratorV4Historical20261016 = oldO4;
   const hook = await deploy("WhitelistLifecycleHook", [or.address, whitelist.address]);
   await (await er.addEscrow(escrow.address)).wait(); await (await or.addOrchestrator(o3.address)).wait();
   await (await o3.setLifecycleHook(hook.address)).wait();
@@ -39,11 +46,11 @@ async function fixture() {
     await (await uv.addPaymentMethod(method)).wait(); await (await pvr.addPaymentMethod(method, uv.address, currencies)).wait();
   }
   const existing = {};
-  for (const name of ["EscrowV2", "EscrowRegistry", "OrchestratorRegistry", "PaymentVerifierRegistry", "RelayerRegistry", "NullifierRegistryV2", "DisputeNullifierRegistry", "DisputeVerifier", "MultiAttestationVerifier", "OrchestratorV3", "UnifiedPaymentVerifierV3"]) {
+  for (const name of ["EscrowV2", "EscrowRegistry", "OrchestratorRegistry", "PaymentVerifierRegistry", "RelayerRegistry", "NullifierRegistryV2", "DisputeNullifierRegistry", "DisputeVerifier", "MultiAttestationVerifier", "OrchestratorV3", "UnifiedPaymentVerifierV3", "Orchestrator", "OrchestratorV4Historical20261016"]) {
     const contract = deployed[name], receipt = await contract.deployTransaction.wait();
-    existing[name] = { address: contract.address, artifact: name === "DisputeNullifierRegistry" ? "NullifierRegistry" : name, runtimeCodeHash: utils.keccak256(await hre.ethers.provider.getCode(contract.address)), deploymentTransaction: receipt.transactionHash, deploymentBlock: receipt.blockNumber };
+    existing[name] = { address: contract.address, artifact: name === "DisputeNullifierRegistry" ? "NullifierRegistry" : name === "OrchestratorV4Historical20261016" ? "OrchestratorV4" : name, runtimeCodeHash: utils.keccak256(await hre.ethers.provider.getCode(contract.address)), deploymentTransaction: receipt.transactionHash, deploymentBlock: receipt.blockNumber };
   }
-  const config = { version: 1, environment: "base_staging", chainId, signer: wallet.address, governance: wallet.address, existing, stakeToken: token.address, protocolFee: "0", protocolFeeRecipient: wallet.address, allowMultipleIntents: false, predecessorHook: hook.address, paymentMethods, retainedDisputeWriters: [dv.address], attestationWitnesses: [other], attestationThreshold: "1", baselineBlock: await hre.ethers.provider.getBlockNumber() };
+  const config = { version: 1, environment: "base_staging", chainId, signer: wallet.address, governance: wallet.address, existing, stakeToken: token.address, protocolFee: "0", protocolFeeRecipient: wallet.address, allowMultipleIntents: false, predecessorHook: hook.address, paymentMethods, retainedDisputeWriters: [dv.address], attestationWitnesses: [other], attestationThreshold: "1", baselineBlock: await hre.ethers.provider.getBlockNumber(), legacyDrainCheckpoints: ["Orchestrator", "OrchestratorV4Historical20261016"].map((contract) => ({ contract, intentCounter: "0", indexedBlock: existing[contract].deploymentBlock })) };
   const directory = mkdtempSync(join(tmpdir(), "o4-release-test-"));
   hre.config.paths.deployments = join(directory, "deployments");
   const path = join(directory, "manifest.json");
@@ -74,6 +81,19 @@ test("seven-contract deployment resumes without duplicate addresses or transacti
     const nonce = await wallet.getTransactionCount();
     const restored = new TransactionJournal(f.path, JSON.parse(readFileSync(f.path)), wallet);
     await deploySuite(hre, restored); assert.equal(await wallet.getTransactionCount(), nonce);
+    await (await f.deployed.Orchestrator.unpauseOrchestrator()).wait();
+    const beforeRejectedActivation = await wallet.getTransactionCount();
+    await assert.rejects(activate(hre, restored), /Orchestrator must be paused/);
+    assert.equal(await wallet.getTransactionCount(), beforeRejectedActivation);
+    await (await f.deployed.Orchestrator.pauseOrchestrator()).wait();
+    restored.manifest.configuration.legacyDrainCheckpoints[0].intentCounter = "1";
+    await assert.rejects(activate(hre, restored), /Orchestrator intent counter changed/);
+    restored.manifest.configuration.legacyDrainCheckpoints[0].intentCounter = "0";
+    await (await f.deployed.OrchestratorV4Historical20261016.unpauseOrchestrator()).wait();
+    const beforeOldO4Rejection = await wallet.getTransactionCount();
+    await assert.rejects(activate(hre, restored), /OrchestratorV4Historical20261016 must be paused/);
+    assert.equal(await wallet.getTransactionCount(), beforeOldO4Rejection);
+    await (await f.deployed.OrchestratorV4Historical20261016.pauseOrchestrator()).wait();
     await activate(hre, restored);
     assert.deepEqual(await f.deployed.PaymentVerifierRegistry.getPaymentMethods(), f.config.paymentMethods.map((x) => x.method));
     assert.deepEqual(await f.deployed.NullifierRegistryV2.getWriters(), [restored.manifest.contracts.UnifiedPaymentVerifierV4.address]);
