@@ -65,6 +65,19 @@ export const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
   ProtocolViewerV4: "contracts/ProtocolViewerV4.sol/ProtocolViewerV4.json",
 };
 
+// Executed staging stacks still hold historical obligations. Their ABI must stay
+// bound to the deployed record, never to a newer contract reusing the source name.
+export const HISTORICAL_ABI_DEPLOYMENTS = [
+  "DisputeProtectionPolicyBypass",
+  "StakeVaultBypass",
+  "IntentLifecycleHookV1Bypass",
+  "WhitelistPolicyV4",
+  "DisputeProtectionPolicyV2Historical20261016",
+  "StakeVaultV2Historical20261016",
+  "OrchestratorV4Historical20261016",
+  "UnifiedPaymentVerifierV4Historical20261016",
+] as const;
+
 function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
@@ -127,10 +140,13 @@ export async function extractABIs(): Promise<void> {
   const contractsDir = path.join(ABIS_DIR, "contracts");
   ensureDir(contractsDir);
   const sourceIndex: string[] = [];
-  for (const [name, artifactRelativePath] of Object.entries(
-    SOURCE_ABI_ARTIFACTS
-  )) {
-    const artifactPath = path.join(ROOT, "artifacts", artifactRelativePath);
+  const abiSources = [
+    ...Object.entries(SOURCE_ABI_ARTIFACTS).map(([name, relativePath]) =>
+      [name, path.join(ROOT, "artifacts", relativePath)]),
+    ...HISTORICAL_ABI_DEPLOYMENTS.map((name) =>
+      [name, path.join(ROOT, "deployments", "base_staging", `${name}.json`)]),
+  ];
+  for (const [name, artifactPath] of abiSources) {
     if (!fs.existsSync(artifactPath)) {
       throw new Error(`Missing compiled artifact for ${name}: ${artifactPath}`);
     }

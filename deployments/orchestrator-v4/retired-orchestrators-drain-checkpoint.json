@@ -1,0 +1,32 @@
+{
+  "query": "query { Intent(where:{status:{_eq:\"SIGNALED\"}},limit:1000){intentHash orchestratorAddress status} chain_metadata{latest_processed_block} }",
+  "response": {
+    "data": {
+      "Intent": [
+        {
+          "intentHash": "0x0b248466b017a76849323f694d4ad356a8a64aacb5b813414ff67999190c604b",
+          "orchestratorAddress": "0xc17a59227b136c45faa153086a15ef87ed14be00",
+          "status": "SIGNALED"
+        }
+      ],
+      "chain_metadata": [
+        {
+          "latest_processed_block": 52937634
+        }
+      ]
+    }
+  },
+  "onchainCheckpoint": {
+    "blockNumber": 52937634,
+    "Orchestrator": {
+      "address": "0xF9b9CD27Deea496B960b3cb5221b514705fCaF5e",
+      "intentCounter": "290",
+      "paused": false
+    },
+    "OrchestratorV4Historical20261016": {
+      "address": "0x338dfB48fAcA1F2dddD0da83Ecb31819b0Cf4612",
+      "intentCounter": "38",
+      "paused": false
+    }
+  }
+}

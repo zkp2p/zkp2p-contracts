@@ -81,6 +81,13 @@
       "runtimeCodeHash": "0x7636c79f0f46cf88c7122767e553264f1898fa253ea214f6a1c3187b0f0a4bcf",
       "deploymentTransaction": "0xa5b62cfc333a942673cac178d74ed18732ab4b9d776ccce653611c36aa7a2d51",
       "deploymentBlock": 49352536
+    },
+    "Orchestrator": {
+      "address": "0x88888883Ed048FF0a415271B28b2F52d431810D0",
+      "artifact": "Orchestrator",
+      "runtimeCodeHash": "0xf511343f2903dd1877c490796cc9423fac66b162b59004d55e522046c1ceb050",
+      "deploymentTransaction": "0x0944b5b5ce03b4e335bf48d8ee158a347445715873f7e04cc7a2c99563803935",
+      "deploymentBlock": 37290782
     }
   },
   "stakeToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
@@ -235,5 +242,6 @@
     "0xE078D93bFdd87A8c5C5cCA5905DCbA0Dd7A1F0BD"
   ],
   "attestationThreshold": "1",
-  "baselineBlock": 52936874
+  "baselineBlock": 52936874,
+  "legacyDrainCheckpoints": null
 }

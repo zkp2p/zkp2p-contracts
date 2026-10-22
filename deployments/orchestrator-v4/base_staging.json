@@ -81,6 +81,20 @@
       "runtimeCodeHash": "0x3125872c0996c6d79fc3ed080a1b85b0f6eeb1fd51d1003d517ea3053af5a8fa",
       "deploymentTransaction": "0x6126084fd2b68f683d95c57fd782bce122b1ffce8f57c8857fd3526b24a83ea9",
       "deploymentBlock": 48966649
+    },
+    "Orchestrator": {
+      "address": "0xF9b9CD27Deea496B960b3cb5221b514705fCaF5e",
+      "artifact": "Orchestrator",
+      "runtimeCodeHash": "0xf511343f2903dd1877c490796cc9423fac66b162b59004d55e522046c1ceb050",
+      "deploymentTransaction": "0x87941e6d712a81f7416c5c58421f0c7a9d6ecffb2b8382aa760e9c83f5be8898",
+      "deploymentBlock": 37207010
+    },
+    "OrchestratorV4Historical20261016": {
+      "address": "0x338dfB48fAcA1F2dddD0da83Ecb31819b0Cf4612",
+      "artifact": "OrchestratorV4",
+      "runtimeCodeHash": "0xacece62784689956be7b22118b5a59c04d420ed5da3c2671e9c211e616785d75",
+      "deploymentTransaction": "0x18aeb7b6110ffe9f4547aa72aa4e743b6f67c41f4034bcf9c0182ff6c738798b",
+      "deploymentBlock": 52665856
     }
   },
   "stakeToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
@@ -243,5 +257,17 @@
     "0x4ab950AE1e3326578Bf7e643a2031E858aBa2927"
   ],
   "attestationThreshold": "1",
-  "baselineBlock": 52936874
+  "baselineBlock": 52936874,
+  "legacyDrainCheckpoints": [
+    {
+      "contract": "Orchestrator",
+      "intentCounter": "290",
+      "indexedBlock": 52937634
+    },
+    {
+      "contract": "OrchestratorV4Historical20261016",
+      "intentCounter": "38",
+      "indexedBlock": 52937634
+    }
+  ]
 }

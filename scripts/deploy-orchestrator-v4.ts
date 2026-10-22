@@ -24,6 +24,7 @@ export type ReleaseConfig = {
   existing: Record<string, Pin>; stakeToken: string; protocolFee: string; protocolFeeRecipient: string;
   allowMultipleIntents: boolean; predecessorHook: string; paymentMethods: Array<{ method: string; currencies: string[] }>;
   retainedDisputeWriters: string[]; attestationWitnesses: string[]; attestationThreshold: string; baselineBlock: number;
+  legacyDrainCheckpoints: Array<{ contract: string; intentCounter: string; indexedBlock: number }>;
 };
 type Receipt = { blockNumber: number; blockHash: string; transactionHash: string; gasUsed: string; effectiveGasPrice: string };
 type Transaction = { step: string; hash: string; nonce: number; to: string | null; data: string; value: string; receipt: Receipt | null };
@@ -56,7 +57,7 @@ export function validateConfig(value: unknown): asserts value is ReleaseConfig {
   check(typeof c.protocolFee === "string" && /^\d+$/.test(c.protocolFee) && BigNumber.from(c.protocolFee).lte("50000000000000000"), "Invalid protocol fee");
   check(typeof c.allowMultipleIntents === "boolean", "Missing allowMultipleIntents setting");
   check(c.existing && typeof c.existing === "object", "Missing reused contract pins");
-  for (const name of ["EscrowV2", "EscrowRegistry", "OrchestratorRegistry", "PaymentVerifierRegistry", "RelayerRegistry", "NullifierRegistryV2", "DisputeNullifierRegistry", "DisputeVerifier", "MultiAttestationVerifier", "OrchestratorV3", "UnifiedPaymentVerifierV3"]) {
+  for (const name of ["EscrowV2", "EscrowRegistry", "OrchestratorRegistry", "PaymentVerifierRegistry", "RelayerRegistry", "NullifierRegistryV2", "DisputeNullifierRegistry", "DisputeVerifier", "MultiAttestationVerifier", "OrchestratorV3", "UnifiedPaymentVerifierV3", "Orchestrator"]) {
     const pin = c.existing[name];
     check(pin && utils.isAddress(pin.address) && !same(pin.address, ZERO) && /^0x[\da-f]{64}$/i.test(pin.runtimeCodeHash), `Invalid ${name} pin`);
     check(typeof pin.artifact === "string" && /^0x[\da-f]{64}$/i.test(pin.deploymentTransaction) && Number.isSafeInteger(pin.deploymentBlock), `Missing ${name} provenance`);
@@ -67,6 +68,9 @@ export function validateConfig(value: unknown): asserts value is ReleaseConfig {
   check(new Set(c.paymentMethods.map((m) => m.method.toLowerCase())).size === c.paymentMethods.length, "Duplicate payment method");
   for (const list of [c.retainedDisputeWriters, c.attestationWitnesses]) check(Array.isArray(list) && list.length > 0 && list.every(utils.isAddress), "Invalid writer/witness list");
   check(typeof c.attestationThreshold === "string" && /^[1-9]\d*$/.test(c.attestationThreshold), "Invalid witness threshold");
+  check(Array.isArray(c.legacyDrainCheckpoints) && c.legacyDrainCheckpoints.length > 0, "Missing reviewed legacy drain checkpoints");
+  for (const checkpoint of c.legacyDrainCheckpoints) check(c.existing[checkpoint.contract] && /^\d+$/.test(checkpoint.intentCounter) && Number.isSafeInteger(checkpoint.indexedBlock), "Invalid legacy drain checkpoint");
+  check(c.legacyDrainCheckpoints.some((checkpoint) => checkpoint.contract === "Orchestrator"), "V1 drain checkpoint is required");
 }
 
 async function existing(hre: HardhatRuntimeEnvironment, c: ReleaseConfig, name: string): Promise<Contract> {
@@ -94,6 +98,11 @@ export async function inspect(hre: HardhatRuntimeEnvironment, c: ReleaseConfig) 
   const escrow = await existing(hre, c, "EscrowV2"), escrowRegistry = await existing(hre, c, "EscrowRegistry");
   const o3 = await existing(hre, c, "OrchestratorV3"), attestor = await existing(hre, c, "MultiAttestationVerifier");
   const disputeVerifier = await existing(hre, c, "DisputeVerifier"), verifier = await existing(hre, c, "UnifiedPaymentVerifierV3");
+  const legacyOrchestrators = [];
+  for (const checkpoint of c.legacyDrainCheckpoints) {
+    const legacy = await existing(hre, c, checkpoint.contract);
+    legacyOrchestrators.push({ contract: checkpoint.contract, paused: await legacy.paused(at), intentCounter: (await legacy.intentCounter(at)).toString() });
+  }
   return {
     blockNumber: block.number, blockHash: block.hash, contracts, paymentMethods,
     requiredOwnershipChanges: REQUIRED_REGISTRY_OWNERS.filter((name) => !same(contracts[name].owner, c.governance)).map((name) => ({ name, address: contracts[name].address, owner: contracts[name].owner, requiredOwner: c.governance })),
@@ -104,6 +113,7 @@ export async function inspect(hre: HardhatRuntimeEnvironment, c: ReleaseConfig) 
     attestation: { witnesses: await attestor.witnesses(at), threshold: (await attestor.requiredSignatures(at)).toString() },
     disputeVerifier: { nullifierRegistry: await disputeVerifier.nullifierRegistry(at), attestationVerifier: await disputeVerifier.attestationVerifier(at) },
     paymentVerifier: { orchestratorRegistry: await verifier.orchestratorRegistry(at), nullifierRegistry: await verifier.nullifierRegistry(at), attestationVerifier: await verifier.attestationVerifier(at) },
+    legacyOrchestrators,
     signer: { address: c.signer, balanceWei: (await provider.getBalance(c.signer, block.number)).toString(), nonce: await provider.getTransactionCount(c.signer, block.number), pendingNonce: await provider.getTransactionCount(c.signer, "pending") },
   };
 }
@@ -255,6 +265,7 @@ export async function activationTransactions(hre: HardhatRuntimeEnvironment, m: 
 export async function activate(hre: HardhatRuntimeEnvironment, journal: TransactionJournal): Promise<void> {
   const c = journal.manifest.configuration;
   check(c.environment === "base_staging" && same(journal.wallet.address, c.governance), "Direct activation is staging-only; production uses its Safe batch");
+  assertLegacyDrained(c, await inspect(hre, c));
   const transactions = await activationTransactions(hre, journal.manifest);
   const started = transactions.some((tx) => journal.manifest.transactions.some((entry) => entry.step === tx.step));
   if (!started) await verifySuite(hre, journal, false);
@@ -267,7 +278,9 @@ export async function activate(hre: HardhatRuntimeEnvironment, journal: Transact
   }
   check(!transactions.slice(completed.length).some((tx) => journal.manifest.transactions.some((entry) => entry.step === tx.step)), "Activation journal is not a contiguous prefix");
   const assertActivationState = async (): Promise<void> => {
-    assertBaseline(c, await inspect(hre, c), journal.manifest, completed);
+    const snapshot = await inspect(hre, c);
+    assertLegacyDrained(c, snapshot);
+    assertBaseline(c, snapshot, journal.manifest, completed);
     const o4 = journal.manifest.contracts.OrchestratorV4; check(o4, "O4 is missing");
     const registered = await (await existing(hre, c, "OrchestratorRegistry")).isOrchestrator(o4.address);
     check(registered === completed.includes("register-orchestrator"), "O4 registration differs from the confirmed activation prefix");
@@ -280,6 +293,14 @@ export async function activate(hre: HardhatRuntimeEnvironment, journal: Transact
     await assertActivationState();
   }
   await verifySuite(hre, journal, true);
+}
+
+function assertLegacyDrained(c: ReleaseConfig, snapshot: Awaited<ReturnType<typeof inspect>>): void {
+  for (const checkpoint of c.legacyDrainCheckpoints) {
+    const legacy = snapshot.legacyOrchestrators.find((record) => record.contract === checkpoint.contract);
+    check(legacy && legacy.paused, `${checkpoint.contract} must be paused before the shared verifier cutover`);
+    check(legacy.intentCounter === checkpoint.intentCounter, `${checkpoint.contract} intent counter changed after its zero-open-intent checkpoint; drain and review again`);
+  }
 }
 
 export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: TransactionJournal, active: boolean): Promise<void> {
@@ -317,6 +338,7 @@ export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: Trans
   const registered = await (await existing(hre, c, "OrchestratorRegistry")).isOrchestrator(o.address);
   check(registered === active, "O4 registration does not match release phase");
   if (active) {
+    assertLegacyDrained(c, snapshot);
     check(snapshot.paymentMethods.every((method) => same(method.verifier, v.address)), "Not all payment routes select UPV4");
     check(equal(snapshot.nullifierWriters, [v.address]), "UPV4 must be the only payment nullifier writer");
     check(equal(snapshot.disputeWriters, [...c.retainedDisputeWriters, p.address]), "Policy writer missing or predecessor writer changed");
@@ -366,6 +388,8 @@ async function main(): Promise<void> {
     if (action === "prepare-governance") {
       check(environment === "base", "Governance batch is only for Base production");
       await verifySuite(hre, journal, false);
+      const snapshot = await inspect(hre, c);
+      assertLegacyDrained(c, snapshot);
       manifest.governanceTransactions = await activationTransactions(hre, manifest); journal.save();
       console.log("Unsigned Safe calls recorded; no governance transaction submitted.");
     }
