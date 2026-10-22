@@ -1,10 +1,11 @@
 # Orchestrator V4 staging release
 
-Status: implementation prepared; no new live contracts deployed yet. The four
-mutable staging registries still need their owner to transfer control to the
-verified staging deployer. The deploy command rejects this state before its
-first transaction. Existing private deposits also need their depositors to enable
-the fresh whitelist before activation. Production is unchanged.
+Status: implementation prepared; no new live contracts deployed yet. Staging
+may deploy and verify the fresh, unregistered suite while recording pending
+registry ownership. Activation remains blocked until the four mutable staging
+registries belong to the verified staging deployer, both incompatible predecessors
+are paused/drained, and existing private deposits enable the fresh whitelist.
+Production is unchanged.
 
 ## Scope and source
 
@@ -84,10 +85,23 @@ including coverage and Codecov, to be green.
 
 `inspect` performs only reads and writes a local preflight snapshot. `deploy`
 checks the selected chain, derived signer, pinned reused bytecode, wiring,
-registry ownership, payment catalog, witnesses, predecessor configuration and
-pending nonce before deploying. It installs the policy as the vault controller,
+registry ownership status, payment catalog, witnesses, predecessor configuration
+and pending nonce before deploying. Staging deployment writes only fresh contract
+state: missing reused-registry ownership is recorded in the manifest and blocks
+activation, but does not prevent passive deployment. All production deployment
+permission checks remain required. An inactive suite has no registry permission
+to lock existing escrow funds, and UPV4 has no replay-registry write permission. It installs the policy as the vault controller,
 configures UPV4 methods, selects O4's policy and sets its intent configuration.
-`activate` grants the new writer permissions, removes payment routes in reverse
+`verify` uses a read-only signer, needs no deployment key and requires an active
+registered suite with the expected permissions, routes, legacy pauses and privacy.
+Use it from the exact release checkout before starting dependent services. It
+writes refreshed evidence to the ignored manifest-path `.verification` sidecar,
+leaving the committed input manifest unchanged for repeatable clean-checkout gates.
+`verify-source`, `record-drain` and unsigned governance preparation also require
+no signing key. The manifest is supplied alongside the immutable package;
+`verification.active=false` means addresses are deployed but not activated.
+
+`activate` first requires reused-registry ownership, then grants the new writer permissions, removes payment routes in reverse
 order, recreates them in their original order with their original currencies,
 revokes UPV3's payment-nullifier permission and registers O4 last. Each transition
 must match the confirmed transaction prefix. Recovery reconciles mined receipts
@@ -146,6 +160,15 @@ before concurrent Pay intents are exercised. `allowMultipleIntents` stays false;
 serial staging tests do not require this permission. Fulfillment is permissionless
 and the isolated fulfillment signer needs no relayer registration.
 
+The [passive deployment plan](../../deployments/orchestrator-v4/passive-deployment-plan.json)
+records a Base fork rehearsal: 23 fresh-suite transactions, nonces 26–48 and
+13,279,823 execution gas. At block 52938969 the RPC quoted a 0.001 gwei tip
+and 0.005 gwei base fee, yielding approximately 0.000079678938 ETH execution
+plus 0.000000660751 ETH estimated L1 data fees. Recheck fees, balance and nonce
+before live broadcast. Predicted addresses in that plan are explicitly simulated
+until confirmed live receipts are recorded. No top-up is needed at the recorded
+0.114271057733113262 ETH staging balance.
+
 ## Recovery and evidence
 
 The canonical manifest is
@@ -158,7 +181,10 @@ records are also written for explorer verification and package extraction.
 Before broadcasting, the script saves the exact signed transaction in a local
 `.pending` file and records its hash in the manifest. Restarting reconciles that
 hash or rebroadcasts the same bytes; it does not allocate a second deployment
-nonce. A consumed nonce without the expected receipt fails closed. Preserve the
+nonce. EIP-1559 fees use the RPC `eth_maxPriorityFeePerGas` quote as the tip,
+with a twice-base-fee cap plus that tip; ethers v5's 1.5 gwei default tip is not
+used on Base. An unavailable priority quote or a tip above the RPC's total gas-price
+recommendation rejects before signing. A consumed nonce without the expected receipt fails closed. Preserve the
 manifest and `.pending` file together. Never delete a partial manifest to retry.
 The `.lock` file prevents concurrent release commands. If the process is killed,
 confirm that no release process is running, then remove only its stale `.lock`
