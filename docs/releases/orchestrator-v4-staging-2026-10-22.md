@@ -68,10 +68,10 @@ separately approved production release.
 
 ```sh
 yarn deploy:orchestrator-v4 base_staging inspect
-yarn deploy:orchestrator-v4 base_staging deploy
+HARDHAT_CONFIG=hardhat.canonical.config.ts yarn deploy:orchestrator-v4 base_staging deploy
 yarn deploy:orchestrator-v4 base_staging record-drain /path/to/post-pause-drain.json
-yarn deploy:orchestrator-v4 base_staging activate
-yarn deploy:orchestrator-v4 base_staging verify
+HARDHAT_CONFIG=hardhat.canonical.config.ts yarn deploy:orchestrator-v4 base_staging activate
+HARDHAT_CONFIG=hardhat.readonly.config.ts yarn deploy:orchestrator-v4 base_staging verify
 yarn deploy:orchestrator-v4 base_staging verify-source
 ```
 
@@ -269,10 +269,10 @@ The seven ordinary Hardhat records are under `deployments/base_staging/`.
 The deployment source passed [complete Foundry CI](https://github.com/zkp2p/zkp2p-contracts/actions/runs/39768499783)
 and [full manual Release readiness](https://github.com/zkp2p/zkp2p-contracts/actions/runs/39768543477),
 including build/package/localhost, four coverage lanes, floors and Codecov.
-Explorer verification is a separate operation: its exact-source results are
-recorded in the manifest after the explorer API exposes matching source and
-constructor metadata. Deployed bytecode and constructor transaction checks already
-passed independently of explorer indexing.
+All seven exact source/constructor checks passed on Basescan using compiler
+`v0.8.18+commit.87f61d96`, with no similar-match substitution. Their complete
+readbacks are recorded in the canonical manifest, independently of the earlier
+on-chain runtime/constructor checks.
 
 ### Immutable package and activation evidence
 
@@ -314,3 +314,25 @@ remains enforced by the canonical runner.
 - [ ] Downstream services deployed against the fresh addresses and start blocks.
 - [ ] Real staging quote/signal/payment verification/fulfillment traced end to end.
 - [x] Canonical PR #362 remains open; superseded deployment PR #356 linked and closed.
+
+### Canonical receipts and scoped group funding
+
+Base RPC preconfirmations can expose successful execution with an all-zero block
+hash before the transaction belongs to a sealed block. The execution entry point
+uses `hardhat.canonical.config.ts`, which preserves the canonical compiler/network
+configuration and normalizes only those receipt responses to pending. Standalone
+transaction-journal users import `CanonicalJsonRpcProvider` from
+`scripts/canonical-receipts.ts`. All other responses and errors remain unchanged.
+A regression replays the actual funding receipt: the zero-hash observation cannot
+enter the journal, and the same sealed transaction recovers without signing or
+broadcasting. The read-only verification-tool pin is independent of this execution
+adapter; deployed source, immutable package and protected paths are unchanged.
+
+The single scoped curator funding transferred 0.000012 ETH from the migrated
+staging deployer to `0x469dE3A098C6530E2842a538832eC0609D6c988d`, nonce 49.
+Transaction `0x6e21e7a32d13e66dc3d18c4369db39ddd16850e026e47cbc931a485f652347b3`
+is canonical at block 52939787, block hash
+`0x7369bae26124ff72e3ae4660c93e679c47b907042a427afa438dbd294fe33d75`.
+Initial preconfirmation metadata was reconciled from this same transaction with
+read-only receipt/block/transaction queries; no second transfer was signed.
+The journal is `deployments/orchestrator-v4/pay-curator-funding.json`.

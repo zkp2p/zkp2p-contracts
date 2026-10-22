@@ -1175,7 +1175,7 @@
     }
   },
   "verification": {
-    "verifiedAtBlock": 52939480,
+    "verifiedAtBlock": 52939855,
     "active": false,
     "bytecode": true,
     "constructors": true,
@@ -1210,7 +1210,72 @@
     ],
     "paymentCatalog": true,
     "escrowCompatible": true,
-    "predecessorPreserved": true
+    "predecessorPreserved": true,
+    "sources": [
+      {
+        "name": "StakeVaultV2",
+        "address": "0xa33dE1C8eD627fF5D6d94ABaC462A86b315cFb4e",
+        "compiler": "v0.8.18+commit.87f61d96",
+        "constructorArguments": "00000000000000000000000041123d6419c7b8e44157f6f3b0088442116641ec000000000000000000000000833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+        "sourceCommit": "cd849c5383a274a4c970d7bb6231e032285fd9a2",
+        "explorerUrl": "https://basescan.org/address/0xa33dE1C8eD627fF5D6d94ABaC462A86b315cFb4e#code",
+        "verified": true
+      },
+      {
+        "name": "AddressGroupRegistryV4",
+        "address": "0xE138653725e3602d596ae388D2B2FD05ed1148f3",
+        "compiler": "v0.8.18+commit.87f61d96",
+        "constructorArguments": "",
+        "sourceCommit": "cd849c5383a274a4c970d7bb6231e032285fd9a2",
+        "explorerUrl": "https://basescan.org/address/0xE138653725e3602d596ae388D2B2FD05ed1148f3#code",
+        "verified": true
+      },
+      {
+        "name": "WhitelistPolicyV2",
+        "address": "0xe034B9C59063DBad5F632c38515e75C24F625503",
+        "compiler": "v0.8.18+commit.87f61d96",
+        "constructorArguments": "000000000000000000000000e138653725e3602d596ae388d2b2fd05ed1148f3",
+        "sourceCommit": "cd849c5383a274a4c970d7bb6231e032285fd9a2",
+        "explorerUrl": "https://basescan.org/address/0xe034B9C59063DBad5F632c38515e75C24F625503#code",
+        "verified": true
+      },
+      {
+        "name": "DisputeProtectionPolicyV2",
+        "address": "0x3C536cD642cF0ca989899D392fb2c41Bff7A94b1",
+        "compiler": "v0.8.18+commit.87f61d96",
+        "constructorArguments": "00000000000000000000000041123d6419c7b8e44157f6f3b0088442116641ec000000000000000000000000a33de1c8ed627ff5d6d94abac462a86b315cfb4e000000000000000000000000973578148c5fd49b9f68b50b26066555325ac708000000000000000000000000e0b05a9655af0f31e32904267baa50fbc7f217ea000000000000000000000000fa6384eb6176cfec049540526a3d2126c3666d8a",
+        "sourceCommit": "cd849c5383a274a4c970d7bb6231e032285fd9a2",
+        "explorerUrl": "https://basescan.org/address/0x3C536cD642cF0ca989899D392fb2c41Bff7A94b1#code",
+        "verified": true
+      },
+      {
+        "name": "UnifiedPaymentVerifierV4",
+        "address": "0x7b1598b98cAC2930DD8D3174C329416848771748",
+        "compiler": "v0.8.18+commit.87f61d96",
+        "constructorArguments": "000000000000000000000000fa6384eb6176cfec049540526a3d2126c3666d8a0000000000000000000000002eb43d6c7c7ec4220aa6b8735bc053824a71778c0000000000000000000000009855a39ac5975069632e91160d8712cbff19e864",
+        "sourceCommit": "cd849c5383a274a4c970d7bb6231e032285fd9a2",
+        "explorerUrl": "https://basescan.org/address/0x7b1598b98cAC2930DD8D3174C329416848771748#code",
+        "verified": true
+      },
+      {
+        "name": "OrchestratorV4",
+        "address": "0x7222027313D6D8D7e9BCdD7d2411a228B998C180",
+        "compiler": "v0.8.18+commit.87f61d96",
+        "constructorArguments": "00000000000000000000000041123d6419c7b8e44157f6f3b0088442116641ec0000000000000000000000000000000000000000000000000000000000002105000000000000000000000000c545f336ec77e69bf115729accbf2e557a00ac910000000000000000000000002261416da54c85f975c73fa56ef4d2d6b0aef7cc000000000000000000000000b214650b424e6b5fdcb1259566eb7a512d8bd25e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000084e113087c97cd80ea9d78983d4b8ff61eca1929000000000000000000000000e034b9c59063dbad5f632c38515e75c24f625503",
+        "sourceCommit": "cd849c5383a274a4c970d7bb6231e032285fd9a2",
+        "explorerUrl": "https://basescan.org/address/0x7222027313D6D8D7e9BCdD7d2411a228B998C180#code",
+        "verified": true
+      },
+      {
+        "name": "ProtocolViewerV4",
+        "address": "0xEC0131D535160f32601BFca3DfA4B8043eefB56a",
+        "compiler": "v0.8.18+commit.87f61d96",
+        "constructorArguments": "",
+        "sourceCommit": "cd849c5383a274a4c970d7bb6231e032285fd9a2",
+        "explorerUrl": "https://basescan.org/address/0xEC0131D535160f32601BFca3DfA4B8043eefB56a#code",
+        "verified": true
+      }
+    ]
   },
   "governanceTransactions": []
 }
