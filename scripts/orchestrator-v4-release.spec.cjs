@@ -119,6 +119,10 @@ test("seven-contract deployment resumes without duplicate addresses or transacti
     await assert.rejects(activate(hre, restored), /was unpaused after the drain observation/);
     await recordDrainEvidence(hre, restored, await drainEvidence());
     await activate(hre, restored);
+    const savedEvidence = restored.manifest.activationDrainEvidence;
+    restored.manifest.activationDrainEvidence = null;
+    await assert.rejects(verifySuite(hre, restored, true), /Post-pause indexer drain evidence is required/);
+    restored.manifest.activationDrainEvidence = savedEvidence;
     assert.deepEqual(await f.deployed.PaymentVerifierRegistry.getPaymentMethods(), f.config.paymentMethods.map((x) => x.method));
     assert.deepEqual(await f.deployed.NullifierRegistryV2.getWriters(), [restored.manifest.contracts.UnifiedPaymentVerifierV4.address]);
     assert.deepEqual(await f.deployed.DisputeNullifierRegistry.getWriters(), [...f.config.retainedDisputeWriters, restored.manifest.contracts.DisputeProtectionPolicyV2.address]);

@@ -70,14 +70,16 @@ test("historical signal inventory rejects indexer-only absence, duplicates, fore
   const event = iface.encodeEventLog(iface.getEvent("IntentSignaled"), [hash, CALLS[0].to, 1, utils.id("venmo"), HISTORICAL_OWNER, HISTORICAL_OWNER, 1, utils.id("USD"), 1, 100]);
   const log = { ...event, address: historical.address, logIndex: 4 };
   const receipt = { status: 1, blockHash: utils.id("canonical"), blockNumber: 99, logs: [log] };
-  const legacy = { address: historical.address, interface: iface, provider: { getTransactionReceipt: async () => receipt }, getIntent: async () => ({ owner: constants.AddressZero }) };
+  const provider = { getTransactionReceipt: async () => receipt, getBlock: async () => ({ hash: receipt.blockHash }) };
+  const legacy = { address: historical.address, interface: iface, provider, getIntent: async () => ({ owner: constants.AddressZero }) };
   const refs = [{ transactionHash: utils.id("signal"), logIndex: 4 }];
   await assertLegacyIntentInventory(legacy, refs, "1", 100, 101);
   await assert.rejects(assertLegacyIntentInventory(legacy, [], "38", 100, 101), /full on-chain counter/);
   await assert.rejects(assertLegacyIntentInventory(legacy, [...refs, ...refs], "2", 100, 101), /Duplicate/);
   await assert.rejects(assertLegacyIntentInventory({ ...legacy, getIntent: async () => ({ owner: HISTORICAL_OWNER }) }, refs, "1", 100, 101), /remains open/);
-  await assert.rejects(assertLegacyIntentInventory({ ...legacy, provider: { getTransactionReceipt: async () => ({ ...receipt, logs: [{ ...log, address: constants.AddressZero }] }) } }, refs, "1", 100, 101), /expected event/);
+  await assert.rejects(assertLegacyIntentInventory({ ...legacy, provider: { ...provider, getTransactionReceipt: async () => ({ ...receipt, logs: [{ ...log, address: constants.AddressZero }] }) } }, refs, "1", 100, 101), /expected event/);
   await assert.rejects(assertLegacyIntentInventory(legacy, refs, "1", 98, 101), /after pause/);
+  await assert.rejects(assertLegacyIntentInventory({ ...legacy, provider: { ...provider, getBlock: async () => ({ hash: utils.id("reorg") }) } }, refs, "1", 100, 101), /not canonical/);
 });
 
 test("a residual V1 record requires its exact authentic unlock and a fully deleted escrow lock at both blocks", async () => {
@@ -86,14 +88,16 @@ test("a residual V1 record requires its exact authentic unlock and a fully delet
   const event = iface.encodeEventLog(iface.getEvent("FundsUnlocked"), [3, signal.intentHash, 1000000]);
   const receipt = { status: 1, blockHash: utils.id("sealed unlock"), blockNumber: 90, logs: [{ ...event, address: record.address, logIndex: 19 }] };
   const empty = { intentHash: constants.HashZero, amount: BigNumber.from(0), timestamp: BigNumber.from(0), expiryTime: BigNumber.from(0) };
-  const escrow = { address: record.address, interface: iface, provider: { getTransactionReceipt: async () => receipt }, getDepositIntent: async () => empty, getDepositIntentHashes: async () => [] };
+  const escrow = { address: record.address, interface: iface, provider: { getTransactionReceipt: async () => receipt, getBlock: async () => ({ hash: receipt.blockHash }) }, getDepositIntent: async () => empty, getDepositIntentHashes: async () => [] };
   const unlock = { transactionHash: utils.id("unlock"), logIndex: 19 };
-  await assertReleasedLegacyLock(escrow, signal, unlock, 100, 101);
-  await assert.rejects(assertReleasedLegacyLock(escrow, signal, undefined, 100, 101), /authenticated escrow unlock/);
-  await assert.rejects(assertReleasedLegacyLock(escrow, { ...signal, depositId: BigNumber.from(4) }, unlock, 100, 101), /differs from the authentic signal/);
-  await assert.rejects(assertReleasedLegacyLock({ ...escrow, getDepositIntent: async (_id, _hash, at) => at.blockTag === 100 ? { ...empty, amount: BigNumber.from(1) } : empty }, signal, unlock, 100, 101), /still has an intent lock/);
-  await assert.rejects(assertReleasedLegacyLock({ ...escrow, getDepositIntentHashes: async () => [signal.intentHash] }, signal, unlock, 100, 101), /still has an intent lock/);
-  await assert.rejects(assertReleasedLegacyLock(escrow, signal, unlock, 89, 101), /after pause/);
+  await assertReleasedLegacyLock(escrow, signal, unlock, 90, 18, 100, 101);
+  await assert.rejects(assertReleasedLegacyLock(escrow, signal, undefined, 90, 18, 100, 101), /authenticated escrow unlock/);
+  await assert.rejects(assertReleasedLegacyLock(escrow, { ...signal, depositId: BigNumber.from(4) }, unlock, 90, 18, 100, 101), /differs from the authentic signal/);
+  await assert.rejects(assertReleasedLegacyLock({ ...escrow, getDepositIntent: async (_id, _hash, at) => at.blockTag === 100 ? { ...empty, amount: BigNumber.from(1) } : empty }, signal, unlock, 90, 18, 100, 101), /still has an intent lock/);
+  await assert.rejects(assertReleasedLegacyLock({ ...escrow, getDepositIntentHashes: async () => [signal.intentHash] }, signal, unlock, 90, 18, 100, 101), /still has an intent lock/);
+  await assert.rejects(assertReleasedLegacyLock(escrow, signal, unlock, 80, 18, 89, 101), /after pause/);
+  await assert.rejects(assertReleasedLegacyLock(escrow, signal, unlock, 90, 20, 100, 101), /does not follow/);
+  await assert.rejects(assertReleasedLegacyLock({ ...escrow, provider: { ...escrow.provider, getBlock: async () => ({ hash: utils.id("reorg") }) } }, signal, unlock, 90, 18, 100, 101), /not canonical/);
 });
 
 test("operator source cannot claim an untracked helper, dirty imported code or leak injected credentials to git", () => {
