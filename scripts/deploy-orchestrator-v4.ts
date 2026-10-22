@@ -26,7 +26,7 @@ export type ReleaseConfig = {
   allowMultipleIntents: boolean; predecessorHook: string; paymentMethods: Array<{ method: string; currencies: string[] }>;
   retainedDisputeWriters: string[]; attestationWitnesses: string[]; attestationThreshold: string; baselineBlock: number;
   legacyDrainCheckpoints: Array<{ contract: string; intentCounter: string; indexedBlock: number }>;
-  legacyWhitelistCheckpoint: { indexedBlock: number; enabled: Array<{ depositId: string; paymentMethod: string }> };
+  legacyWhitelistCheckpoint: { indexedBlock: number; enabled: Array<{ escrow: string; depositId: string; paymentMethod: string }> };
 };
 type Receipt = { blockNumber: number; blockHash: string; transactionHash: string; gasUsed: string; effectiveGasPrice: string };
 type Transaction = { step: string; hash: string; nonce: number; to: string | null; data: string; value: string; receipt: Receipt | null };
@@ -80,8 +80,8 @@ export function validateConfig(value: unknown): asserts value is ReleaseConfig {
   check(c.legacyDrainCheckpoints.some((checkpoint) => checkpoint.contract === "Orchestrator"), "V1 drain checkpoint is required");
   const privacy = c.legacyWhitelistCheckpoint;
   check(privacy && Number.isSafeInteger(privacy.indexedBlock) && privacy.indexedBlock > 0 && Array.isArray(privacy.enabled), "Missing reviewed private-deposit checkpoint");
-  for (const row of privacy.enabled) check(typeof row.depositId === "string" && /^\d+$/.test(row.depositId) && bytes32(row.paymentMethod), "Invalid private-deposit checkpoint row");
-  check(new Set(privacy.enabled.map((row) => `${row.depositId}:${row.paymentMethod.toLowerCase()}`)).size === privacy.enabled.length, "Duplicate private-deposit checkpoint row");
+  for (const row of privacy.enabled) check(utils.isAddress(row.escrow) && typeof row.depositId === "string" && /^\d+$/.test(row.depositId) && bytes32(row.paymentMethod), "Invalid private-deposit checkpoint row");
+  check(new Set(privacy.enabled.map((row) => `${row.escrow.toLowerCase()}:${row.depositId}:${row.paymentMethod.toLowerCase()}`)).size === privacy.enabled.length, "Duplicate private-deposit checkpoint row");
 }
 
 async function existing(hre: HardhatRuntimeEnvironment, c: ReleaseConfig, name: string): Promise<Contract> {
@@ -314,36 +314,38 @@ export async function activate(hre: HardhatRuntimeEnvironment, journal: Transact
 /** Preserve existing private liquidity even when it is currently empty or not accepting intents. */
 export async function assertPrivateDepositsPreserved(hre: HardhatRuntimeEnvironment, journal: TransactionJournal): Promise<void> {
   const m = journal.manifest, c = m.configuration, checkpoint = c.legacyWhitelistCheckpoint;
-  const policy = await existing(hre, c, "PredecessorWhitelistPolicy"), escrow = await existing(hre, c, "EscrowV2");
+  const policy = await existing(hre, c, "PredecessorWhitelistPolicy");
   const fresh = m.contracts.WhitelistPolicyV2; check(fresh, "Fresh whitelist policy is missing");
   const whitelist = new Contract(fresh.address, (await hre.artifacts.readArtifact("WhitelistPolicyV2")).abi, hre.ethers.provider);
   const block = await hre.ethers.provider.getBlockNumber(), at = { blockTag: block };
   check(checkpoint.indexedBlock <= block, "Private-deposit checkpoint is ahead of the selected chain");
-  const candidates = new Map<string, { depositId: string; paymentMethod: string }>();
+  const candidates = new Map<string, { escrow: string; depositId: string; paymentMethod: string }>();
   for (const row of checkpoint.enabled) {
-    check(await policy.enabled(escrow.address, row.depositId, row.paymentMethod, { blockTag: checkpoint.indexedBlock }), "Private-deposit checkpoint differs from on-chain policy");
-    candidates.set(`${row.depositId}:${row.paymentMethod}`, row);
+    check(await policy.enabled(row.escrow, row.depositId, row.paymentMethod, { blockTag: checkpoint.indexedBlock }), "Private-deposit checkpoint differs from on-chain policy");
+    candidates.set(`${row.escrow.toLowerCase()}:${row.depositId}:${row.paymentMethod.toLowerCase()}`, row);
   }
   // A depositor may enable another private method while the release waits. Include every later event.
   for (let fromBlock = checkpoint.indexedBlock + 1; fromBlock <= block; fromBlock += 1000) {
-    const events = await policy.queryFilter(policy.filters.EnabledUpdated(escrow.address), fromBlock, Math.min(fromBlock + 999, block));
+    const events = await policy.queryFilter(policy.filters.EnabledUpdated(), fromBlock, Math.min(fromBlock + 999, block));
     for (const event of events) {
       const args = policy.interface.parseLog(event).args;
-      const row = { depositId: args.depositId.toString(), paymentMethod: args.paymentMethod as string };
-      candidates.set(`${row.depositId}:${row.paymentMethod}`, row);
+      const row = { escrow: args.escrow as string, depositId: args.depositId.toString(), paymentMethod: args.paymentMethod as string };
+      candidates.set(`${row.escrow.toLowerCase()}:${row.depositId}:${row.paymentMethod.toLowerCase()}`, row);
     }
   }
-  const privateIds = new Set<string>();
-  for (const row of candidates.values()) if (await policy.enabled(escrow.address, row.depositId, row.paymentMethod, at)) privateIds.add(row.depositId);
-  const required: string[] = [], deleted: string[] = [], missing: string[] = [];
-  for (const id of privateIds) {
+  const privateDeposits = new Map<string, { escrow: string; depositId: string }>();
+  for (const row of candidates.values()) if (await policy.enabled(row.escrow, row.depositId, row.paymentMethod, at))
+    privateDeposits.set(`${row.escrow.toLowerCase()}:${row.depositId}`, { escrow: row.escrow, depositId: row.depositId });
+  const required: Array<{ escrow: string; depositId: string }> = [], deleted: typeof required = [], missing: string[] = [];
+  for (const deposit of privateDeposits.values()) {
+    const escrow = new Contract(deposit.escrow, (await hre.artifacts.readArtifact("EscrowV2")).abi, hre.ethers.provider);
     // Escrow IDs are monotonic. Deleted deposits cannot be re-created or funded again.
-    if (same((await escrow.getDeposit(id, at)).depositor, ZERO)) { deleted.push(id); continue; }
-    required.push(id);
-    if (!await whitelist.enabled(escrow.address, id, at)) missing.push(id);
+    if (same((await escrow.getDeposit(deposit.depositId, at)).depositor, ZERO)) { deleted.push(deposit); continue; }
+    required.push(deposit);
+    if (!await whitelist.enabled(deposit.escrow, deposit.depositId, at)) missing.push(`${deposit.escrow}:${deposit.depositId}`);
   }
   check(missing.length === 0, `Existing private deposits require their depositors to enable WhitelistPolicyV2: ${missing.join(", ")}`);
-  m.verification.privateDeposits = { checkedAtBlock: block, predecessorPolicy: policy.address, requiredDepositIds: required, deletedDepositIds: deleted };
+  m.verification.privateDeposits = { checkedAtBlock: block, predecessorPolicy: policy.address, requiredDeposits: required, deletedDeposits: deleted };
   journal.save();
 }
 

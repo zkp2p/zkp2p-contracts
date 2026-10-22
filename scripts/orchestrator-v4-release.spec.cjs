@@ -28,7 +28,7 @@ async function createPrivateDeposit(f, retainOnEmpty = true) {
     delegate: constants.AddressZero, intentGuardian: other, retainOnEmpty,
   })).wait();
   await (await f.deployed.PredecessorWhitelistPolicy.setEnabled(escrow.address, id, method, true)).wait();
-  return { depositId: id, paymentMethod: method };
+  return { escrow: escrow.address, depositId: id, paymentMethod: method };
 }
 
 async function fixture() {
@@ -273,16 +273,16 @@ test("private-deposit activation covers retained empty liquidity and later event
     const funded = await createPrivateDeposit(f);
     await deploySuite(hre, f.journal);
     const nonce = await wallet.getTransactionCount();
-    await assert.rejects(activate(hre, f.journal), /depositors to enable WhitelistPolicyV2: 0, 2/);
+    await assert.rejects(activate(hre, f.journal), /depositors to enable WhitelistPolicyV2: 0x[\da-fA-F]+:0, 0x[\da-fA-F]+:2/);
     assert.equal(await wallet.getTransactionCount(), nonce);
     assert.equal(await f.deployed.DisputeNullifierRegistry.isWriter(f.manifest.contracts.DisputeProtectionPolicyV2.address), false);
     const whitelist = await hre.ethers.getContractAt("WhitelistPolicyV2", f.manifest.contracts.WhitelistPolicyV2.address, wallet);
     await (await whitelist.setEnabled(f.deployed.EscrowV2.address, empty.depositId, true)).wait();
-    await assert.rejects(assertPrivateDepositsPreserved(hre, f.journal), /depositors to enable WhitelistPolicyV2: 2/);
+    await assert.rejects(assertPrivateDepositsPreserved(hre, f.journal), /depositors to enable WhitelistPolicyV2: 0x[\da-fA-F]+:2/);
     await (await whitelist.setEnabled(f.deployed.EscrowV2.address, funded.depositId, true)).wait();
     await assertPrivateDepositsPreserved(hre, f.journal);
-    assert.deepEqual(f.manifest.verification.privateDeposits.requiredDepositIds, ["0", "2"]);
-    assert.deepEqual(f.manifest.verification.privateDeposits.deletedDepositIds, ["1"]);
+    assert.deepEqual(f.manifest.verification.privateDeposits.requiredDeposits.map((row) => row.depositId), ["0", "2"]);
+    assert.deepEqual(f.manifest.verification.privateDeposits.deletedDeposits.map((row) => row.depositId), ["1"]);
     // Enabling the new policy with no groups/takers makes existing private rows inaccessible through O4.
     assert.equal(await whitelist.isWhitelisted(f.deployed.EscrowV2.address, funded.depositId, other, constants.HashZero), false);
     await activate(hre, f.journal);
@@ -290,22 +290,25 @@ test("private-deposit activation covers retained empty liquidity and later event
   } finally { rmSync(f.directory, { recursive: true, force: true }); }
 });
 
-test("a private deposit introduced during route cutover blocks the final orchestrator registration", async () => {
+test("a private deposit on another registered escrow introduced during cutover blocks registration", async () => {
   const f = await fixture();
   try {
     await deploySuite(hre, f.journal);
+    const secondEscrow = await (await hre.ethers.getContractFactory("EscrowV2", wallet)).deploy(wallet.address, f.config.chainId, f.deployed.OrchestratorRegistry.address, f.deployed.PaymentVerifierRegistry.address, f.deployed.RelayerRegistry.address, 1, 100, 3600);
+    await secondEscrow.deployed();
+    await (await f.deployed.EscrowRegistry.addEscrow(secondEscrow.address)).wait();
     class IntroducePrivateDepositJournal extends TransactionJournal {
       async execute(step, request) {
         const result = await super.execute(step, request);
-        if (step === "authorize-policy-writer") await createPrivateDeposit(f);
+        if (step === "authorize-policy-writer") await createPrivateDeposit({ ...f, deployed: { ...f.deployed, EscrowV2: secondEscrow } });
         return result;
       }
     }
-    await assert.rejects(activate(hre, new IntroducePrivateDepositJournal(f.path, f.manifest, wallet)), /depositors to enable WhitelistPolicyV2: 0/);
+    await assert.rejects(activate(hre, new IntroducePrivateDepositJournal(f.path, f.manifest, wallet)), /depositors to enable WhitelistPolicyV2: 0x[\da-fA-F]+:0/);
     assert.equal(await f.deployed.OrchestratorRegistry.isOrchestrator(f.manifest.contracts.OrchestratorV4.address), false);
     assert.equal(f.manifest.transactions.some((tx) => tx.step === "register-orchestrator"), false);
     const whitelist = await hre.ethers.getContractAt("WhitelistPolicyV2", f.manifest.contracts.WhitelistPolicyV2.address, wallet);
-    await (await whitelist.setEnabled(f.deployed.EscrowV2.address, 0, true)).wait();
+    await (await whitelist.setEnabled(secondEscrow.address, 0, true)).wait();
     await activate(hre, new TransactionJournal(f.path, JSON.parse(readFileSync(f.path)), wallet));
     assert.equal(await f.deployed.OrchestratorRegistry.isOrchestrator(f.manifest.contracts.OrchestratorV4.address), true);
   } finally { rmSync(f.directory, { recursive: true, force: true }); }

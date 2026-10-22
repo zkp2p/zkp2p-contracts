@@ -1,195 +1,166 @@
 {
   "indexer": {
-    "observedAt": "2026-10-22T10:47:49.017161+00:00",
-    "endpoint": "https://indexer-staging.zkp2p.xyz/v1/graphql",
-    "query": "query {DepositWhitelistPolicy(where:{enabled:{_eq:true},policyAddress:{_eq:\"0xf79aad1baab617ff3eb299225c80893f22f743fe\"},escrowAddress:{_eq:\"0x77e8f808fe201075e0bd651cd46fdf239fc83265\"}},limit:1000){policyAddress escrowAddress depositIdOnContract paymentMethodHash enabled} chain_metadata{latest_processed_block}}",
+    "query": "query {DepositWhitelistPolicy(where:{enabled:{_eq:true},policyAddress:{_eq:\"0xf79aad1baab617ff3eb299225c80893f22f743fe\"}},limit:1000){escrowAddress depositIdOnContract paymentMethodHash enabled} chain_metadata{latest_processed_block}}",
     "response": {
       "data": {
         "DepositWhitelistPolicy": [
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "0",
             "paymentMethodHash": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "1",
             "paymentMethodHash": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "4",
             "paymentMethodHash": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "13",
             "paymentMethodHash": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "13",
             "paymentMethodHash": "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "24",
             "paymentMethodHash": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "25",
             "paymentMethodHash": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "48",
             "paymentMethodHash": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "48",
             "paymentMethodHash": "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "60",
             "paymentMethodHash": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "65",
             "paymentMethodHash": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "66",
             "paymentMethodHash": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "84",
             "paymentMethodHash": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "6",
             "paymentMethodHash": "0x10940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "18",
             "paymentMethodHash": "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "19",
             "paymentMethodHash": "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "29",
             "paymentMethodHash": "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "97",
             "paymentMethodHash": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "98",
             "paymentMethodHash": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "129",
             "paymentMethodHash": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "130",
             "paymentMethodHash": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "131",
             "paymentMethodHash": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "132",
             "paymentMethodHash": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "133",
             "paymentMethodHash": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "134",
             "paymentMethodHash": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "138",
             "paymentMethodHash": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
             "enabled": true
           },
           {
-            "policyAddress": "0xf79aad1baab617ff3eb299225c80893f22f743fe",
             "escrowAddress": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
             "depositIdOnContract": "139",
             "paymentMethodHash": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
@@ -198,14 +169,14 @@
         ],
         "chain_metadata": [
           {
-            "latest_processed_block": 52938360
+            "latest_processed_block": 52938535
           }
         ]
       }
     }
   },
   "onchain": {
-    "blockNumber": 52938360,
+    "blockNumber": 52938535,
     "escrow": "0x77e8f808FE201075e0bD651CD46fdF239fc83265",
     "oldPolicy": "0xF79aAD1BAaB617fF3Eb299225c80893F22F743Fe",
     "policyRuntimeCodeHash": "0x1ece96bb7be9cdd2433a2aad66c9b2d710e3e210a65876e0f8c1e43662ee5653",

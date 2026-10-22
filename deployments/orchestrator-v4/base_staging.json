@@ -278,113 +278,140 @@
     }
   ],
   "legacyWhitelistCheckpoint": {
-    "indexedBlock": 52938360,
+    "indexedBlock": 52938535,
     "enabled": [
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "0",
         "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "1",
         "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "4",
         "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "13",
         "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "13",
         "paymentMethod": "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "24",
         "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "25",
         "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "48",
         "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "48",
         "paymentMethod": "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "60",
         "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "65",
         "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "66",
         "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "84",
         "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "6",
         "paymentMethod": "0x10940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "18",
         "paymentMethod": "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "19",
         "paymentMethod": "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "29",
         "paymentMethod": "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "97",
         "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "98",
         "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "129",
         "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "130",
         "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "131",
         "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "132",
         "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "133",
         "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "134",
         "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "138",
         "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
       },
       {
+        "escrow": "0x77e8f808fe201075e0bd651cd46fdf239fc83265",
         "depositId": "139",
         "paymentMethod": "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
       }
