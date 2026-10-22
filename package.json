@@ -73,7 +73,9 @@
     "typecheck:dispute-deployment": "tsc -p tsconfig.dispute-deployment.json",
     "test:fx-rate-feeds-deployment": "node --test scripts/fx-rate-feeds-deployment.spec.cjs",
     "deploy:fx-rate-feeds:base": "ts-node --transpile-only scripts/deployActive.ts base 44_deploy_fx_rate_feeds && hardhat export --network base --export ./deployments/outputs/baseContracts.ts && ts-node --transpile-only scripts/canonicalizeDeploymentOutput.ts base ./deployments/outputs/baseContracts.ts && yarn workspace @zkp2p/contracts-v2 extract",
-    "verify:fx-rate-feeds:base": "yarn hardhat --network base etherscan-verify-with-delay --delay 600 --contracts FxRateStore,FxRateFeedInrUsd,FxRateFeedCnyUsd --fail-on-error"
+    "verify:fx-rate-feeds:base": "yarn hardhat --network base etherscan-verify-with-delay --delay 600 --contracts FxRateStore,FxRateFeedInrUsd,FxRateFeedCnyUsd --fail-on-error",
+    "deploy:orchestrator-v4": "ts-node --transpile-only scripts/deploy-orchestrator-v4.ts",
+    "test:orchestrator-v4-release": "node --test scripts/staging-signer-config.spec.cjs scripts/orchestrator-v4-release.spec.cjs"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-verify": "2.1.3",
