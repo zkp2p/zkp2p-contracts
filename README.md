@@ -661,6 +661,26 @@ contract deployment or duplicate staging artifact is required.
 These are the supported deployment entrypoints and all route through `scripts/deployActive.ts`. Do not invoke
 `hardhat deploy` directly: it bypasses the immutable-lane hash and retirement filter.
 
+### Base staging ownership
+
+On 2026-10-22, ownership transfers were initiated for 148 current and historical
+`base_staging` deployments in this repository: 122 completed immediately and 26 await
+acceptance. The destination is
+[`0xdd93E0f5fC32c86A568d87Cb4f08598f55E980F3`](https://basescan.org/address/0xdd93E0f5fC32c86A568d87Cb4f08598f55E980F3);
+`0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929` remains the owner of pending transfers.
+`base_staging` uses Base mainnet, chain ID 8453.
+
+Read each contract's live `owner()` before administrative calls. For `Ownable2Step`
+contracts, also read `pendingOwner()`: the current owner retains authority until the
+pending owner calls `acceptOwnership()`. The handoff changes ownership only; fee and
+dust recipients, registry permissions, controllers, and other signer roles remain unchanged.
+
+Both `base` and `base_staging` load `BASE_DEPLOY_PRIVATE_KEY`. Select the verified
+staging owner for staging operations without replacing the shared production secret.
+Existing staging governance checks still expect `0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929`;
+reconcile those checks in current wrappers/helpers before rerunning deployment commands.
+Preserve immutable deployment lanes and historical constructor arguments and receipts.
+
 ### V3 Groups Cutover
 
 The lifecycle rollout is split into explicit lanes. Production-executed numbered scripts are immutable
