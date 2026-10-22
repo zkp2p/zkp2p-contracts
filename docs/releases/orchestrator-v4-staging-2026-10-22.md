@@ -283,11 +283,13 @@ The package's record/export commit differs from `manifest.sourceCommit`, which
 remains the exact deployment and compilation source above.
 
 Services may build against this passive artifact while activation is pending.
-Before starting them, use a clean checkout of that exact record/export commit and
-run `yarn deploy:orchestrator-v4 base_staging verify` without a signing key. It
+Before starting them, use a clean checkout of the reviewed verification-tool commit
+and prove its protected source paths are unchanged from the record/export commit.
+The tool commit is pinned separately from the immutable package. Run `HARDHAT_CONFIG=hardhat.readonly.config.ts yarn deploy:orchestrator-v4 base_staging verify` without a signing key. It
 accepts the committed passive manifest as input, independently requires live
 active registration, routes, writers, privacy and paused predecessor state, and
-writes `orchestrator-v4-base_staging.json.verification` with `active=true`. That
+writes `orchestrator-v4-base_staging.json.verification` with `active=true`. The read-only Hardhat config imports the canonical configuration and empties network
+accounts, so missing keys for unrelated networks cannot prevent verification. That
 ignored receipt does not dirty the checkout. Do not reject the passive input's
 `active=false` before running the verifier. Later activation receipts and drain
 evidence belong to the deployment record; they do not require rebuilding every
