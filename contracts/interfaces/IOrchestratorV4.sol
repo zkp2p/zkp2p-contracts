@@ -146,10 +146,10 @@ interface IOrchestratorV4 {
 
     /* ============ External Functions for Users ============ */
 
-    /// @notice Signals an intent the current signal policy accepts and locks its escrow funds.
+    /// @notice Signals an intent and locks its escrow funds; a set signal policy must accept it.
     function signalIntent(SignalIntentParams calldata params) external;
 
-    /// @notice Sets the signal policy that validates every later signal.
+    /// @notice Sets the signal policy that validates every later signal; zero disables signal checks.
     function setSignalPolicy(IIntentSignalPolicy policy) external;
 
     /// @notice Sets the settlement policy applied to every later settlement; zero disables protection.

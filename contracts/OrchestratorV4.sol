@@ -98,8 +98,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
 
     /**
      * @notice Signals intent to pay the depositor defined in the _depositId the _amount * deposit conversionRate off-chain at 
-     * their given _payeeId in order to unlock _amount of funds on-chain. The current signal policy must accept the intent, e.g.
-     * by checking a gating service signature over it. This function captures and stores all values required for fullfilling
+     * their given _payeeId in order to unlock _amount of funds on-chain. The current signal policy, if set, must accept the
+     * intent, e.g. by checking a gating service signature over it. This function captures and stores all values required for fullfilling
      * the intent to give strong guarantees to the buyer. Checks whitelist admission and records whether the taker was
      * whitelisted, and the arbitrator of the group the taker signals through, before locking liquidity for the
      * corresponding deposit on the escrow contract.
@@ -113,7 +113,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     {
         // Checks
         (bool takerWhitelisted, address arbitrator) = _validateSignalIntent(_params);
-        signalPolicy.validateSignalIntent(msg.sender, _params);
+        IIntentSignalPolicy policy = signalPolicy;
+        if (address(policy) != address(0)) policy.validateSignalIntent(msg.sender, _params);
 
         // Effects
         bytes32 intentHash = _calculateIntentHash();
@@ -365,7 +366,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
 
     /**
      * @notice GOVERNANCE ONLY: Updates the global signal policy.
-     * @dev Applies to every later signal. Signals revert while no policy is set.
+     * @dev Applies to every later signal. The zero address disables signal checks.
      *
      * @param _policy   New global signal policy
      */

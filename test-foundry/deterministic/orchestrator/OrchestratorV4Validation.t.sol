@@ -65,10 +65,14 @@ contract OrchestratorV4ValidationTest is OrchestratorV4Fixture {
         _signalCall(taker, _defaultParams());
     }
 
-    function test_SignalRevertsWithoutSignalPolicy() public {
+    function test_ZeroSignalPolicySkipsSignalChecks() public {
+        signalPolicy.setRevertOnSignal(true);
         orchestrator.setSignalPolicy(IIntentSignalPolicy(address(0)));
-        vm.expectRevert(bytes(""));
-        _signalCall(taker, _defaultParams());
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
+        params.payerCommitment = "payer";
+        bytes32 id = _signal(taker, params);
+        assertEq(orchestrator.getIntent(id).payerCommitment, "payer");
+        assertEq(signalPolicy.signalCalls(), 0);
     }
 
     function test_FulfillRejectsMissingIntent() public {
