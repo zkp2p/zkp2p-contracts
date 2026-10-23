@@ -17,23 +17,22 @@ contract ProtocolViewerV4Test is OrchestratorV4Fixture {
 
     function test_GetIntentV4ReturnsTheFullO4IntentAndItsDeposit() public {
         vm.startPrank(depositor);
-        uint256 gatedDepositId = _createDeposit(gatingService, delegate);
+        uint256 newDepositId = _createDeposit(address(0), delegate);
         vm.stopPrank();
         IOrchestratorV4.SignalIntentParams memory params =
-            _params(gatedDepositId, taker, INTENT_AMOUNT, CONVERSION_RATE, _emptyReferralFees());
+            _params(newDepositId, taker, INTENT_AMOUNT, CONVERSION_RATE, _emptyReferralFees());
         params.payerCommitment = abi.encode(uint8(1), keccak256("salt"), keccak256("payer"));
-        params.gatingServiceSignature = _gatingSignature(gatingServiceKey, taker, params, params.signatureExpiration);
         bytes32 id = _signal(taker, params);
 
         IProtocolViewerV4.IntentViewV4 memory intentView = viewer.getIntentV4(address(orchestrator), id);
         assertEq(intentView.intentHash, id);
         assertEq(abi.encode(intentView.intent), abi.encode(orchestrator.getIntent(id)));
         assertEq(intentView.intent.payerCommitment, params.payerCommitment);
-        assertEq(intentView.deposit.depositId, gatedDepositId);
+        assertEq(intentView.deposit.depositId, newDepositId);
         // The inherited deposit reads are ProtocolViewerV2's, unchanged.
         assertEq(
             abi.encode(intentView.deposit),
-            abi.encode(new ProtocolViewerV2().getDeposit(address(escrow), gatedDepositId))
+            abi.encode(new ProtocolViewerV2().getDeposit(address(escrow), newDepositId))
         );
     }
 

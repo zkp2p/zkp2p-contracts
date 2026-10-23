@@ -4,12 +4,10 @@ pragma solidity ^0.8.18;
 
 import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
-import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Pausable } from "@openzeppelin/contracts/security/Pausable.sol";
-import { SignatureChecker } from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import { AddressArrayUtils } from "./external/AddressArrayUtils.sol";
 import { Bytes32ArrayUtils } from "./external/Bytes32ArrayUtils.sol";
@@ -18,18 +16,17 @@ import { IReferralFee } from "./interfaces/IReferralFee.sol";
 import { IEscrow } from "./interfaces/IEscrow.sol";
 import { IEscrowV2 } from "./interfaces/IEscrowV2.sol";
 import { IEscrowRegistry } from "./interfaces/IEscrowRegistry.sol";
-import { IWhitelistPolicyV2 } from "./interfaces/IWhitelistPolicyV2.sol";
 import { IIntentSettlementPolicy } from "./interfaces/IIntentSettlementPolicy.sol";
+import { IIntentSignalPolicy } from "./interfaces/IIntentSignalPolicy.sol";
 import { IPaymentVerifierV2 } from "./interfaces/IPaymentVerifierV2.sol";
 import { IPaymentVerifierRegistry } from "./interfaces/IPaymentVerifierRegistry.sol";
-import { IRelayerRegistry } from "./interfaces/IRelayerRegistry.sol";
 import { ReferralFeeLib } from "./lib/ReferralFeeLib.sol";
 
 /**
  * @title OrchestratorV4
  * @notice Standalone V4 orchestrator for the ZKP2P protocol. Owns the complete intent (order)
  * lifecycle — signal, cancel, fulfill, manual release, prune, orphan cleanup — and extends it
- * with a governance-selected settlement policy and deferred settlement.
+ * with governance-selected signal and settlement policies and deferred settlement.
  * @dev Intent keeps V3 field order with the intent hooks removed and the hook data replaced by payerCommitment,
  * then appends takerWhitelisted and arbitrator.
  */
@@ -37,9 +34,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
 
     using AddressArrayUtils for address[];
     using Bytes32ArrayUtils for bytes32[];
-    using ECDSA for bytes32;
     using SafeERC20 for IERC20;
-    using SignatureChecker for address;
 
 
     /* ============ Constants ============ */
@@ -50,8 +45,6 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
 
     /* ============ State Variables ============ */
 
-    uint256 immutable public chainId;              // chainId of the chain the orchestrator is deployed on
-
     mapping(bytes32 => Intent) internal intents;                       // Mapping of intentHashes to intent structs
     mapping(address => bytes32[]) internal accountIntents;             // Mapping of address to array of intentHashes
 
@@ -59,43 +52,34 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     mapping(bytes32 => address) internal intentManagerFeeRecipient;
     mapping(bytes32 => uint256) internal intentManagerFee;
 
-    // Governance-selected settlement policy applied at settlement.
+    // Governance-selected policies applied at signal and at settlement.
+    IIntentSignalPolicy public signalPolicy;
     IIntentSettlementPolicy public settlementPolicy;
 
     // Contract references
     IEscrowRegistry public escrowRegistry;                              // Registry of escrow contracts
     IPaymentVerifierRegistry public  paymentVerifierRegistry;          // Registry of payment verifiers
-    IWhitelistPolicyV2 public immutable whitelistPolicy;
-    IRelayerRegistry public relayerRegistry;                           // Registry of relayers
 
     // Protocol fee configuration
     uint256 public protocolFee;                                     // Protocol fee taken from taker (in preciseUnits, 1e16 = 1%)
     address public protocolFeeRecipient;                            // Address that receives protocol fees
-
-    bool public allowMultipleIntents;                               // Whether to allow multiple intents per account
 
     uint256 public intentCounter;                                 // Counter for number of intents created; nonce for unique intent hashes
 
     /* ============ Constructor ============ */
     constructor(
         address _owner,
-        uint256 _chainId,
         address _escrowRegistry,
         address _paymentVerifierRegistry,
-        address _relayerRegistry,
         uint256 _protocolFee,
-        address _protocolFeeRecipient,
-        IWhitelistPolicyV2 _whitelistPolicy
+        address _protocolFeeRecipient
     )
         Ownable()
     {
-        chainId = _chainId;
         escrowRegistry = IEscrowRegistry(_escrowRegistry);
         paymentVerifierRegistry = IPaymentVerifierRegistry(_paymentVerifierRegistry);
-        relayerRegistry = IRelayerRegistry(_relayerRegistry);
         protocolFee = _protocolFee;
         protocolFeeRecipient = _protocolFeeRecipient;
-        whitelistPolicy = _whitelistPolicy;
 
         transferOwnership(_owner);
     }
@@ -104,11 +88,11 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
 
     /**
      * @notice Signals intent to pay the depositor defined in the _depositId the _amount * deposit conversionRate off-chain at 
-     * their given _payeeId in order to unlock _amount of funds on-chain. Caller must provide a signature from the deposit's gating
-     * service to prove their eligibility to take liquidity. This function captures and stores all values required for fullfilling
-     * the intent to give strong guarantees to the buyer. Checks whitelist admission and records whether the taker was
-     * whitelisted, and the arbitrator of the group the taker signals through, before locking liquidity for the
-     * corresponding deposit on the escrow contract.
+     * their given _payeeId in order to unlock _amount of funds on-chain. The current signal policy, if set, must accept the
+     * intent, e.g. by checking a gating service signature over it. This function captures and stores all values required for fullfilling
+     * the intent to give strong guarantees to the buyer. Records whether the signal policy admitted the taker as
+     * whitelisted, and the arbitrator it named, before locking liquidity for the corresponding deposit on the escrow
+     * contract.
      *
      * @param _params                   Struct containing all the intent parameters
      */
@@ -369,6 +353,18 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     /* ============ Governance Functions ============ */
 
     /**
+     * @notice GOVERNANCE ONLY: Updates the global signal policy.
+     * @dev Applies to every later signal. The zero address disables signal checks.
+     *
+     * @param _policy   New global signal policy
+     */
+    function setSignalPolicy(IIntentSignalPolicy _policy) external onlyOwner {
+        address previousPolicy = address(signalPolicy);
+        signalPolicy = _policy;
+        emit SignalPolicyUpdated(previousPolicy, address(_policy));
+    }
+
+    /**
      * @notice GOVERNANCE ONLY: Updates the global settlement policy.
      * @dev Applies to every later settlement, including open intents. The zero address disables protection.
      *
@@ -418,29 +414,6 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     }
 
     /**
-     * @notice GOVERNANCE ONLY: Sets whether all accounts can signal multiple intents.
-     *
-     * @param _allowMultiple   True to allow all accounts to signal multiple intents, false to restrict to whitelisted relayers only
-     */
-    function setAllowMultipleIntents(bool _allowMultiple) external onlyOwner {
-        allowMultipleIntents = _allowMultiple;
-        
-        emit AllowMultipleIntentsUpdated(_allowMultiple);
-    }
-
-    /**
-     * @notice GOVERNANCE ONLY: Updates the relayer registry address.
-     *
-     * @param _relayerRegistry   New relayer registry address
-     */
-    function setRelayerRegistry(address _relayerRegistry) external onlyOwner {
-        if (_relayerRegistry == address(0)) revert ZeroAddress();
-        
-        relayerRegistry = IRelayerRegistry(_relayerRegistry);
-        emit RelayerRegistryUpdated(_relayerRegistry);
-    }
-
-    /**
      * @notice GOVERNANCE ONLY: Pauses intent creation and fulfillment functionality.
      * 
      * Functionalities that are paused:
@@ -484,19 +457,13 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     /* ============ Internal Functions ============ */
 
     /**
-     * @notice Validates an intent before it is signaled and returns the arbitrator of the group it names.
+     * @notice Validates an intent against its deposit before it is signaled, then lets the signal policy, if set, admit
+     * the taker and name the intent's arbitrator.
      */
     function _validateSignalIntent(SignalIntentParams calldata _intent)
         internal
-        view
         returns (bool takerWhitelisted, address arbitrator)
     {
-        // Check if account can have multiple intents
-        bool canHaveMultipleIntents = relayerRegistry.isWhitelistedRelayer(msg.sender) || allowMultipleIntents;
-        if (!canHaveMultipleIntents && accountIntents[msg.sender].length > 0) {
-            revert AccountHasActiveIntent(msg.sender, accountIntents[msg.sender][0]);
-        }
-
         if (_intent.to == address(0)) revert ZeroAddress();
         
         ReferralFeeLib.validateReferralFees(_intent.referralFees);
@@ -521,31 +488,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (minConversionRate == 0) revert CurrencyNotSupported(_intent.paymentMethod, _intent.fiatCurrency);
         if (_intent.conversionRate < minConversionRate) revert RateBelowMinimum(_intent.conversionRate, minConversionRate);
 
-        // With the whitelist off, anyone may signal and groupId is ignored; a group taker gets its group's arbitrator.
-        bool depositWhitelisted = whitelistPolicy.enabled(_intent.escrow, _intent.depositId);
-        if (depositWhitelisted) {
-            takerWhitelisted = whitelistPolicy.isWhitelisted(_intent.escrow, _intent.depositId, msg.sender, _intent.groupId);
-            if (!takerWhitelisted) {
-                revert TakerNotWhitelisted(_intent.escrow, _intent.depositId, _intent.paymentMethod, msg.sender);
-            }
-            if (_intent.groupId != bytes32(0)) (,,,,, arbitrator) = whitelistPolicy.groupRegistry().getGroup(_intent.groupId);
-        }
-
-        address intentGatingService = IEscrow(_intent.escrow).getDepositGatingService(_intent.depositId, _intent.paymentMethod);
-        // Only a gating service can vouch that the committed payer IDs belong to the taker.
-        if (_intent.payerCommitment.length != 0 && intentGatingService == address(0)) {
-            revert PayerCommitmentRequiresGatingService();
-        }
-        if (intentGatingService != address(0)) {
-            // Check if signature has expired
-            if (block.timestamp > _intent.signatureExpiration) {
-                revert SignatureExpired(_intent.signatureExpiration, block.timestamp);
-            }
-
-            if (!_isValidIntentGatingSignature(_intent, intentGatingService, msg.sender)) {
-                revert InvalidSignature();
-            }
-        }
+        IIntentSignalPolicy policy = signalPolicy;
+        if (address(policy) != address(0)) (takerWhitelisted, arbitrator) = policy.validateSignalIntent(msg.sender, _intent);
     }
 
     /**
@@ -676,37 +620,5 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
             netAmount, 
             _releasedBy
         );
-    }
-
-    /**
-     * @notice Checks if a intent gating service signature is valid.
-     */
-    function _isValidIntentGatingSignature(
-        SignalIntentParams calldata _intent,
-        address _intentGatingService,
-        address _caller
-    )
-        internal
-        view
-        returns(bool)
-    {
-        bytes memory message = abi.encodePacked(
-            address(this),
-            _intent.escrow,
-            _intent.depositId,
-            _intent.amount,
-            _caller,
-            _intent.to,
-            _intent.paymentMethod,
-            _intent.fiatCurrency,
-            _intent.conversionRate,
-            ReferralFeeLib.hashReferralFees(_intent.referralFees),
-            _intent.signatureExpiration,
-            chainId,
-            _intent.payerCommitment // Last and variable-length; empty keeps O3's message byte for byte
-        );
-
-        bytes32 verifierPayload = keccak256(message).toEthSignedMessageHash();
-        return _intentGatingService.isValidSignatureNow(verifierPayload, _intent.gatingServiceSignature);
     }
 }

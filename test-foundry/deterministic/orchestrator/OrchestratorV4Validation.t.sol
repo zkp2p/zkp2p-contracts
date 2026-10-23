@@ -2,16 +2,11 @@
 pragma solidity ^0.8.18;
 
 import {OrchestratorV4Fixture} from "../helpers/OrchestratorV4Fixture.sol";
+import {IIntentSignalPolicy} from "contracts/interfaces/IIntentSignalPolicy.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
+import {SignalPolicyMock} from "../../mocks/SignalPolicyMock.sol";
 
 contract OrchestratorV4ValidationTest is OrchestratorV4Fixture {
-    function test_AccountWithActiveIntentRevertsWhenMultipleIntentsDisabled() public virtual {
-        orchestrator.setAllowMultipleIntents(false);
-        bytes32 first = _signalDefault();
-        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.AccountHasActiveIntent.selector, taker, first));
-        _signalCall(taker, _defaultParams());
-    }
-
     function test_SignalRejectsZeroRecipient() public {
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.to = address(0);
@@ -47,59 +42,50 @@ contract OrchestratorV4ValidationTest is OrchestratorV4Fixture {
         _signalCall(taker, _defaultParams());
     }
 
-    function _newGatedDeposit() internal returns (uint256 gatedDepositId) {
-        vm.startPrank(depositor);
-        gatedDepositId = _createDeposit(gatingService, delegate);
-        vm.stopPrank();
+    function _useSignalPolicyMock() internal returns (SignalPolicyMock mock) {
+        mock = new SignalPolicyMock();
+        orchestrator.setSignalPolicy(mock);
     }
 
-    function test_SignalWithGatingSignature() public {
-        uint256 gatedDepositId = _newGatedDeposit();
-        IOrchestratorV4.SignalIntentParams memory params =
-            _gatedParams(gatedDepositId, gatingServiceKey, taker, block.timestamp + 1 days);
-        assertNotEq(_signal(taker, params), bytes32(0));
-    }
-
-    function test_GatingRejectsExpiredSignature() public {
-        vm.warp(100);
-        uint256 gatedDepositId = _newGatedDeposit();
-        uint256 expiration = block.timestamp - 1;
-        IOrchestratorV4.SignalIntentParams memory params =
-            _gatedParams(gatedDepositId, gatingServiceKey, taker, expiration);
-        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.SignatureExpired.selector, expiration, block.timestamp));
-        _signalCall(taker, params);
-    }
-
-    function test_GatingRejectsSignatureFromWrongSigner() public {
-        uint256 gatedDepositId = _newGatedDeposit();
-        IOrchestratorV4.SignalIntentParams memory params =
-            _gatedParams(gatedDepositId, 0xBAD, taker, block.timestamp + 1 days);
-        vm.expectRevert(IOrchestratorV4.InvalidSignature.selector);
-        _signalCall(taker, params);
-    }
-
-    function test_GatingSignatureCoversPayerCommitment() public {
-        uint256 gatedDepositId = _newGatedDeposit();
-        IOrchestratorV4.SignalIntentParams memory params =
-            _gatedParams(gatedDepositId, gatingServiceKey, taker, block.timestamp + 1 days);
+    function test_SignalForwardsTakerAndParamsToSignalPolicy() public {
+        SignalPolicyMock mock = _useSignalPolicyMock();
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
+        params.gatingServiceSignature = hex"5167";
         params.payerCommitment = "payer";
-        vm.expectRevert(IOrchestratorV4.InvalidSignature.selector);
-        _signalCall(taker, params);
-        params.gatingServiceSignature = _gatingSignature(gatingServiceKey, taker, params, params.signatureExpiration);
-        bytes32 id = _signal(taker, params);
+        bytes32 id = _intentHash(orchestrator.intentCounter());
+        _signalRaw(taker, params);
+        assertEq(mock.signalCalls(), 1);
+        assertEq(mock.lastTaker(), taker);
+        assertEq(mock.lastParams(), abi.encode(params));
         assertEq(orchestrator.getIntent(id).payerCommitment, "payer");
     }
 
-    function test_PayerCommitmentRequiresGatingService() public {
-        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
-        params.payerCommitment = "payer";
-        vm.expectRevert(IOrchestratorV4.PayerCommitmentRequiresGatingService.selector);
-        _signalCall(taker, params);
+    function test_SignalStoresTheAdmissionTheSignalPolicyReturns() public {
+        SignalPolicyMock mock = _useSignalPolicyMock();
+        mock.setAdmission(true, other);
+        bytes32 id = _signalDefault();
+        assertTrue(orchestrator.getIntent(id).takerWhitelisted);
+        assertEq(orchestrator.getIntent(id).arbitrator, other);
     }
 
+    function test_SignalRejectedBySignalPolicy() public {
+        _useSignalPolicyMock().setRevertOnSignal(true);
+        vm.expectRevert("signal rejected");
+        _signalCall(taker, _defaultParams());
+    }
 
-
-
+    function test_ZeroSignalPolicySkipsSignalChecks() public {
+        _whitelist(other);
+        orchestrator.setSignalPolicy(IIntentSignalPolicy(address(0)));
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
+        params.payerCommitment = "payer";
+        bytes32 id = _intentHash(orchestrator.intentCounter());
+        _signalRaw(taker, params);
+        IOrchestratorV4.Intent memory intent = orchestrator.getIntent(id);
+        assertEq(intent.payerCommitment, "payer");
+        assertFalse(intent.takerWhitelisted);
+        assertEq(intent.arbitrator, address(0));
+    }
 
     function test_FulfillRejectsMissingIntent() public {
         bytes32 missing = bytes32("missing");

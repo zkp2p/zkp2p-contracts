@@ -3,7 +3,7 @@ pragma solidity ^0.8.18;
 
 import {IAddressGroupRegistry} from "./IAddressGroupRegistry.sol";
 
-/// @notice Per-deposit taker whitelist read by OrchestratorV4 at signal.
+/// @notice Per-deposit taker whitelist read by the OrchestratorV4 signal policy at signal.
 interface IWhitelistPolicyV2 {
     event EnabledUpdated(address indexed escrow, uint256 indexed depositId, bool enabled);
     event GroupUpdated(address indexed escrow, uint256 indexed depositId, bytes32 indexed groupId, bool allowed);

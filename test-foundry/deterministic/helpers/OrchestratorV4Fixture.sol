@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
+import {IntentSignalPolicy} from "contracts/hooks/IntentSignalPolicy.sol";
 import {WhitelistPolicyV2} from "contracts/hooks/WhitelistPolicyV2.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 import {Test} from "forge-std/Test.sol";
@@ -51,6 +52,7 @@ abstract contract OrchestratorV4Fixture is Test {
     PaymentVerifierV2Mock internal verifier;
     PostIntentHookV2Mock internal postIntentHook;
     OrchestratorMock internal orchestratorMock;
+    IntentSignalPolicy internal signalPolicy;
     uint256 internal depositId;
 
     function setUp() public virtual {
@@ -86,15 +88,13 @@ abstract contract OrchestratorV4Fixture is Test {
         whitelist = new WhitelistPolicyV2(new AddressGroupRegistry());
         orchestrator = new OrchestratorV4(
             address(this),
-            CHAIN_ID,
             address(escrowRegistry),
             address(paymentVerifierRegistry),
-            address(relayerRegistry),
             0,
-            protocolFeeRecipient,
-            whitelist
+            protocolFeeRecipient
         );
-        orchestrator.setAllowMultipleIntents(true);
+        signalPolicy = new IntentSignalPolicy(gatingService, whitelist, relayerRegistry, true);
+        orchestrator.setSignalPolicy(signalPolicy);
         postIntentHook = new PostIntentHookV2Mock(address(token), address(orchestrator));
         orchestratorMock = new OrchestratorMock(address(escrow));
 
@@ -215,7 +215,14 @@ abstract contract OrchestratorV4Fixture is Test {
         _signalCall(caller, params);
     }
 
+    /// @dev Signs params as the gating service for the caller, then signals.
     function _signalCall(address caller, IOrchestratorV4.SignalIntentParams memory params) internal {
+        params.gatingServiceSignature = _gatingSignature(gatingServiceKey, caller, params, params.signatureExpiration);
+        _signalRaw(caller, params);
+    }
+
+    /// @dev Signals params exactly as given.
+    function _signalRaw(address caller, IOrchestratorV4.SignalIntentParams memory params) internal {
         vm.prank(caller);
         orchestrator.signalIntent(params);
     }
@@ -270,7 +277,7 @@ abstract contract OrchestratorV4Fixture is Test {
                 params.conversionRate,
                 _referralHash(params.referralFees),
                 expiration,
-                CHAIN_ID,
+                block.chainid,
                 params.payerCommitment
             )
         );
@@ -279,18 +286,12 @@ abstract contract OrchestratorV4Fixture is Test {
         return abi.encodePacked(r, s, v);
     }
 
-    function _gatedParams(uint256 gatedDepositId, uint256 signerKey, address signedCaller, uint256 expiration)
+    function _gatedParams(uint256 signerKey, address signedCaller, uint256 expiration)
         internal
         view
         returns (IOrchestratorV4.SignalIntentParams memory params)
     {
-        params = _params(
-            gatedDepositId,
-            taker,
-            INTENT_AMOUNT,
-            CONVERSION_RATE,
-            _emptyReferralFees()
-        );
+        params = _defaultParams();
         params.signatureExpiration = expiration;
         params.gatingServiceSignature = _gatingSignature(signerKey, signedCaller, params, expiration);
     }
