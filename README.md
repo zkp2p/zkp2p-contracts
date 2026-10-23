@@ -231,32 +231,68 @@ Base staging uses Base mainnet, chain ID **8453**, with the dedicated signer
 `base_staging` loads only `STAGING_DEPLOYER_KEY`, accepting the key with or without a `0x` prefix. If it is unset,
 the account list is empty. Production `base` continues to use `BASE_DEPLOY_PRIVATE_KEY`.
 
-The dedicated signer is the intended deployer and owner of every ownable component in the current staging
-stack and future staging deployments. Historical contracts outside that stack do not need to migrate.
+Use the dedicated signer for future staging deployments and as the owner of every ownable component in the
+current staging stack. Historical contracts outside that stack do not need to migrate.
 
-At Base block **52975854** (23 October 2026), the current V3 stack plus the seven passive V4 candidates contain
-**21 ownable contracts**: **12** already belong to the dedicated signer and the following **nine** still belong
-to historical owner `0xdd93E0f5fC32c86A568d87Cb4f08598f55E980F3`. Another eight components have no contract-wide
-`owner()` interface. The passive V4 candidates are not activated; their ownership does not establish rollout readiness.
+At Base block **52976468** (23 October 2026), all **21 ownable contracts** in the supported V3 stack
+and seven passive V4 candidates report the dedicated signer as owner. The remaining eight components have no
+contract-wide `owner()` interface. The nine outstanding ownership transfers are complete, with successful receipts,
+`OwnershipTransferred` events and owner readbacks; all 20 checked address/boolean configuration getters stayed
+unchanged. The handoff spans [the EscrowV2 transfer](https://basescan.org/tx/0x99c29550534a6db39d7b3dd78b4d2eaf35e4bd2e3de3dee8239d4ed0c656dd68) through
+[the RateManagerV1 transfer](https://basescan.org/tx/0x9ba1f506cb1aa96d5dfd38abf8c06bbca6dc43609f3990cd7cc174ff2b6bf145).
 
-| Current staging component awaiting transfer | Contract |
+#### Supported staging V3 stack
+
+This is the retained staging integration inventory. Familiar lifecycle names and exact deployment aliases are
+shown together. Superseded staging deployments are excluded.
+
+| Contract / familiar name | Deployment artifact | Base staging address |
+| --- | --- | --- |
+| `EscrowV2` | `EscrowV2` | [`0x77e8f808FE201075e0bD651CD46fdF239fc83265`](https://basescan.org/address/0x77e8f808FE201075e0bD651CD46fdF239fc83265) |
+| `OrchestratorV3` | `OrchestratorV3` | [`0x2b5E8Ab562e45fA89D73802605E145ED3E3EeF4f`](https://basescan.org/address/0x2b5E8Ab562e45fA89D73802605E145ED3E3EeF4f) |
+| `UnifiedPaymentVerifierV3` | `UnifiedPaymentVerifierV3` | [`0x4c62E99649c8Ba745E67018f5c8a483D77c429C4`](https://basescan.org/address/0x4c62E99649c8Ba745E67018f5c8a483D77c429C4) |
+| `MultiAttestationVerifier` | `MultiAttestationVerifier` | [`0x9855a39aC5975069632e91160d8712CBfF19e864`](https://basescan.org/address/0x9855a39aC5975069632e91160d8712CBfF19e864) |
+| `IntentLifecycleHookV1` | `IntentLifecycleHookV1MethodScopedStaked` | [`0x5A7f6cb7397134da1fDEFA7E2D434b4Cf18E56D9`](https://basescan.org/address/0x5A7f6cb7397134da1fDEFA7E2D434b4Cf18E56D9) |
+| `WhitelistPolicy` | `WhitelistPolicyMethodScoped` | [`0xF79aAD1BAaB617fF3Eb299225c80893F22F743Fe`](https://basescan.org/address/0xF79aAD1BAaB617fF3Eb299225c80893F22F743Fe) |
+| `DisputeProtectionPolicy` | `DisputeProtectionPolicyMethodScopedStaked` | [`0x484fA07F085eb66bb7C2b649Ea9d5894b2B6681c`](https://basescan.org/address/0x484fA07F085eb66bb7C2b649Ea9d5894b2B6681c) |
+| `StakeVault` | `StakeVaultMethodScoped` | [`0x92d7B59E99e1CD2066540Cd2413b8714948b731f`](https://basescan.org/address/0x92d7B59E99e1CD2066540Cd2413b8714948b731f) |
+| `DisputeVerifier` | `DisputeVerifier` | [`0x973578148c5Fd49b9f68B50B26066555325AC708`](https://basescan.org/address/0x973578148c5Fd49b9f68B50B26066555325AC708) |
+| `DisputeNullifierRegistry` | `DisputeNullifierRegistry` | [`0xE0B05a9655AF0f31E32904267baa50FbC7f217ea`](https://basescan.org/address/0xE0B05a9655AF0f31E32904267baa50FbC7f217ea) |
+| `IntentGuardian` | `IntentGuardian` | [`0x3355bb8CEFA54509d244384CFA7f2A71fdb1FDD6`](https://basescan.org/address/0x3355bb8CEFA54509d244384CFA7f2A71fdb1FDD6) |
+| `PaymentVerifierRegistry` | `PaymentVerifierRegistry` | [`0x2261416DA54C85f975C73FA56EF4D2D6b0aEF7Cc`](https://basescan.org/address/0x2261416DA54C85f975C73FA56EF4D2D6b0aEF7Cc) |
+| `EscrowRegistry` | `EscrowRegistry` | [`0xc545f336eC77E69bf115729acCbf2e557A00ac91`](https://basescan.org/address/0xc545f336eC77E69bf115729acCbf2e557A00ac91) |
+| `OrchestratorRegistry` | `OrchestratorRegistry` | [`0xfA6384EB6176cfEC049540526A3d2126C3666d8A`](https://basescan.org/address/0xfA6384EB6176cfEC049540526A3d2126C3666d8A) |
+| `RelayerRegistry` | `RelayerRegistry` | [`0xB214650b424E6b5fdcB1259566eB7A512D8Bd25E`](https://basescan.org/address/0xB214650b424E6b5fdcB1259566eB7A512D8Bd25E) |
+| `AddressGroupRegistry` | `AddressGroupRegistry` | [`0x54Ff7788Cb42B46FE2F016a65Fd0f654Bb9BcF3D`](https://basescan.org/address/0x54Ff7788Cb42B46FE2F016a65Fd0f654Bb9BcF3D) |
+| `NullifierRegistryV2` | `NullifierRegistryV2` | [`0x2eb43d6C7c7Ec4220Aa6B8735BC053824a71778C`](https://basescan.org/address/0x2eb43d6C7c7Ec4220Aa6B8735BC053824a71778C) |
+| `NullifierRegistry` | `NullifierRegistry` | [`0x3FFd04f7909a16d3476263A1f4ce413A089dCc69`](https://basescan.org/address/0x3FFd04f7909a16d3476263A1f4ce413A089dCc69) |
+| `RateManagerV1` | `RateManagerV1` | [`0x9d773Af159538369b4842e40510562016E3eD3d7`](https://basescan.org/address/0x9d773Af159538369b4842e40510562016E3eD3d7) |
+| `ChainlinkOracleAdapter` | `ChainlinkOracleAdapter` | [`0xA3dBea0fCc742bF2eF32BB38E0D94e6AF0A6eDD6`](https://basescan.org/address/0xA3dBea0fCc742bF2eF32BB38E0D94e6AF0A6eDD6) |
+| `PythOracleAdapter` | `PythOracleAdapter` | [`0xaa2bBDa3072bD37af76613846268Ec48bd0bB885`](https://basescan.org/address/0xaa2bBDa3072bD37af76613846268Ec48bd0bB885) |
+| `ProtocolViewerV2` | `ProtocolViewerV2` | [`0x5079E5aD9aF58E0B7F512C977720106A1494f684`](https://basescan.org/address/0x5079E5aD9aF58E0B7F512C977720106A1494f684) |
+
+`NullifierRegistryV2` still reads the retained `NullifierRegistry` for replay protection. The lifecycle hook,
+`AddressGroupRegistry`, oracle adapters and viewer do not have a contract-wide owner. FX feed contracts are shared
+with production and are outside this staging ownership handoff.
+
+#### Passive V4 candidates
+
+These seven contracts are deployed but not activated. They remain separate from the supported V3 integration
+targets above; their ownership does not establish rollout readiness.
+
+| Candidate | Base staging address |
 | --- | --- |
-| EscrowV2 | [`0x77e8f808FE201075e0bD651CD46fdF239fc83265`](https://basescan.org/address/0x77e8f808FE201075e0bD651CD46fdF239fc83265) |
-| OrchestratorV3 | [`0x2b5E8Ab562e45fA89D73802605E145ED3E3EeF4f`](https://basescan.org/address/0x2b5E8Ab562e45fA89D73802605E145ED3E3EeF4f) |
-| UnifiedPaymentVerifierV3 | [`0x4c62E99649c8Ba745E67018f5c8a483D77c429C4`](https://basescan.org/address/0x4c62E99649c8Ba745E67018f5c8a483D77c429C4) |
-| MultiAttestationVerifier | [`0x9855a39aC5975069632e91160d8712CBfF19e864`](https://basescan.org/address/0x9855a39aC5975069632e91160d8712CBfF19e864) |
-| WhitelistPolicyMethodScoped | [`0xF79aAD1BAaB617fF3Eb299225c80893F22F743Fe`](https://basescan.org/address/0xF79aAD1BAaB617fF3Eb299225c80893F22F743Fe) |
-| EscrowRegistry | [`0xc545f336eC77E69bf115729acCbf2e557A00ac91`](https://basescan.org/address/0xc545f336eC77E69bf115729acCbf2e557A00ac91) |
-| RelayerRegistry | [`0xB214650b424E6b5fdcB1259566eB7A512D8Bd25E`](https://basescan.org/address/0xB214650b424E6b5fdcB1259566eB7A512D8Bd25E) |
-| NullifierRegistry | [`0x3FFd04f7909a16d3476263A1f4ce413A089dCc69`](https://basescan.org/address/0x3FFd04f7909a16d3476263A1f4ce413A089dCc69) |
-| RateManagerV1 | [`0x9d773Af159538369b4842e40510562016E3eD3d7`](https://basescan.org/address/0x9d773Af159538369b4842e40510562016E3eD3d7) |
+| `StakeVaultV2` | [`0xa33dE1C8eD627fF5D6d94ABaC462A86b315cFb4e`](https://basescan.org/address/0xa33dE1C8eD627fF5D6d94ABaC462A86b315cFb4e) |
+| `AddressGroupRegistryV4` | [`0xE138653725e3602d596ae388D2B2FD05ed1148f3`](https://basescan.org/address/0xE138653725e3602d596ae388D2B2FD05ed1148f3) |
+| `WhitelistPolicyV2` | [`0xe034B9C59063DBad5F632c38515e75C24F625503`](https://basescan.org/address/0xe034B9C59063DBad5F632c38515e75C24F625503) |
+| `DisputeProtectionPolicyV2` | [`0x3C536cD642cF0ca989899D392fb2c41Bff7A94b1`](https://basescan.org/address/0x3C536cD642cF0ca989899D392fb2c41Bff7A94b1) |
+| `UnifiedPaymentVerifierV4` | [`0x7b1598b98cAC2930DD8D3174C329416848771748`](https://basescan.org/address/0x7b1598b98cAC2930DD8D3174C329416848771748) |
+| `OrchestratorV4` | [`0x7222027313D6D8D7e9BCdD7d2411a228B998C180`](https://basescan.org/address/0x7222027313D6D8D7e9BCdD7d2411a228B998C180) |
+| `ProtocolViewerV4` | [`0xEC0131D535160f32601BFca3DfA4B8043eefB56a`](https://basescan.org/address/0xEC0131D535160f32601BFca3DfA4B8043eefB56a) |
 
-Each remaining contract uses a single-step `transferOwnership` to
-`0x41123d6419C7b8e44157f6F3b0088442116641eC`, signed by its current owner. These transfers remain pending;
-read-only call simulations passed at the observation block. The legacy `NullifierRegistry` is retained because
-`NullifierRegistryV2` still reads it for replay protection. The historical `PostIntentHookRegistry` and retired
-pre-intent hooks are outside this current-stack handoff. The earlier 26 two-step transfers and four registry
-transfers are complete and must not be replayed.
+The V4 orchestrator, verifier, dispute policy and vault are owned by the dedicated signer. The V4 address-group
+registry, whitelist policy and viewer have no contract-wide owner. Deployment and activation remain separate
+release steps; this ownership handoff does not resume the paused rollout.
 
 Read each target's live `owner()` and, for two-step ownership, `pendingOwner()` before administrative calls.
 The current owner retains authority until acceptance. Preserve governance checks in current wrappers/helpers
