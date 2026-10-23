@@ -22,10 +22,11 @@ does not make them an active integration target.
 
 ### Lifecycle, whitelist and dispute protection
 
-The public package uses short canonical names. The deployment artifacts retain the names of the selected
-method-scoped stack. These names refer to the same production addresses:
+Use the familiar names below when discussing the production stack. The public package exports those same
+canonical names; deployment artifacts retain the longer method-scoped names. All four are current production
+components, and each pair refers to one deployed contract:
 
-| Package name | Selected deployment artifact | Base production address |
+| Familiar / package name | Deployment artifact name | Base production address |
 | --- | --- | --- |
 | `IntentLifecycleHookV1` | `IntentLifecycleHookV1MethodScopedStaked` | `0x5Dd6C675a7406fE8C9f0D93394a36fd6e8c50031` |
 | `WhitelistPolicy` | `WhitelistPolicyMethodScoped` | `0x389Cd9bA91FfFcd83d267B241E975541892759Ce` |
@@ -44,6 +45,18 @@ The whitelist policy configures allowed groups and direct takers per deposit/pay
 whitelist/dispute policy at intent admission and settlement. `DisputeVerifier` and `DisputeNullifierRegistry`
 support dispute verification and replay protection; `IntentGuardian` supports configured intent extensions.
 
+### Intent admission
+
+Production whitelisting uses `WhitelistPolicy` through `IntentLifecycleHookV1`. OrchestratorV3 separately
+checks the gating-service signature configured on each escrow deposit/payment method. Neither path requires
+the old `WhitelistPreIntentHook` or `SignatureGatingPreIntentHook` deployment; those two are outside the current
+production stack.
+
+OrchestratorV3 retains a generic optional per-deposit pre-intent-hook interface. On 23 October 2026, the production
+indexer returned no O3 `DepositPreIntentHookSet` events. Its 248 non-null legacy whitelist-hook deposit records
+were also checked directly against O3 at Base block **52975146**: every `getDepositPreIntentHook` result was zero.
+Legacy indexed hook fields therefore must not be interpreted as current O3 admission policy.
+
 ### Registries and pricing
 
 - `EscrowRegistry`, `OrchestratorRegistry`, `PaymentVerifierRegistry` and `RelayerRegistry` define the
@@ -53,8 +66,9 @@ support dispute verification and replay protection; `IntentGuardian` supports co
 - `RateManagerV1` supplies delegated rates. `EscrowV2` applies the configured deposit floor and oracle
   constraints. `ChainlinkOracleAdapter` reads configured Chainlink-compatible feeds.
 - `FxRateStore`, `FxRateFeedInrUsd` and `FxRateFeedCnyUsd` provide the protocol's INR/USD and CNY/USD feeds.
-- Read helpers and per-deposit hooks must be selected from the consumer's configured deployment.
-  A package export alone does not establish that a particular helper is used by every production deposit.
+- `ProtocolViewerV2` remains a read helper in the retained stack. `PythOracleAdapter` is retained as an adapter
+  component; this inventory does not assert that a current deposit uses it. The current indexer supports
+  Chainlink-compatible feeds and has removed Pyth indexing.
 
 ## Settlement flow
 
