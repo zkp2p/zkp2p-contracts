@@ -1,10 +1,10 @@
-import { ONE_DAY_IN_SECONDS, THREE_MINUTES_IN_SECONDS, ZERO, ONE_HOUR_IN_SECONDS, SIX_HOURS_IN_SECONDS } from "../utils/constants";
+import { ONE_DAY_IN_SECONDS, THREE_MINUTES_IN_SECONDS, ZERO, ONE_HOUR_IN_SECONDS } from "../utils/constants";
 import { ether, usdc } from "../utils/common/units";
 
 export const INTENT_EXPIRATION_PERIOD: any = {
-  "localhost": ONE_DAY_IN_SECONDS,
-  "hardhat": ONE_DAY_IN_SECONDS,
-  "base": SIX_HOURS_IN_SECONDS,
+  "localhost": ONE_HOUR_IN_SECONDS,
+  "hardhat": ONE_HOUR_IN_SECONDS,
+  "base": ONE_HOUR_IN_SECONDS,
   "base_staging": ONE_HOUR_IN_SECONDS,
 };
 
@@ -95,9 +95,9 @@ export const USDC: any = {
 
 // V2 Parameters
 export const ESCROW_V2_INTENT_EXPIRATION_PERIOD: any = {
-  "localhost": ONE_DAY_IN_SECONDS,
-  "hardhat": ONE_DAY_IN_SECONDS,
-  "base": SIX_HOURS_IN_SECONDS,
+  "localhost": ONE_HOUR_IN_SECONDS,
+  "hardhat": ONE_HOUR_IN_SECONDS,
+  "base": ONE_HOUR_IN_SECONDS,
   "base_staging": ONE_HOUR_IN_SECONDS,
 };
 
