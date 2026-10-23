@@ -82,6 +82,7 @@ const sourceAbiArtifacts = {
   StakeVault: "artifacts/contracts/StakeVault.sol/StakeVault.json",
   StakeVaultV2: "artifacts/contracts/StakeVaultV2.sol/StakeVaultV2.json",
   WhitelistPolicyV2: "artifacts/contracts/hooks/WhitelistPolicyV2.sol/WhitelistPolicyV2.json",
+  IntentSignalPolicy: "artifacts/contracts/hooks/IntentSignalPolicy.sol/IntentSignalPolicy.json",
   DisputeProtectionPolicyV2: "artifacts/contracts/hooks/DisputeProtectionPolicyV2.sol/DisputeProtectionPolicyV2.json",
   UnifiedPaymentVerifierV4: "artifacts/contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol/UnifiedPaymentVerifierV4.json",
   OrchestratorV4: "artifacts/contracts/OrchestratorV4.sol/OrchestratorV4.json",

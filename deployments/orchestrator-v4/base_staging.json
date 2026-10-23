@@ -4,6 +4,7 @@
   "chainId": 8453,
   "signer": "0x41123d6419C7b8e44157f6F3b0088442116641eC",
   "governance": "0x41123d6419C7b8e44157f6F3b0088442116641eC",
+  "gatingService": "0x87eE8394DDa0F8CB89924e093f6209cfCA3045e0",
   "existing": {
     "EscrowV2": {
       "address": "0x77e8f808FE201075e0bD651CD46fdF239fc83265",

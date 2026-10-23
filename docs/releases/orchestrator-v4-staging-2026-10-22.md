@@ -8,6 +8,16 @@ incompatible predecessors are paused and drained, and existing private deposits
 enable the fresh whitelist. Seven of eighteen privacy migrations are complete;
 eleven still require their owners. Production is unchanged.
 
+Source update, 2026-10-23: main now includes #361 (the attested UPV4 snapshot
+ends with the intent owner) and #363 (O4 delegates signal admission to
+`IntentSignalPolicy`). The runner deploys eight contracts: it adds
+`IntentSignalPolicy` with the configured `gatingService`, the fresh
+WhitelistPolicyV2, the reused RelayerRegistry and `allowMultipleIntents`, and
+selects it with `setSignalPolicy`. The seven contracts recorded below run the
+previous source and do not implement the new O4 or UPV4 ABIs; they are not
+redeployed by this update. The next staging deployment starts a new manifest and
+records these seven as historical, as was done for the October 16 suite.
+
 The operator-local [historical-owner handoff](orchestrator-v4-historical-owner-handoff.md)
 defines the exact seven allowed calls, signing isolation, plan hash and recovery
 procedure. Ownership handoff alone does not authorize activation.

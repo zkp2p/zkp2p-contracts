@@ -14,6 +14,7 @@ export const NEW_CONTRACTS = {
   StakeVaultV2: "StakeVaultV2",
   AddressGroupRegistryV4: "AddressGroupRegistry",
   WhitelistPolicyV2: "WhitelistPolicyV2",
+  IntentSignalPolicy: "IntentSignalPolicy",
   DisputeProtectionPolicyV2: "DisputeProtectionPolicyV2",
   UnifiedPaymentVerifierV4: "UnifiedPaymentVerifierV4",
   OrchestratorV4: "OrchestratorV4",
@@ -22,7 +23,7 @@ export const NEW_CONTRACTS = {
 type NewName = keyof typeof NEW_CONTRACTS;
 type Pin = { address: string; artifact: string; runtimeCodeHash: string; deploymentTransaction: string; deploymentBlock: number };
 export type ReleaseConfig = {
-  version: 1; environment: "base_staging" | "base"; chainId: number; signer: string; governance: string;
+  version: 1; environment: "base_staging" | "base"; chainId: number; signer: string; governance: string; gatingService: string;
   existing: Record<string, Pin>; stakeToken: string; protocolFee: string; protocolFeeRecipient: string;
   allowMultipleIntents: boolean; predecessorHook: string; paymentMethods: Array<{ method: string; currencies: string[] }>;
   retainedDisputeWriters: string[]; attestationWitnesses: string[]; attestationThreshold: string; baselineBlock: number;
@@ -60,7 +61,7 @@ export function validateConfig(value: unknown): asserts value is ReleaseConfig {
   const c = value as ReleaseConfig;
   check(c.version === 1 && ["base_staging", "base"].includes(c.environment), "Unsupported release configuration");
   check(Number.isSafeInteger(c.chainId) && c.chainId > 0, "Invalid configured chain ID");
-  for (const name of ["signer", "governance", "stakeToken", "protocolFeeRecipient", "predecessorHook"] as const)
+  for (const name of ["signer", "governance", "gatingService", "stakeToken", "protocolFeeRecipient", "predecessorHook"] as const)
     check(typeof c[name] === "string" && utils.isAddress(c[name]) && !same(c[name], ZERO), `Invalid configured ${name}`);
   if (c.environment === "base_staging") check(same(c.signer, c.governance), "Staging governance must be its verified signer");
   check(typeof c.protocolFee === "string" && /^\d+$/.test(c.protocolFee) && BigNumber.from(c.protocolFee).lte("50000000000000000"), "Invalid protocol fee");
@@ -253,14 +254,15 @@ export async function deploySuite(hre: HardhatRuntimeEnvironment, journal: Trans
   await deploy("StakeVaultV2", [c.signer, c.stakeToken]);
   await deploy("AddressGroupRegistryV4", []);
   await deploy("WhitelistPolicyV2", [fresh("AddressGroupRegistryV4")]);
+  await deploy("IntentSignalPolicy", [c.gatingService, fresh("WhitelistPolicyV2"), a("RelayerRegistry"), c.allowMultipleIntents]);
   await deploy("DisputeProtectionPolicyV2", [c.signer, fresh("StakeVaultV2"), a("DisputeVerifier"), a("DisputeNullifierRegistry"), a("OrchestratorRegistry")]);
   await call("StakeVaultV2", "setController", [fresh("DisputeProtectionPolicyV2"), true]);
   await deploy("UnifiedPaymentVerifierV4", [a("OrchestratorRegistry"), a("NullifierRegistryV2"), a("MultiAttestationVerifier")]);
   const upv = new Contract(fresh("UnifiedPaymentVerifierV4"), (await hre.artifacts.readArtifact("UnifiedPaymentVerifierV4")).abi);
   for (const { method } of c.paymentMethods) await journal.execute(`verifier-method:${method}`, { to: upv.address, data: upv.interface.encodeFunctionData("addPaymentMethod", [method]) });
-  await deploy("OrchestratorV4", [c.signer, c.chainId, a("EscrowRegistry"), a("PaymentVerifierRegistry"), a("RelayerRegistry"), c.protocolFee, c.protocolFeeRecipient, fresh("WhitelistPolicyV2")]);
+  await deploy("OrchestratorV4", [c.signer, a("EscrowRegistry"), a("PaymentVerifierRegistry"), c.protocolFee, c.protocolFeeRecipient]);
+  await call("OrchestratorV4", "setSignalPolicy", [fresh("IntentSignalPolicy")]);
   await call("OrchestratorV4", "setSettlementPolicy", [fresh("DisputeProtectionPolicyV2")]);
-  if (c.allowMultipleIntents) await call("OrchestratorV4", "setAllowMultipleIntents", [true]);
   await deploy("ProtocolViewerV4", []);
   if (!same(c.signer, c.governance)) for (const name of ["StakeVaultV2", "DisputeProtectionPolicyV2", "UnifiedPaymentVerifierV4", "OrchestratorV4"] as const) await call(name, "transferOwnership", [c.governance]);
   await verifySuite(hre, journal, false);
@@ -469,17 +471,18 @@ export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: Trans
     check(tx && same(tx.from, c.signer) && tx.to === null && tx.data === new ContractFactory(artifact.abi, artifact.bytecode).getDeployTransaction(...record.constructorArguments).data, `${name} constructor transaction differs`);
     contracts[name] = new Contract(record.address, artifact.abi, hre.ethers.provider);
   }
-  const o = contracts.OrchestratorV4, v = contracts.UnifiedPaymentVerifierV4, p = contracts.DisputeProtectionPolicyV2, vault = contracts.StakeVaultV2;
+  const o = contracts.OrchestratorV4, v = contracts.UnifiedPaymentVerifierV4, p = contracts.DisputeProtectionPolicyV2, vault = contracts.StakeVaultV2, signal = contracts.IntentSignalPolicy;
   const expectedFields: Array<[Contract, string, string]> = [
-    [o, "whitelistPolicy", contracts.WhitelistPolicyV2.address], [o, "settlementPolicy", p.address],
-    [o, "escrowRegistry", c.existing.EscrowRegistry.address], [o, "paymentVerifierRegistry", c.existing.PaymentVerifierRegistry.address], [o, "relayerRegistry", c.existing.RelayerRegistry.address],
+    [o, "signalPolicy", signal.address], [o, "settlementPolicy", p.address],
+    [o, "escrowRegistry", c.existing.EscrowRegistry.address], [o, "paymentVerifierRegistry", c.existing.PaymentVerifierRegistry.address],
+    [signal, "gatingService", c.gatingService], [signal, "whitelistPolicy", contracts.WhitelistPolicyV2.address], [signal, "relayerRegistry", c.existing.RelayerRegistry.address],
     [o, "protocolFeeRecipient", c.protocolFeeRecipient], [vault, "stakeToken", c.stakeToken], [p, "stakeVault", vault.address],
     [p, "disputeVerifier", c.existing.DisputeVerifier.address], [p, "disputeNullifierRegistry", c.existing.DisputeNullifierRegistry.address], [p, "orchestratorRegistry", c.existing.OrchestratorRegistry.address],
     [v, "orchestratorRegistry", c.existing.OrchestratorRegistry.address], [v, "nullifierRegistry", c.existing.NullifierRegistryV2.address], [v, "attestationVerifier", c.existing.MultiAttestationVerifier.address],
     [contracts.WhitelistPolicyV2, "groupRegistry", contracts.AddressGroupRegistryV4.address],
   ];
   for (const [contract, field, expected] of expectedFields) check(same(await contract[field](), expected), `${contract.address} ${field} mismatch`);
-  check((await o.chainId()).eq(c.chainId) && (await o.protocolFee()).eq(c.protocolFee) && await o.allowMultipleIntents() === c.allowMultipleIntents && !await o.paused(), "O4 fee, chain, intent or pause mismatch");
+  check((await o.protocolFee()).eq(c.protocolFee) && await signal.allowMultipleIntents() === c.allowMultipleIntents && !await o.paused(), "O4 fee, intent limit or pause mismatch");
   check(await vault.isController(p.address), "Policy is not the vault controller");
   check(equal(await v.getPaymentMethods(), c.paymentMethods.map((method) => method.method)), "UPV4 method catalog mismatch");
   for (const contract of [o, v, vault, p]) {
