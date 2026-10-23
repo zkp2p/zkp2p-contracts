@@ -214,9 +214,9 @@ Orchestrator ── net ──▶ Recipient OR PostIntentHook (then executes)
 - Focused iteration: `forge test --match-path '<test-file>'`, `forge test --match-contract <Contract>`, or
   `forge test --match-test <testName>`.
 - `yarn coverage`: Run the deterministic Foundry coverage pipeline. It is intentionally much heavier than tests.
-- Deploy: `yarn deploy:localhost`, `yarn deploy:base`, `yarn deploy:base_staging`. These supported commands route
-  through `scripts/deployActive.ts`; direct `hardhat deploy` invocation bypasses immutable-lane retirement and is
-  unsupported.
+- Deploy: `yarn deploy:localhost`, `yarn deploy:base`, `yarn deploy:base_staging` through `scripts/deployActive.ts`.
+  Check [staging ownership](README.md#base-staging-ownership); direct `hardhat deploy` bypasses immutable-lane
+  retirement and is unsupported.
 - Verify: `yarn etherscan:base` and `yarn etherscan:base_staging`.
 
 ## Fast Development Workflow

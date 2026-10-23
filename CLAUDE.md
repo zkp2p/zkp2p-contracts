@@ -188,8 +188,8 @@ yarn etherscan:base_staging
 yarn etherscan:base
 ```
 
-Only run a live command after the `ship-contracts` boundary for that exact
-action is approved.
+Before live commands, require `ship-contracts` approval for that action and check
+[staging ownership](README.md#base-staging-ownership).
 
 ## Package boundary
 
