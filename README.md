@@ -231,18 +231,32 @@ Base staging uses Base mainnet, chain ID **8453**, with the dedicated signer
 `base_staging` loads only `STAGING_DEPLOYER_KEY`, accepting the key with or without a `0x` prefix. If it is unset,
 the account list is empty. Production `base` continues to use `BASE_DEPLOY_PRIVATE_KEY`.
 
-The 22 October 2026 batch redirected and accepted 26 two-step ownership transfers to the dedicated signer.
-A fresh read of the same 194-contract staging inventory at Base block **52975363** (23 October 2026) found:
+The dedicated signer is the intended deployer and owner of every ownable component in the current staging
+stack and future staging deployments. Historical contracts outside that stack do not need to migrate.
 
-| Owner | Contracts in that staging inventory |
-| --- | ---: |
-| Dedicated staging signer `0x41123d6419C7b8e44157f6F3b0088442116641eC` | 30 |
-| Historical owner `0xdd93E0f5fC32c86A568d87Cb4f08598f55E980F3` | 164 |
-| Former deployer `0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929` | 0 |
+At Base block **52975854** (23 October 2026), the current V3 stack plus the seven passive V4 candidates contain
+**21 ownable contracts**: **12** already belong to the dedicated signer and the following **nine** still belong
+to historical owner `0xdd93E0f5fC32c86A568d87Cb4f08598f55E980F3`. Another eight components have no contract-wide
+`owner()` interface. The passive V4 candidates are not activated; their ownership does not establish rollout readiness.
 
-All 26 contracts from the recorded batch had zero pending owners. Four registry owners had changed since that
-batch's snapshot. Ownership remains mixed; this inventory is not a claim that all staging contracts use the
-dedicated signer or that every contract deployed by the former deployer has been discovered.
+| Current staging component awaiting transfer | Contract |
+| --- | --- |
+| EscrowV2 | [`0x77e8f808FE201075e0bD651CD46fdF239fc83265`](https://basescan.org/address/0x77e8f808FE201075e0bD651CD46fdF239fc83265) |
+| OrchestratorV3 | [`0x2b5E8Ab562e45fA89D73802605E145ED3E3EeF4f`](https://basescan.org/address/0x2b5E8Ab562e45fA89D73802605E145ED3E3EeF4f) |
+| UnifiedPaymentVerifierV3 | [`0x4c62E99649c8Ba745E67018f5c8a483D77c429C4`](https://basescan.org/address/0x4c62E99649c8Ba745E67018f5c8a483D77c429C4) |
+| MultiAttestationVerifier | [`0x9855a39aC5975069632e91160d8712CBfF19e864`](https://basescan.org/address/0x9855a39aC5975069632e91160d8712CBfF19e864) |
+| WhitelistPolicyMethodScoped | [`0xF79aAD1BAaB617fF3Eb299225c80893F22F743Fe`](https://basescan.org/address/0xF79aAD1BAaB617fF3Eb299225c80893F22F743Fe) |
+| EscrowRegistry | [`0xc545f336eC77E69bf115729acCbf2e557A00ac91`](https://basescan.org/address/0xc545f336eC77E69bf115729acCbf2e557A00ac91) |
+| RelayerRegistry | [`0xB214650b424E6b5fdcB1259566eB7A512D8Bd25E`](https://basescan.org/address/0xB214650b424E6b5fdcB1259566eB7A512D8Bd25E) |
+| NullifierRegistry | [`0x3FFd04f7909a16d3476263A1f4ce413A089dCc69`](https://basescan.org/address/0x3FFd04f7909a16d3476263A1f4ce413A089dCc69) |
+| RateManagerV1 | [`0x9d773Af159538369b4842e40510562016E3eD3d7`](https://basescan.org/address/0x9d773Af159538369b4842e40510562016E3eD3d7) |
+
+Each remaining contract uses a single-step `transferOwnership` to
+`0x41123d6419C7b8e44157f6F3b0088442116641eC`, signed by its current owner. These transfers remain pending;
+read-only call simulations passed at the observation block. The legacy `NullifierRegistry` is retained because
+`NullifierRegistryV2` still reads it for replay protection. The historical `PostIntentHookRegistry` and retired
+pre-intent hooks are outside this current-stack handoff. The earlier 26 two-step transfers and four registry
+transfers are complete and must not be replayed.
 
 Read each target's live `owner()` and, for two-step ownership, `pendingOwner()` before administrative calls.
 The current owner retains authority until acceptance. Preserve governance checks in current wrappers/helpers
