@@ -102,7 +102,6 @@ interface IOrchestratorV4 {
     error ZeroAddress();
 
     // Authorization errors
-    error UnauthorizedEscrowCaller(address caller);
     error UnauthorizedCaller(address caller, address authorized);
 
     // Not found errors
@@ -112,13 +111,9 @@ interface IOrchestratorV4 {
     error CurrencyNotSupported(bytes32 paymentMethod, bytes32 currency);
 
     // Whitelist errors
-    error PaymentMethodNotWhitelisted(bytes32 paymentMethod);
     error EscrowNotWhitelisted(address escrow);
 
     // Amount and fee errors
-    error AmountBelowMin(uint256 amount, uint256 min);
-    error AmountAboveMax(uint256 amount, uint256 max);
-    error AmountExceedsLimit(uint256 amount, uint256 limit);
     error FeeExceedsMaximum(uint256 fee, uint256 maximum);
     error RateBelowMinimum(uint256 rate, uint256 minRate);
     error PartialReleaseRequiresArbitrator(uint256 releaseAmount, uint256 intentAmount);
@@ -126,10 +121,6 @@ interface IOrchestratorV4 {
     // Verification errors
     error PaymentVerificationFailed();
     error HashMismatch(bytes32 expected, bytes32 actual);
-
-    // Transfer errors
-    error TransferFailed(address recipient, uint256 amount);
-    error EscrowLockFailed();
 
     /* ============ View Functions ============ */
 
