@@ -5,6 +5,7 @@ import {IIntentSettlementPolicy} from "contracts/interfaces/IIntentSettlementPol
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {SettlementPolicyMock} from "../../mocks/SettlementPolicyMock.sol";
 import {OrchestratorV4Fixture} from "../helpers/OrchestratorV4Fixture.sol";
+import {IntentSignalPolicy} from "contracts/hooks/IntentSignalPolicy.sol";
 
 contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
     event IntentFulfilled(bytes32 indexed intentHash, address indexed fundsTransferredTo, uint256 amount, address releasedBy);
@@ -180,12 +181,12 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         assertEq(policyMock.settlementCalls(), 0);
     }
 
-    function test_WhitelistAdmissionAppliesWithZeroPolicyAndUsesTakerNotRecipient() public {
+    function test_WhitelistAdmissionAppliesWithZeroSettlementPolicyAndUsesTakerNotRecipient() public {
         _whitelist(other);
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.to = other;
         relayerRegistry.addRelayer(taker);
-        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker));
+        vm.expectRevert(abi.encodeWithSelector(IntentSignalPolicy.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker));
         _signalCall(taker, params);
         assertEq(orchestrator.intentCounter(), 0);
         assertEq(escrow.getDeposit(depositId).outstandingIntentAmount, 0);

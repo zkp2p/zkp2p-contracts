@@ -4,6 +4,7 @@ pragma solidity ^0.8.18;
 
 import { IReferralFee } from "./IReferralFee.sol";
 import { IIntentSettlementPolicy } from "./IIntentSettlementPolicy.sol";
+import { IIntentSignalPolicy } from "./IIntentSignalPolicy.sol";
 
 /**
  * @title IOrchestratorV4
@@ -28,8 +29,8 @@ interface IOrchestratorV4 {
         bytes32 payeeId;                            // Hashed payee identifier to whom the owner will pay offchain
         IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker
         bytes payerCommitment;                      // What the payer commits to, e.g. a salted payer ID hash; empty = none
-        bool takerWhitelisted;                      // Taker passed the deposit's enabled whitelist at signal; skips the policy
-        address arbitrator;                         // Arbitrator of the group the taker signaled through; can release or cancel; zero = none
+        bool takerWhitelisted;                      // Signal policy admitted the taker as whitelisted; skips the settlement policy
+        address arbitrator;                         // Arbitrator the signal policy named; can release, cancel or extend; zero = none
     }
 
     struct SignalIntentParams {
@@ -41,10 +42,10 @@ interface IOrchestratorV4 {
         bytes32 fiatCurrency;                       // The currency code for offchain payment
         uint256 conversionRate;                     // The conversion rate agreed offchain
         IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker
-        bytes gatingServiceSignature;               // Signature from the deposit's gating service
+        bytes gatingServiceSignature;               // Signature from the gating service, checked by the signal policy
         uint256 signatureExpiration;                // Timestamp when the gating service signature expires
-        bytes payerCommitment;                      // Signed by the gating service; UPV4 requires the attestor to sign its hash
-        bytes32 groupId;                            // Allowed group the taker is a member of; its arbitrator rules the intent; zero = none; ignored when the whitelist is off
+        bytes payerCommitment;                      // Vouched for by the signal policy; UPV4 requires the attestor to sign its hash
+        bytes32 groupId;                            // Group the taker signals through; the signal policy may name its arbitrator; zero = none
     }
 
     struct FulfillIntentParams {
@@ -88,9 +89,8 @@ interface IOrchestratorV4 {
     );
     event IntentManagerFeeSnapshotted(bytes32 indexed intentHash, address indexed feeRecipient, uint256 fee);
     event SettlementPolicyUpdated(address indexed previousPolicy, address indexed newPolicy);
-    event AllowMultipleIntentsUpdated(bool allowMultiple);
+    event SignalPolicyUpdated(address indexed previousPolicy, address indexed newPolicy);
 
-    event RelayerRegistryUpdated(address indexed relayerRegistry);
     event EscrowRegistryUpdated(address indexed escrowRegistry);
 
     event ProtocolFeeUpdated(uint256 protocolFee);
@@ -102,7 +102,6 @@ interface IOrchestratorV4 {
     error ZeroAddress();
 
     // Authorization errors
-    error UnauthorizedEscrowCaller(address caller);
     error UnauthorizedCaller(address caller, address authorized);
 
     // Not found errors
@@ -112,42 +111,31 @@ interface IOrchestratorV4 {
     error CurrencyNotSupported(bytes32 paymentMethod, bytes32 currency);
 
     // Whitelist errors
-    error PaymentMethodNotWhitelisted(bytes32 paymentMethod);
     error EscrowNotWhitelisted(address escrow);
-    error TakerNotWhitelisted(address escrow, uint256 depositId, bytes32 paymentMethod, address taker);
 
     // Amount and fee errors
-    error AmountBelowMin(uint256 amount, uint256 min);
-    error AmountAboveMax(uint256 amount, uint256 max);
-    error AmountExceedsLimit(uint256 amount, uint256 limit);
     error FeeExceedsMaximum(uint256 fee, uint256 maximum);
     error RateBelowMinimum(uint256 rate, uint256 minRate);
     error PartialReleaseRequiresArbitrator(uint256 releaseAmount, uint256 intentAmount);
 
-    // Validation errors
-    error AccountHasActiveIntent(address account, bytes32 existingIntent);
-    error InvalidSignature();
-    error PayerCommitmentRequiresGatingService();
-    error SignatureExpired(uint256 expiration, uint256 currentTime);
-
     // Verification errors
     error PaymentVerificationFailed();
     error HashMismatch(bytes32 expected, bytes32 actual);
-
-    // Transfer errors
-    error TransferFailed(address recipient, uint256 amount);
-    error EscrowLockFailed();
 
     /* ============ View Functions ============ */
 
     function getIntent(bytes32 intentHash) external view returns (Intent memory);
     function getAccountIntents(address account) external view returns (bytes32[] memory);
     function settlementPolicy() external view returns (IIntentSettlementPolicy);
+    function signalPolicy() external view returns (IIntentSignalPolicy);
 
     /* ============ External Functions for Users ============ */
 
-    /// @notice Signals an intent and locks its escrow funds.
+    /// @notice Signals an intent and locks its escrow funds; a set signal policy must accept it.
     function signalIntent(SignalIntentParams calldata params) external;
+
+    /// @notice Sets the signal policy that validates every later signal; zero disables signal checks.
+    function setSignalPolicy(IIntentSignalPolicy policy) external;
 
     /// @notice Sets the settlement policy applied to every later settlement; zero disables protection.
     function setSettlementPolicy(IIntentSettlementPolicy policy) external;
