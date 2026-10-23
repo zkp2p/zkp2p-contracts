@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
+import {IntentSignalPolicy} from "contracts/hooks/IntentSignalPolicy.sol";
 import {WhitelistPolicyV2} from "contracts/hooks/WhitelistPolicyV2.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 import {Test} from "forge-std/Test.sol";
@@ -9,7 +10,6 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {EscrowV2} from "contracts/EscrowV2.sol";
 import {OrchestratorV4} from "contracts/OrchestratorV4.sol";
 import {OrchestratorMock} from "../../mocks/OrchestratorMock.sol";
-import {SignalPolicyMock} from "../../mocks/SignalPolicyMock.sol";
 import {PaymentVerifierV2Mock} from "../../mocks/PaymentVerifierV2Mock.sol";
 import {PostIntentHookV2Mock} from "../../mocks/PostIntentHookV2Mock.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
@@ -52,7 +52,7 @@ abstract contract OrchestratorV4Fixture is Test {
     PaymentVerifierV2Mock internal verifier;
     PostIntentHookV2Mock internal postIntentHook;
     OrchestratorMock internal orchestratorMock;
-    SignalPolicyMock internal signalPolicy;
+    IntentSignalPolicy internal signalPolicy;
     uint256 internal depositId;
 
     function setUp() public virtual {
@@ -90,13 +90,10 @@ abstract contract OrchestratorV4Fixture is Test {
             address(this),
             address(escrowRegistry),
             address(paymentVerifierRegistry),
-            address(relayerRegistry),
             0,
-            protocolFeeRecipient,
-            whitelist
+            protocolFeeRecipient
         );
-        orchestrator.setAllowMultipleIntents(true);
-        signalPolicy = new SignalPolicyMock();
+        signalPolicy = new IntentSignalPolicy(gatingService, whitelist, relayerRegistry, true);
         orchestrator.setSignalPolicy(signalPolicy);
         postIntentHook = new PostIntentHookV2Mock(address(token), address(orchestrator));
         orchestratorMock = new OrchestratorMock(address(escrow));
@@ -218,7 +215,14 @@ abstract contract OrchestratorV4Fixture is Test {
         _signalCall(caller, params);
     }
 
+    /// @dev Signs params as the gating service for the caller, then signals.
     function _signalCall(address caller, IOrchestratorV4.SignalIntentParams memory params) internal {
+        params.gatingServiceSignature = _gatingSignature(gatingServiceKey, caller, params, params.signatureExpiration);
+        _signalRaw(caller, params);
+    }
+
+    /// @dev Signals params exactly as given.
+    function _signalRaw(address caller, IOrchestratorV4.SignalIntentParams memory params) internal {
         vm.prank(caller);
         orchestrator.signalIntent(params);
     }

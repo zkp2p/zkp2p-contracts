@@ -6,6 +6,7 @@ import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {SettlementPolicyMock} from "../../mocks/SettlementPolicyMock.sol";
 import {OrchestratorV4Fixture} from "../helpers/OrchestratorV4Fixture.sol";
+import {IntentSignalPolicy} from "contracts/hooks/IntentSignalPolicy.sol";
 
 contract OrchestratorV4ArbitratorTest is OrchestratorV4Fixture {
     event IntentFulfilled(bytes32 indexed intentHash, address indexed fundsTransferredTo, uint256 amount, address releasedBy);
@@ -74,13 +75,13 @@ contract OrchestratorV4ArbitratorTest is OrchestratorV4Fixture {
         params.groupId = unallowed;
 
         vm.expectRevert(
-            abi.encodeWithSelector(IOrchestratorV4.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker)
+            abi.encodeWithSelector(IntentSignalPolicy.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker)
         );
         _signalCall(taker, params);
     }
 
     function test_SignalRejectsTakerOutsideTheGroup() public {
-        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, other));
+        vm.expectRevert(abi.encodeWithSelector(IntentSignalPolicy.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, other));
         _signalCall(other, _defaultParams());
     }
 
@@ -97,7 +98,7 @@ contract OrchestratorV4ArbitratorTest is OrchestratorV4Fixture {
 
         // Without naming the group, a member would signal with no arbitrator.
         vm.expectRevert(
-            abi.encodeWithSelector(IOrchestratorV4.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker)
+            abi.encodeWithSelector(IntentSignalPolicy.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker)
         );
         _signalCall(taker, super._defaultParams());
 

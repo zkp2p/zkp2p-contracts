@@ -18,6 +18,7 @@ import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.s
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IntentSignalPolicy} from "contracts/hooks/IntentSignalPolicy.sol";
 
 /// @dev A recipient that can only forward the token it holds, like a splitter or exchange deposit contract.
 contract ForwardingRecipient {
@@ -207,7 +208,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
     function test_EnabledWhitelistRejectsNonMemberBeforeEscrowLock() public {
         vm.prank(depositor);
         whitelist.setEnabled(address(escrow), depositId, true);
-        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker));
+        vm.expectRevert(abi.encodeWithSelector(IntentSignalPolicy.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker));
         _signalCall(taker, _defaultParams());
         assertEq(escrow.getDeposit(depositId).outstandingIntentAmount, 0);
     }

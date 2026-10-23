@@ -4,15 +4,9 @@ pragma solidity ^0.8.18;
 import {OrchestratorV4Fixture} from "../helpers/OrchestratorV4Fixture.sol";
 import {IIntentSignalPolicy} from "contracts/interfaces/IIntentSignalPolicy.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
+import {SignalPolicyMock} from "../../mocks/SignalPolicyMock.sol";
 
 contract OrchestratorV4ValidationTest is OrchestratorV4Fixture {
-    function test_AccountWithActiveIntentRevertsWhenMultipleIntentsDisabled() public virtual {
-        orchestrator.setAllowMultipleIntents(false);
-        bytes32 first = _signalDefault();
-        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.AccountHasActiveIntent.selector, taker, first));
-        _signalCall(taker, _defaultParams());
-    }
-
     function test_SignalRejectsZeroRecipient() public {
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.to = address(0);
@@ -48,31 +42,49 @@ contract OrchestratorV4ValidationTest is OrchestratorV4Fixture {
         _signalCall(taker, _defaultParams());
     }
 
+    function _useSignalPolicyMock() internal returns (SignalPolicyMock mock) {
+        mock = new SignalPolicyMock();
+        orchestrator.setSignalPolicy(mock);
+    }
+
     function test_SignalForwardsTakerAndParamsToSignalPolicy() public {
+        SignalPolicyMock mock = _useSignalPolicyMock();
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.gatingServiceSignature = hex"5167";
         params.payerCommitment = "payer";
-        bytes32 id = _signal(taker, params);
-        assertEq(signalPolicy.signalCalls(), 1);
-        assertEq(signalPolicy.lastTaker(), taker);
-        assertEq(signalPolicy.lastParams(), abi.encode(params));
+        bytes32 id = _intentHash(orchestrator.intentCounter());
+        _signalRaw(taker, params);
+        assertEq(mock.signalCalls(), 1);
+        assertEq(mock.lastTaker(), taker);
+        assertEq(mock.lastParams(), abi.encode(params));
         assertEq(orchestrator.getIntent(id).payerCommitment, "payer");
     }
 
+    function test_SignalStoresTheAdmissionTheSignalPolicyReturns() public {
+        SignalPolicyMock mock = _useSignalPolicyMock();
+        mock.setAdmission(true, other);
+        bytes32 id = _signalDefault();
+        assertTrue(orchestrator.getIntent(id).takerWhitelisted);
+        assertEq(orchestrator.getIntent(id).arbitrator, other);
+    }
+
     function test_SignalRejectedBySignalPolicy() public {
-        signalPolicy.setRevertOnSignal(true);
+        _useSignalPolicyMock().setRevertOnSignal(true);
         vm.expectRevert("signal rejected");
         _signalCall(taker, _defaultParams());
     }
 
     function test_ZeroSignalPolicySkipsSignalChecks() public {
-        signalPolicy.setRevertOnSignal(true);
+        _whitelist(other);
         orchestrator.setSignalPolicy(IIntentSignalPolicy(address(0)));
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.payerCommitment = "payer";
-        bytes32 id = _signal(taker, params);
-        assertEq(orchestrator.getIntent(id).payerCommitment, "payer");
-        assertEq(signalPolicy.signalCalls(), 0);
+        bytes32 id = _intentHash(orchestrator.intentCounter());
+        _signalRaw(taker, params);
+        IOrchestratorV4.Intent memory intent = orchestrator.getIntent(id);
+        assertEq(intent.payerCommitment, "payer");
+        assertFalse(intent.takerWhitelisted);
+        assertEq(intent.arbitrator, address(0));
     }
 
     function test_FulfillRejectsMissingIntent() public {

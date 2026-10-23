@@ -29,8 +29,8 @@ interface IOrchestratorV4 {
         bytes32 payeeId;                            // Hashed payee identifier to whom the owner will pay offchain
         IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker
         bytes payerCommitment;                      // What the payer commits to, e.g. a salted payer ID hash; empty = none
-        bool takerWhitelisted;                      // Taker passed the deposit's enabled whitelist at signal; skips the policy
-        address arbitrator;                         // Arbitrator of the group the taker signaled through; can release or cancel; zero = none
+        bool takerWhitelisted;                      // Signal policy admitted the taker as whitelisted; skips the settlement policy
+        address arbitrator;                         // Arbitrator the signal policy named; can release, cancel or extend; zero = none
     }
 
     struct SignalIntentParams {
@@ -44,8 +44,8 @@ interface IOrchestratorV4 {
         IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker
         bytes gatingServiceSignature;               // Signature from the gating service, checked by the signal policy
         uint256 signatureExpiration;                // Timestamp when the gating service signature expires
-        bytes payerCommitment;                      // Signed by the gating service; UPV4 requires the attestor to sign its hash
-        bytes32 groupId;                            // Allowed group the taker is a member of; its arbitrator rules the intent; zero = none; ignored when the whitelist is off
+        bytes payerCommitment;                      // Vouched for by the signal policy; UPV4 requires the attestor to sign its hash
+        bytes32 groupId;                            // Group the taker signals through; the signal policy may name its arbitrator; zero = none
     }
 
     struct FulfillIntentParams {
@@ -90,9 +90,7 @@ interface IOrchestratorV4 {
     event IntentManagerFeeSnapshotted(bytes32 indexed intentHash, address indexed feeRecipient, uint256 fee);
     event SettlementPolicyUpdated(address indexed previousPolicy, address indexed newPolicy);
     event SignalPolicyUpdated(address indexed previousPolicy, address indexed newPolicy);
-    event AllowMultipleIntentsUpdated(bool allowMultiple);
 
-    event RelayerRegistryUpdated(address indexed relayerRegistry);
     event EscrowRegistryUpdated(address indexed escrowRegistry);
 
     event ProtocolFeeUpdated(uint256 protocolFee);
@@ -116,7 +114,6 @@ interface IOrchestratorV4 {
     // Whitelist errors
     error PaymentMethodNotWhitelisted(bytes32 paymentMethod);
     error EscrowNotWhitelisted(address escrow);
-    error TakerNotWhitelisted(address escrow, uint256 depositId, bytes32 paymentMethod, address taker);
 
     // Amount and fee errors
     error AmountBelowMin(uint256 amount, uint256 min);
@@ -125,9 +122,6 @@ interface IOrchestratorV4 {
     error FeeExceedsMaximum(uint256 fee, uint256 maximum);
     error RateBelowMinimum(uint256 rate, uint256 minRate);
     error PartialReleaseRequiresArbitrator(uint256 releaseAmount, uint256 intentAmount);
-
-    // Validation errors
-    error AccountHasActiveIntent(address account, bytes32 existingIntent);
 
     // Verification errors
     error PaymentVerificationFailed();
