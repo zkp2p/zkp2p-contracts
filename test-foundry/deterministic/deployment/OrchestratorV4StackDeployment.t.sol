@@ -13,6 +13,7 @@ import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionP
 import {StakeVault} from "contracts/StakeVault.sol";
 import {StakeVaultV2} from "contracts/StakeVaultV2.sol";
 import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
+import {IntentSignalPolicy} from "contracts/hooks/IntentSignalPolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {WhitelistPolicyV2} from "contracts/hooks/WhitelistPolicyV2.sol";
@@ -31,11 +32,13 @@ import {IOrchestrator} from "contracts/interfaces/IOrchestrator.sol";
 import {IPaymentVerifier} from "contracts/interfaces/IPaymentVerifier.sol";
 import {IPaymentVerifierV2} from "contracts/interfaces/IPaymentVerifierV2.sol";
 import {IPostIntentHook} from "contracts/interfaces/IPostIntentHook.sol";
+import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
 import {UnifiedPaymentVerifierV3CallerHarness} from "../../mocks/UnifiedPaymentVerifierV3Harness.sol";
 
 /// @dev Models the deployer-owned O4 release; Safe ownership acceptance is outside this model.
 contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
     uint256 internal constant WITNESS_KEY = 0xA11CE;
+    uint256 internal constant GATING_KEY = 0x6A7E;
     uint64 internal constant RISK_WINDOW = 14 days;
     bytes32 internal constant PAYPAL = keccak256("paypal");
     bytes32 internal constant ZELLE = keccak256("zelle");
@@ -48,6 +51,7 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
     WhitelistPolicy internal whitelist;
     WhitelistPolicyV2 internal freshWhitelist;
     AddressGroupRegistry internal freshGroupRegistry;
+    IntentSignalPolicy internal freshSignalPolicy;
     UnifiedPaymentVerifierV3 internal predecessor;
     UnifiedPaymentVerifierV4 internal successor;
     StakeVault internal predecessorVault;
@@ -122,18 +126,18 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         for (uint256 index; index < originalMethods.length; index++) {
             successor.addPaymentMethod(originalMethods[index]);
         }
+        freshSignalPolicy = new IntentSignalPolicy(
+            vm.addr(GATING_KEY), freshWhitelist, orchestrator.relayerRegistry(), orchestrator.allowMultipleIntents()
+        );
         orchestratorV4 = new OrchestratorV4(
             address(this),
-            orchestrator.chainId(),
             address(orchestrator.escrowRegistry()),
             address(orchestrator.paymentVerifierRegistry()),
-            address(orchestrator.relayerRegistry()),
             orchestrator.protocolFee(),
-            orchestrator.protocolFeeRecipient(),
-            freshWhitelist
+            orchestrator.protocolFeeRecipient()
         );
+        orchestratorV4.setSignalPolicy(freshSignalPolicy);
         orchestratorV4.setSettlementPolicy(freshPolicy);
-        if (orchestrator.allowMultipleIntents()) orchestratorV4.setAllowMultipleIntents(true);
         viewer = new ProtocolViewerV4();
     }
 
@@ -259,6 +263,7 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
 
     function test_O4SignalRevertsBeforeRegistration() public {
         IOrchestratorV4.SignalIntentParams memory params = _defaultV4Params();
+        _signO4(params, taker);
         vm.expectRevert(
             abi.encodeWithSelector(
                 IEscrowV2.UnauthorizedCaller.selector, address(orchestratorV4), address(orchestratorRegistry)
@@ -271,15 +276,16 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
     function test_O4ConfigMatchesO3() public view {
         assertEq(orchestratorV4.owner(), orchestrator.owner());
         assertFalse(orchestratorV4.paused());
-        assertEq(orchestratorV4.chainId(), orchestrator.chainId());
         assertEq(address(orchestratorV4.escrowRegistry()), address(orchestrator.escrowRegistry()));
         assertEq(address(orchestratorV4.paymentVerifierRegistry()), address(orchestrator.paymentVerifierRegistry()));
-        assertEq(address(orchestratorV4.relayerRegistry()), address(orchestrator.relayerRegistry()));
         assertEq(orchestratorV4.protocolFee(), orchestrator.protocolFee());
         assertEq(orchestratorV4.protocolFeeRecipient(), orchestrator.protocolFeeRecipient());
-        assertEq(orchestratorV4.allowMultipleIntents(), orchestrator.allowMultipleIntents());
         assertEq(address(orchestratorV4.settlementPolicy()), address(freshPolicy));
-        assertEq(address(orchestratorV4.whitelistPolicy()), address(freshWhitelist));
+        assertEq(address(orchestratorV4.signalPolicy()), address(freshSignalPolicy));
+        assertEq(freshSignalPolicy.gatingService(), vm.addr(GATING_KEY));
+        assertEq(address(freshSignalPolicy.relayerRegistry()), address(orchestrator.relayerRegistry()));
+        assertEq(freshSignalPolicy.allowMultipleIntents(), orchestrator.allowMultipleIntents());
+        assertEq(address(freshSignalPolicy.whitelistPolicy()), address(freshWhitelist));
         assertNotEq(address(freshWhitelist), address(whitelist));
         assertEq(address(freshWhitelist.groupRegistry()), address(freshGroupRegistry));
         assertNotEq(address(freshGroupRegistry), address(whitelist.groupRegistry()));
@@ -294,7 +300,7 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         assertTrue(whitelist.enabled(address(escrow), depositId, METHOD));
         assertFalse(freshWhitelist.enabled(address(escrow), depositId));
         assertEq(address(freshWhitelist.groupRegistry()), address(freshGroupRegistry));
-        assertEq(address(orchestratorV4.whitelistPolicy()), address(freshWhitelist));
+        assertEq(address(freshSignalPolicy.whitelistPolicy()), address(freshWhitelist));
         _activateRelease();
         bytes32 id = _signalO4();
         assertEq(orchestratorV4.getIntent(id).owner, taker);
@@ -424,8 +430,9 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         vm.prank(depositor);
         freshWhitelist.setEnabled(address(escrow), depositId, true);
         IOrchestratorV4.SignalIntentParams memory params = _defaultV4Params();
+        _signO4(params, taker);
         vm.expectRevert(
-            abi.encodeWithSelector(IOrchestratorV4.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker)
+            abi.encodeWithSelector(IntentSignalPolicy.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker)
         );
         vm.prank(taker);
         orchestratorV4.signalIntent(params);
@@ -447,6 +454,7 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         IOrchestratorV4.SignalIntentParams memory params = _defaultV4Params();
         params.to = other;
         params.groupId = groups[0];
+        _signO4(params, taker);
         bytes32 id = _nextO4IntentHash();
         vm.prank(taker);
         orchestratorV4.signalIntent(params);
@@ -485,7 +493,7 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         bytes32 afterCutover = _setV1Intent(v1, keccak256("v1-after-cutover"));
         bytes32 paymentId = keccak256("v1-after");
         bytes memory proof =
-            _successorProof(afterCutover, INTENT_AMOUNT, block.timestamp, paymentId, abi.encode(uint256(0)));
+            _successorProof(afterCutover, INTENT_AMOUNT, block.timestamp, taker, paymentId, abi.encode(uint256(0)));
         IPaymentVerifier routed = IPaymentVerifier(paymentVerifierRegistry.getVerifier(METHOD));
         assertEq(address(routed), address(successor));
         vm.expectRevert("UPV: Unsupported orchestrator");
@@ -542,15 +550,43 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         id = _nextO4IntentHash();
         IOrchestratorV4.SignalIntentParams memory params = _defaultV4Params();
         params.to = other;
+        _signO4(params, taker);
         vm.prank(taker);
         orchestratorV4.signalIntent(params);
     }
 
+    /// @dev Signs params as the signal policy's gating service for the caller.
+    function _signO4(IOrchestratorV4.SignalIntentParams memory params, address caller) private view {
+        bytes32[] memory feeHashes = new bytes32[](params.referralFees.length);
+        for (uint256 index; index < params.referralFees.length; index++) {
+            IReferralFee.ReferralFee memory fee = params.referralFees[index];
+            feeHashes[index] = keccak256(abi.encode(fee.recipient, fee.fee));
+        }
+        bytes32 messageHash = keccak256(
+            abi.encodePacked(
+                address(orchestratorV4), params.escrow, params.depositId, params.amount, caller, params.to,
+                params.paymentMethod, params.fiatCurrency, params.conversionRate, keccak256(abi.encode(feeHashes)),
+                params.signatureExpiration, block.chainid, params.payerCommitment
+            )
+        );
+        (uint8 recovery, bytes32 signatureR, bytes32 signatureS) =
+            vm.sign(GATING_KEY, keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash)));
+        params.gatingServiceSignature = abi.encodePacked(signatureR, signatureS, recovery);
+    }
+
     function _intentAmountAndTimestamp(bytes32 intentHash) private view returns (uint256 amount, uint256 timestamp) {
+        (amount, timestamp,) = _intentAmountTimestampAndOwner(intentHash);
+    }
+
+    function _intentAmountTimestampAndOwner(bytes32 intentHash)
+        private
+        view
+        returns (uint256 amount, uint256 timestamp, address owner)
+    {
         IOrchestratorV3.Intent memory intent = orchestrator.getIntent(intentHash);
-        if (intent.owner != address(0)) return (intent.amount, intent.timestamp);
+        if (intent.owner != address(0)) return (intent.amount, intent.timestamp, intent.owner);
         IOrchestratorV4.Intent memory intentV4 = orchestratorV4.getIntent(intentHash);
-        return (intentV4.amount, intentV4.timestamp);
+        return (intentV4.amount, intentV4.timestamp, intentV4.owner);
     }
 
     /// @dev UPV3 payload: abi.encode(PaymentDetails, IntentSnapshot), 448 bytes.
@@ -580,21 +616,22 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         view
         returns (bytes memory)
     {
-        (uint256 amount, uint256 timestamp) = _intentAmountAndTimestamp(intentHash);
-        return _successorProof(intentHash, amount, timestamp, paymentId, settlementData);
+        (uint256 amount, uint256 timestamp, address owner) = _intentAmountTimestampAndOwner(intentHash);
+        return _successorProof(intentHash, amount, timestamp, owner, paymentId, settlementData);
     }
 
     function _successorProof(
         bytes32 intentHash,
         uint256 amount,
         uint256 timestamp,
+        address owner,
         bytes32 paymentId,
         bytes memory settlementData
     ) private view returns (bytes memory) {
         bytes memory data = abi.encode(
             IPaymentVerifierV2.PaymentDetails(METHOD, PAYEE, 5000, USD, block.timestamp * 1000, paymentId),
             IPaymentVerifierV2.IntentSnapshot(
-                intentHash, amount, METHOD, USD, PAYEE, CONVERSION_RATE, timestamp, 0, bytes32(0)
+                intentHash, amount, METHOD, USD, PAYEE, CONVERSION_RATE, timestamp, 0, bytes32(0), owner
             ),
             settlementData
         );

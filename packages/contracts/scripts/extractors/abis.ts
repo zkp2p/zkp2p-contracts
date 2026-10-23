@@ -57,6 +57,7 @@ export const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
   StakeVault: "contracts/StakeVault.sol/StakeVault.json",
   StakeVaultV2: "contracts/StakeVaultV2.sol/StakeVaultV2.json",
   WhitelistPolicyV2: "contracts/hooks/WhitelistPolicyV2.sol/WhitelistPolicyV2.json",
+  IntentSignalPolicy: "contracts/hooks/IntentSignalPolicy.sol/IntentSignalPolicy.json",
   DisputeProtectionPolicyV2:
     "contracts/hooks/DisputeProtectionPolicyV2.sol/DisputeProtectionPolicyV2.json",
   UnifiedPaymentVerifierV4:

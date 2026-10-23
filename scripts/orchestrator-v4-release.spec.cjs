@@ -70,7 +70,7 @@ async function fixture() {
     const contract = deployed[name], receipt = await contract.deployTransaction.wait();
     existing[name] = { address: contract.address, artifact: name === "PredecessorWhitelistPolicy" ? "WhitelistPolicy" : name === "DisputeNullifierRegistry" ? "NullifierRegistry" : name === "OrchestratorV4Historical20261016" ? "OrchestratorV4" : name, runtimeCodeHash: utils.keccak256(await hre.ethers.provider.getCode(contract.address)), deploymentTransaction: receipt.transactionHash, deploymentBlock: receipt.blockNumber };
   }
-  const config = { version: 1, environment: "base_staging", chainId, signer: wallet.address, governance: wallet.address, existing, stakeToken: token.address, protocolFee: "0", protocolFeeRecipient: wallet.address, allowMultipleIntents: false, predecessorHook: hook.address, paymentMethods, retainedDisputeWriters: [dv.address], attestationWitnesses: [other], attestationThreshold: "1", baselineBlock: await hre.ethers.provider.getBlockNumber(), legacyWhitelistCheckpoint: { indexedBlock: await hre.ethers.provider.getBlockNumber(), enabled: [] }, legacyDrainCheckpoints: ["Orchestrator", "OrchestratorV4Historical20261016"].map((contract) => ({ contract, intentCounter: "0", indexedBlock: existing[contract].deploymentBlock })) };
+  const config = { version: 1, environment: "base_staging", chainId, signer: wallet.address, governance: wallet.address, gatingService: other, existing, stakeToken: token.address, protocolFee: "0", protocolFeeRecipient: wallet.address, allowMultipleIntents: false, predecessorHook: hook.address, paymentMethods, retainedDisputeWriters: [dv.address], attestationWitnesses: [other], attestationThreshold: "1", baselineBlock: await hre.ethers.provider.getBlockNumber(), legacyWhitelistCheckpoint: { indexedBlock: await hre.ethers.provider.getBlockNumber(), enabled: [] }, legacyDrainCheckpoints: ["Orchestrator", "OrchestratorV4Historical20261016"].map((contract) => ({ contract, intentCounter: "0", indexedBlock: existing[contract].deploymentBlock })) };
   const directory = mkdtempSync(join(tmpdir(), "o4-release-test-"));
   hre.config.paths.deployments = join(directory, "deployments");
   const path = join(directory, "manifest.json");
@@ -93,12 +93,12 @@ test("RPC and signer pins fail before the first deployment", async () => {
   } finally { rmSync(f.directory, { recursive: true, force: true }); }
 });
 
-test("seven-contract deployment resumes without duplicate addresses or transactions and activates in preserved order", async () => {
+test("eight-contract deployment resumes without duplicate addresses or transactions and activates in preserved order", async () => {
   const f = await fixture();
   try {
     await deploySuite(hre, f.journal);
     const addresses = Object.values(f.manifest.contracts).map((record) => record.address);
-    assert.equal(addresses.length, 7); assert.equal(new Set(addresses).size, 7);
+    assert.equal(addresses.length, 8); assert.equal(new Set(addresses).size, 8);
     assert.equal(await f.deployed.OrchestratorRegistry.isOrchestrator(f.manifest.contracts.OrchestratorV4.address), false);
     const nonce = await wallet.getTransactionCount();
     const restored = new TransactionJournal(f.path, JSON.parse(readFileSync(f.path)), wallet);
@@ -214,6 +214,7 @@ test("production configuration prepares ownership and unsigned Safe calls; direc
     assert.equal(actions.at(-1).step, "register-orchestrator");
     const o4 = await hre.ethers.getContractAt("OrchestratorV4", f.manifest.contracts.OrchestratorV4.address);
     assert.equal(await o4.owner(), other);
+    assert.equal(await o4.signalPolicy(), f.manifest.contracts.IntentSignalPolicy.address);
     const vault = await hre.ethers.getContractAt("StakeVaultV2", f.manifest.contracts.StakeVaultV2.address);
     assert.equal(await vault.owner(), wallet.address); assert.equal(await vault.pendingOwner(), other);
     await assert.rejects(activate(hre, f.journal), /staging-only/);
@@ -334,7 +335,7 @@ test("staging can deploy an inactive suite while registry ownership is pending, 
     const before = await inspect(hre, f.config);
     assert.equal(before.requiredOwnershipChanges.length, 4);
     await deploySuite(hre, f.journal);
-    assert.equal(Object.keys(f.manifest.contracts).length, 7);
+    assert.equal(Object.keys(f.manifest.contracts).length, 8);
     const after = await inspect(hre, f.config);
     assert.deepEqual(after.requiredOwnershipChanges, before.requiredOwnershipChanges);
     assert.deepEqual(after.paymentMethods, before.paymentMethods);
