@@ -11,7 +11,7 @@ import {UnifiedPaymentVerifierV4} from "contracts/unifiedVerifier/UnifiedPayment
 
 /// @notice Opt-in cross-repo smoke; set ATTESTOR_POLICY_SMOKE_ROOT to a checkout with dependencies.
 /// @dev Outside deterministic/, so coverage never runs this FFI test. The attestor must sign settlementData =
-/// abi.encode(disputeWindow): zero for balance payments and 14 days for the protected smoke cases.
+/// abi.encode(disputeWindow): zero for balance payments, 90 days for goods and 14 days for personal payments.
 contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
     function test_ServiceSignedProofSmoke() public {
         string memory attestor = vm.envOr("ATTESTOR_POLICY_SMOKE_ROOT", string(""));
@@ -36,7 +36,7 @@ contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
             );
             assertEq(snapshot.intentHash, id);
             uint256 window = abi.decode(settlementData, (uint256));
-            assertEq(window, index == 0 ? 0 : RISK_WINDOW);
+            assertEq(window, index == 0 ? 0 : index == 2 ? 90 days : RISK_WINDOW);
             assertEq(attestation.releaseAmount, index == 2 ? 45e6 : INTENT_AMOUNT);
             uint256 net = attestation.releaseAmount - attestation.releaseAmount * PROTOCOL_FEE / 1e18
                 - attestation.releaseAmount * REFERRAL_FEE / 1e18;
@@ -79,7 +79,7 @@ contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
         returns (bytes memory)
     {
         IOrchestratorV4.Intent memory intent = orchestrator.getIntent(id);
-        string[] memory command = new string[](11);
+        string[] memory command = new string[](12);
         command[0] = "node";
         command[1] = string.concat(attestor, "/node_modules/tsx/dist/cli.mjs");
         command[2] = "--tsconfig";
@@ -91,6 +91,7 @@ contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
         command[8] = vm.toString(intent.timestamp);
         command[9] = mode;
         command[10] = vm.toString(paymentId);
+        command[11] = vm.toString(intent.owner);
         return vm.ffi(command);
     }
 }

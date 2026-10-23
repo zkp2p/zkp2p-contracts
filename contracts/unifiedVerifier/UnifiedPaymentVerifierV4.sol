@@ -223,7 +223,8 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
                 intentV4.fiatCurrency,
                 intentV4.conversionRate,
                 intentV4.timestamp,
-                intentV4.payerCommitment.length == 0 ? bytes32(0) : keccak256(intentV4.payerCommitment)
+                intentV4.payerCommitment.length == 0 ? bytes32(0) : keccak256(intentV4.payerCommitment),
+                intentV4.owner
             );
         } else if (_isV2Orchestrator(msg.sender)) {
             IOrchestratorV2.Intent memory intentV2 = IOrchestratorV2(msg.sender).getIntent(intentHash);
@@ -235,7 +236,8 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
                 intentV2.fiatCurrency,
                 intentV2.conversionRate,
                 intentV2.timestamp,
-                bytes32(0)
+                bytes32(0),
+                intentV2.owner
             );
         } else {
             revert("UPV: Unsupported orchestrator");
@@ -252,7 +254,8 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
         bytes32 fiatCurrency,
         uint256 conversionRate,
         uint256 signalTimestamp,
-        bytes32 payerCommitmentHash
+        bytes32 payerCommitmentHash,
+        address intentOwner
     ) internal pure {
         require(snapshot.payeeDetails == payeeId, "UPV: Snapshot payee mismatch");
         require(snapshot.amount == amount, "UPV: Snapshot amount mismatch");
@@ -261,6 +264,7 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
         require(snapshot.conversionRate == conversionRate, "UPV: Snapshot rate mismatch");
         require(snapshot.signalTimestamp == signalTimestamp, "UPV: Snapshot timestamp mismatch");
         require(snapshot.payerCommitmentHash == payerCommitmentHash, "UPV: Snapshot payer commitment mismatch");
+        require(snapshot.owner == intentOwner, "UPV: Snapshot owner mismatch");
     }
 
     function _isV2Orchestrator(address orchestrator) internal view returns (bool isV2Orchestrator) {

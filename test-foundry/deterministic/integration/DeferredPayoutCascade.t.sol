@@ -365,6 +365,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         assertEq(oldVault.lockedStake(taker), INTENT_AMOUNT);
         IOrchestratorV3.Intent memory intent = v3.getIntent(id);
         IOrchestratorV4.Intent memory proofIntent;
+        proofIntent.owner = intent.owner;
         proofIntent.amount = intent.amount;
         proofIntent.paymentMethod = intent.paymentMethod;
         proofIntent.timestamp = intent.timestamp;
