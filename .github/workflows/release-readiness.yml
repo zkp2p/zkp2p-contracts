@@ -52,7 +52,7 @@ concurrency:
 
 env:
   FOUNDRY_VERSION: v1.7.1
-  NODE_VERSION: 20.20.2
+  NODE_VERSION: 22.23.4
 
 jobs:
   build-and-deploy:
