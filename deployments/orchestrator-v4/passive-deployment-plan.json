@@ -1,0 +1,315 @@
+{
+  "status": "SIMULATION_ONLY_NOT_DEPLOYED",
+  "chainId": 8453,
+  "environment": "base_staging",
+  "signer": "0x41123d6419C7b8e44157f6F3b0088442116641eC",
+  "forkBlock": 52938535,
+  "startingNonce": 26,
+  "transactions": [
+    {
+      "step": "deploy:StakeVaultV2",
+      "nonce": 26,
+      "to": null,
+      "gasUsed": "1635653"
+    },
+    {
+      "step": "deploy:AddressGroupRegistryV4",
+      "nonce": 27,
+      "to": null,
+      "gasUsed": "722846"
+    },
+    {
+      "step": "deploy:WhitelistPolicyV2",
+      "nonce": 28,
+      "to": null,
+      "gasUsed": "574258"
+    },
+    {
+      "step": "deploy:DisputeProtectionPolicyV2",
+      "nonce": 29,
+      "to": null,
+      "gasUsed": "1264111"
+    },
+    {
+      "step": "StakeVaultV2:setController",
+      "nonce": 30,
+      "to": "0xa33dE1C8eD627fF5D6d94ABaC462A86b315cFb4e",
+      "gasUsed": "48308"
+    },
+    {
+      "step": "deploy:UnifiedPaymentVerifierV4",
+      "nonce": 31,
+      "to": null,
+      "gasUsed": "2017456"
+    },
+    {
+      "step": "verifier-method:0xe99a5081226cbbff9440a63da5caa04fa30f210c12c4dd9976132ac075054cd9",
+      "nonce": 32,
+      "to": "0x7b1598b98cAC2930DD8D3174C329416848771748",
+      "gasUsed": "91858"
+    },
+    {
+      "step": "verifier-method:0xf752c7d19698ecb0bb8988abf9b9a53a4c3657f3bc8850a6fb59fdf3e3ce8cd3",
+      "nonce": 33,
+      "to": "0x7b1598b98cAC2930DD8D3174C329416848771748",
+      "gasUsed": "74758"
+    },
+    {
+      "step": "verifier-method:0x62c7ed738ad3e7618111348af32691b5767777fbaf46a2d8943237625552645c",
+      "nonce": 34,
+      "to": "0x7b1598b98cAC2930DD8D3174C329416848771748",
+      "gasUsed": "74758"
+    },
+    {
+      "step": "verifier-method:0xcac9daea62d7b89d75ac73af4ee14dcf25721012ae82b568c2ea5c808eaa04ff",
+      "nonce": 35,
+      "to": "0x7b1598b98cAC2930DD8D3174C329416848771748",
+      "gasUsed": "74758"
+    },
+    {
+      "step": "verifier-method:0x5908bb0c9b87763ac6171d4104847667e7f02b4c47b574fe890c1f439ed128bb",
+      "nonce": 36,
+      "to": "0x7b1598b98cAC2930DD8D3174C329416848771748",
+      "gasUsed": "74758"
+    },
+    {
+      "step": "verifier-method:0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
+      "nonce": 37,
+      "to": "0x7b1598b98cAC2930DD8D3174C329416848771748",
+      "gasUsed": "74758"
+    },
+    {
+      "step": "verifier-method:0x617f88ab82b5c1b014c539f7e75121427f0bb50a4c58b187a238531e7d58605d",
+      "nonce": 38,
+      "to": "0x7b1598b98cAC2930DD8D3174C329416848771748",
+      "gasUsed": "74758"
+    },
+    {
+      "step": "verifier-method:0x10940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d",
+      "nonce": 39,
+      "to": "0x7b1598b98cAC2930DD8D3174C329416848771748",
+      "gasUsed": "74758"
+    },
+    {
+      "step": "verifier-method:0x554a007c2217df766b977723b276671aee5ebb4adaea0edb6433c88b3e61dac5",
+      "nonce": 40,
+      "to": "0x7b1598b98cAC2930DD8D3174C329416848771748",
+      "gasUsed": "74746"
+    },
+    {
+      "step": "verifier-method:0xa5418819c024239299ea32e09defae8ec412c03e58f5c75f1b2fe84c857f5483",
+      "nonce": 41,
+      "to": "0x7b1598b98cAC2930DD8D3174C329416848771748",
+      "gasUsed": "74758"
+    },
+    {
+      "step": "verifier-method:0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f",
+      "nonce": 42,
+      "to": "0x7b1598b98cAC2930DD8D3174C329416848771748",
+      "gasUsed": "74758"
+    },
+    {
+      "step": "verifier-method:0x1d966dbd6aeb8674d7c05174bd0ded7b56a798672bfb862ef20bbe8c2bbfce18",
+      "nonce": 43,
+      "to": "0x7b1598b98cAC2930DD8D3174C329416848771748",
+      "gasUsed": "74758"
+    },
+    {
+      "step": "verifier-method:0xf81480907d808d639ad3230869e4b05a3b01b2d34e323af40f2efab807effd32",
+      "nonce": 44,
+      "to": "0x7b1598b98cAC2930DD8D3174C329416848771748",
+      "gasUsed": "74758"
+    },
+    {
+      "step": "verifier-method:0x790dd0cc68b6e7f474649a6c0a5463a964be9d2589e2076b6dc99f5701543f51",
+      "nonce": 45,
+      "to": "0x7b1598b98cAC2930DD8D3174C329416848771748",
+      "gasUsed": "74758"
+    },
+    {
+      "step": "deploy:OrchestratorV4",
+      "nonce": 46,
+      "to": null,
+      "gasUsed": "4288363"
+    },
+    {
+      "step": "OrchestratorV4:setSettlementPolicy",
+      "nonce": 47,
+      "to": "0x7222027313D6D8D7e9BCdD7d2411a228B998C180",
+      "gasUsed": "47553"
+    },
+    {
+      "step": "deploy:ProtocolViewerV4",
+      "nonce": 48,
+      "to": null,
+      "gasUsed": "1617575"
+    }
+  ],
+  "predictedContracts": {
+    "StakeVaultV2": {
+      "address": "0xa33dE1C8eD627fF5D6d94ABaC462A86b315cFb4e",
+      "constructorArguments": [
+        "0x41123d6419C7b8e44157f6F3b0088442116641eC",
+        "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+      ]
+    },
+    "AddressGroupRegistryV4": {
+      "address": "0xE138653725e3602d596ae388D2B2FD05ed1148f3",
+      "constructorArguments": []
+    },
+    "WhitelistPolicyV2": {
+      "address": "0xe034B9C59063DBad5F632c38515e75C24F625503",
+      "constructorArguments": [
+        "0xE138653725e3602d596ae388D2B2FD05ed1148f3"
+      ]
+    },
+    "DisputeProtectionPolicyV2": {
+      "address": "0x3C536cD642cF0ca989899D392fb2c41Bff7A94b1",
+      "constructorArguments": [
+        "0x41123d6419C7b8e44157f6F3b0088442116641eC",
+        "0xa33dE1C8eD627fF5D6d94ABaC462A86b315cFb4e",
+        "0x973578148c5Fd49b9f68B50B26066555325AC708",
+        "0xE0B05a9655AF0f31E32904267baa50FbC7f217ea",
+        "0xfA6384EB6176cfEC049540526A3d2126C3666d8A"
+      ]
+    },
+    "UnifiedPaymentVerifierV4": {
+      "address": "0x7b1598b98cAC2930DD8D3174C329416848771748",
+      "constructorArguments": [
+        "0xfA6384EB6176cfEC049540526A3d2126C3666d8A",
+        "0x2eb43d6C7c7Ec4220Aa6B8735BC053824a71778C",
+        "0x9855a39aC5975069632e91160d8712CBfF19e864"
+      ]
+    },
+    "OrchestratorV4": {
+      "address": "0x7222027313D6D8D7e9BCdD7d2411a228B998C180",
+      "constructorArguments": [
+        "0x41123d6419C7b8e44157f6F3b0088442116641eC",
+        8453,
+        "0xc545f336eC77E69bf115729acCbf2e557A00ac91",
+        "0x2261416DA54C85f975C73FA56EF4D2D6b0aEF7Cc",
+        "0xB214650b424E6b5fdcB1259566eB7A512D8Bd25E",
+        "0",
+        "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+        "0xe034B9C59063DBad5F632c38515e75C24F625503"
+      ]
+    },
+    "ProtocolViewerV4": {
+      "address": "0xEC0131D535160f32601BFca3DfA4B8043eefB56a",
+      "constructorArguments": []
+    }
+  },
+  "gasEstimate": "13279823",
+  "feeEstimate": {
+    "totalGas": "13279823",
+    "executionAtCurrentFeeWei": "79678938000000",
+    "executionAtMaxFeeWei": "146078053000000",
+    "l1DataFeeEstimateWei": "660751020161",
+    "transactionFees": [
+      {
+        "step": "deploy:StakeVaultV2",
+        "l1FeeWei": "88294950817"
+      },
+      {
+        "step": "deploy:AddressGroupRegistryV4",
+        "l1FeeWei": "40803993056"
+      },
+      {
+        "step": "deploy:WhitelistPolicyV2",
+        "l1FeeWei": "31443410074"
+      },
+      {
+        "step": "deploy:DisputeProtectionPolicyV2",
+        "l1FeeWei": "68053690181"
+      },
+      {
+        "step": "StakeVaultV2:setController",
+        "l1FeeWei": "1912850753"
+      },
+      {
+        "step": "deploy:UnifiedPaymentVerifierV4",
+        "l1FeeWei": "100679722147"
+      },
+      {
+        "step": "verifier-method:0xe99a5081226cbbff9440a63da5caa04fa30f210c12c4dd9976132ac075054cd9",
+        "l1FeeWei": "1912850753"
+      },
+      {
+        "step": "verifier-method:0xf752c7d19698ecb0bb8988abf9b9a53a4c3657f3bc8850a6fb59fdf3e3ce8cd3",
+        "l1FeeWei": "1912850753"
+      },
+      {
+        "step": "verifier-method:0x62c7ed738ad3e7618111348af32691b5767777fbaf46a2d8943237625552645c",
+        "l1FeeWei": "1912850753"
+      },
+      {
+        "step": "verifier-method:0xcac9daea62d7b89d75ac73af4ee14dcf25721012ae82b568c2ea5c808eaa04ff",
+        "l1FeeWei": "1912850753"
+      },
+      {
+        "step": "verifier-method:0x5908bb0c9b87763ac6171d4104847667e7f02b4c47b574fe890c1f439ed128bb",
+        "l1FeeWei": "1912850753"
+      },
+      {
+        "step": "verifier-method:0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
+        "l1FeeWei": "1912850753"
+      },
+      {
+        "step": "verifier-method:0x617f88ab82b5c1b014c539f7e75121427f0bb50a4c58b187a238531e7d58605d",
+        "l1FeeWei": "1912850753"
+      },
+      {
+        "step": "verifier-method:0x10940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d",
+        "l1FeeWei": "1912850753"
+      },
+      {
+        "step": "verifier-method:0x554a007c2217df766b977723b276671aee5ebb4adaea0edb6433c88b3e61dac5",
+        "l1FeeWei": "1912850753"
+      },
+      {
+        "step": "verifier-method:0xa5418819c024239299ea32e09defae8ec412c03e58f5c75f1b2fe84c857f5483",
+        "l1FeeWei": "1912850753"
+      },
+      {
+        "step": "verifier-method:0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f",
+        "l1FeeWei": "1912850753"
+      },
+      {
+        "step": "verifier-method:0x1d966dbd6aeb8674d7c05174bd0ded7b56a798672bfb862ef20bbe8c2bbfce18",
+        "l1FeeWei": "1912850753"
+      },
+      {
+        "step": "verifier-method:0xf81480907d808d639ad3230869e4b05a3b01b2d34e323af40f2efab807effd32",
+        "l1FeeWei": "1912850753"
+      },
+      {
+        "step": "verifier-method:0x790dd0cc68b6e7f474649a6c0a5463a964be9d2589e2076b6dc99f5701543f51",
+        "l1FeeWei": "1912850753"
+      },
+      {
+        "step": "deploy:OrchestratorV4",
+        "l1FeeWei": "218623067717"
+      },
+      {
+        "step": "OrchestratorV4:setSettlementPolicy",
+        "l1FeeWei": "1912850753"
+      },
+      {
+        "step": "deploy:ProtocolViewerV4",
+        "l1FeeWei": "82246574121"
+      }
+    ],
+    "block": 52938969,
+    "baseFeePerGas": "5000000",
+    "gasPrice": "6000000",
+    "rpcPriority": "1000000",
+    "ethersFeeData": {
+      "lastBaseFeePerGas": "5000000",
+      "maxFeePerGas": "1510000000",
+      "maxPriorityFeePerGas": "1500000000",
+      "gasPrice": "6000000"
+    }
+  },
+  "scope": "Deploy seven fresh contracts and configure only their new state. No reused registry, escrow, deposit or policy writes. Activation is a separate gated command.",
+  "simulationSigner": "Hardhat impersonation only; no signing key and no live transaction."
+}

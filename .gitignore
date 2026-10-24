@@ -41,3 +41,11 @@ vanity-addresses*.json
 # Semgrep / audit tool outputs
 semgrep-results*/
 audits/_scratch/
+
+# Recoverable release transaction journals stay local; the confirmed manifest is committed.
+deployments/outputs/orchestrator-v4-*.json.pending
+deployments/outputs/orchestrator-v4-*.json.lock
+deployments/outputs/orchestrator-v4-*.json.preflight
+deployments/outputs/orchestrator-v4-*.json.verification
+deployments/hardhat/
+deployments/outputs/orchestrator-v4-historical-owner.json

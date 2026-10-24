@@ -2,6 +2,28 @@
 
 Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, and utilities.
 
+## Candidate 0.4.4-rc.9
+
+- Exports the `IntentSignalPolicy` source ABI and the Orchestrator V4 ABI that
+  delegates signal admission to it (gating signature, deposit whitelist, group
+  arbitrator and multiple-intent limit).
+- Exports the payment verifier V4 ABI whose attested snapshot ends with the
+  intent owner.
+- Keeps the October 22 staging addresses. Those contracts run the rc.8 source and
+  do not implement these ABIs until the next staging deployment. This candidate
+  is consumed as a branch tarball; no npm registry tag changes.
+
+## Candidate 0.4.4-rc.8
+
+- Exports the merged Orchestrator V4, ProtocolViewer V4, payment verifier V4,
+  WhitelistPolicy V2, DisputeProtectionPolicy V2 and StakeVault V2 source ABIs.
+- Preserves executed staging bypass records and October 16 contracts under
+  explicit `Historical20261016` aliases with their original deployed ABIs.
+- Includes the seven confirmed October 22 staging addresses; the suite remains
+  inactive until the contract release gates pass. This candidate
+  is consumed as an immutable branch tarball while its PR remains open; no npm
+  registry tag is changed by the staging release.
+
 ## Release 0.4.4-rc.2
 
 - Adds the executed Monobank/UAH registration to the Base catalog, matching Base
