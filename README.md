@@ -103,7 +103,7 @@ not change on-chain state, historical ABIs or immutable deployment inputs.
 
 ### Prerequisites
 
-- Node.js 20.20.2 (the version pinned in CI)
+- Node.js 22.23.4 (the version pinned in CI)
 - Yarn 4
 - Foundry v1.7.1
 - a `.env` copied from `.env.default`

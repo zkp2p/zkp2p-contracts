@@ -63,7 +63,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 22.14.0
+          node-version: 22.23.4
           package-manager-cache: false
 
       - name: Resolve version-derived channel
@@ -94,7 +94,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 22.14.0
+          node-version: 22.23.4
           cache: yarn
           registry-url: https://registry.npmjs.org
 
@@ -201,7 +201,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 22.14.0
+          node-version: 22.23.4
           cache: yarn
           registry-url: https://registry.npmjs.org
 
@@ -265,7 +265,7 @@ jobs:
       - name: Set up Node.js and npm registry
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 24.14.0
+          node-version: 24.22.1
           package-manager-cache: false
           registry-url: https://registry.npmjs.org
 
@@ -349,7 +349,7 @@ jobs:
       - name: Set up Node.js and npm registry
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 24.14.0
+          node-version: 24.22.1
           package-manager-cache: false
           registry-url: https://registry.npmjs.org
 
