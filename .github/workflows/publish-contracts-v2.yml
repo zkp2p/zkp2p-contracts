@@ -54,6 +54,10 @@ jobs:
       verify_latest: ${{ steps.resolve.outputs.verify_latest }}
       verify_rc: ${{ steps.resolve.outputs.verify_rc }}
     steps:
+      - name: Patch hosted action runtime
+        if: runner.environment == 'github-hosted' && runner.os == 'Linux'
+        uses: zkp2p/.github/actions/patch-node24@b5f5952aa1f7ada0a6dedfdbd320dce83d69635b
+
       - name: Checkout policy source
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -84,6 +88,10 @@ jobs:
       actions: read
       contents: read
     steps:
+      - name: Patch hosted action runtime
+        if: runner.environment == 'github-hosted' && runner.os == 'Linux'
+        uses: zkp2p/.github/actions/patch-node24@b5f5952aa1f7ada0a6dedfdbd320dce83d69635b
+
       - name: Checkout canonical release commit
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -186,6 +194,10 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Patch hosted action runtime
+        if: runner.environment == 'github-hosted' && runner.os == 'Linux'
+        uses: zkp2p/.github/actions/patch-node24@b5f5952aa1f7ada0a6dedfdbd320dce83d69635b
+
       - name: Checkout canonical release commit
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -256,6 +268,10 @@ jobs:
       contents: read
       id-token: write
     steps:
+      - name: Patch hosted action runtime
+        if: runner.environment == 'github-hosted' && runner.os == 'Linux'
+        uses: zkp2p/.github/actions/patch-node24@b5f5952aa1f7ada0a6dedfdbd320dce83d69635b
+
       - name: Checkout release verification code
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -340,6 +356,10 @@ jobs:
       actions: read
       contents: read
     steps:
+      - name: Patch hosted action runtime
+        if: runner.environment == 'github-hosted' && runner.os == 'Linux'
+        uses: zkp2p/.github/actions/patch-node24@b5f5952aa1f7ada0a6dedfdbd320dce83d69635b
+
       - name: Checkout release verification code
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:

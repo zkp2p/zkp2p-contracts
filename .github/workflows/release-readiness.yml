@@ -59,6 +59,10 @@ jobs:
     name: Build, package, and localhost deployment
     runs-on: ubuntu-latest
     steps:
+      - name: Patch hosted action runtime
+        if: runner.environment == 'github-hosted' && runner.os == 'Linux'
+        uses: zkp2p/.github/actions/patch-node24@b5f5952aa1f7ada0a6dedfdbd320dce83d69635b
+
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -128,6 +132,10 @@ jobs:
           - orchestrator
           - remaining
     steps:
+      - name: Patch hosted action runtime
+        if: runner.environment == 'github-hosted' && runner.os == 'Linux'
+        uses: zkp2p/.github/actions/patch-node24@b5f5952aa1f7ada0a6dedfdbd320dce83d69635b
+
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -169,6 +177,10 @@ jobs:
       contents: read
       id-token: write
     steps:
+      - name: Patch hosted action runtime
+        if: runner.environment == 'github-hosted' && runner.os == 'Linux'
+        uses: zkp2p/.github/actions/patch-node24@b5f5952aa1f7ada0a6dedfdbd320dce83d69635b
+
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
