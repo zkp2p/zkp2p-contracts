@@ -270,6 +270,14 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
         );
     }
 
+    /**
+     * @notice Returns the arbitrator for intents signaled through the group (address(0) when unset or the group does not exist).
+     * @param _groupId    Group id.
+     */
+    function groupArbitrator(bytes32 _groupId) external view override returns (address) {
+        return groups[_groupId].arbitrator;
+    }
+
     /* ============ Internal Functions ============ */
 
     function _createGroup(address _curator, bool _isPublic, string memory _name) internal returns (bytes32 groupId) {

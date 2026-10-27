@@ -57,7 +57,7 @@ contract IntentSignalPolicy is IIntentSignalPolicy {
             if (!takerWhitelisted) {
                 revert TakerNotWhitelisted(_params.escrow, _params.depositId, _params.paymentMethod, _taker);
             }
-            if (_params.groupId != bytes32(0)) (,,,,, arbitrator) = whitelistPolicy.groupRegistry().getGroup(_params.groupId);
+            if (_params.groupId != bytes32(0)) arbitrator = whitelistPolicy.groupRegistry().groupArbitrator(_params.groupId);
         }
 
         if (block.timestamp > _params.signatureExpiration) {

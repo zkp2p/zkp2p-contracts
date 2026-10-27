@@ -88,6 +88,11 @@ interface IAddressGroupRegistry {
         );
 
     /**
+     * @notice Returns the arbitrator for intents signaled through the group (address(0) when unset or the group does not exist).
+     */
+    function groupArbitrator(bytes32 _groupId) external view returns (address);
+
+    /**
      * @notice Returns the number of groups created (the counter used to derive group ids).
      */
     function groupCount() external view returns (uint256);
