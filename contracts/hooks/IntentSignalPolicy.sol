@@ -7,14 +7,13 @@ import { SignatureChecker } from "@openzeppelin/contracts/utils/cryptography/Sig
 
 import { IIntentSignalPolicy } from "../interfaces/IIntentSignalPolicy.sol";
 import { IOrchestratorV4 } from "../interfaces/IOrchestratorV4.sol";
-import { IRelayerRegistry } from "../interfaces/IRelayerRegistry.sol";
 import { IWhitelistPolicyV2 } from "../interfaces/IWhitelistPolicyV2.sol";
 import { ReferralFeeLib } from "../lib/ReferralFeeLib.sol";
 
 /**
  * @title IntentSignalPolicy
- * @notice OrchestratorV4 signal policy. Admits a taker within the intent limit, through the deposit's whitelist and
- * with the gating service's signature, and names the arbitrator of the group the taker signals through.
+ * @notice OrchestratorV4 signal policy. Admits a taker through the deposit's whitelist with the gating service's
+ * signature, and names the arbitrator of the group the taker signals through.
  * @dev The signature covers the payer commitment, so only the gating service can vouch that the committed payer
  * belongs to the taker. Configuration is immutable; governance changes it by selecting a new policy on the orchestrator.
  */
@@ -24,7 +23,6 @@ contract IntentSignalPolicy is IIntentSignalPolicy {
 
     /* ============ Errors ============ */
 
-    error AccountHasActiveIntent(address account, bytes32 existingIntent);
     error TakerNotWhitelisted(address escrow, uint256 depositId, bytes32 paymentMethod, address taker);
     error SignatureExpired(uint256 expiration, uint256 currentTime);
     error InvalidSignature();
@@ -33,21 +31,12 @@ contract IntentSignalPolicy is IIntentSignalPolicy {
 
     address public immutable gatingService;                 // Signer whose signature every intent needs
     IWhitelistPolicyV2 public immutable whitelistPolicy;    // Per-deposit taker whitelists and their groups
-    IRelayerRegistry public immutable relayerRegistry;      // Relayers may always hold multiple intents
-    bool public immutable allowMultipleIntents;             // Whether every account may hold multiple intents
 
     /* ============ Constructor ============ */
 
-    constructor(
-        address _gatingService,
-        IWhitelistPolicyV2 _whitelistPolicy,
-        IRelayerRegistry _relayerRegistry,
-        bool _allowMultipleIntents
-    ) {
+    constructor(address _gatingService, IWhitelistPolicyV2 _whitelistPolicy) {
         gatingService = _gatingService;
         whitelistPolicy = _whitelistPolicy;
-        relayerRegistry = _relayerRegistry;
-        allowMultipleIntents = _allowMultipleIntents;
     }
 
     /* ============ External Functions ============ */
@@ -62,12 +51,6 @@ contract IntentSignalPolicy is IIntentSignalPolicy {
         override
         returns (bool takerWhitelisted, address arbitrator)
     {
-        // Check if account can have multiple intents
-        if (!allowMultipleIntents && !relayerRegistry.isWhitelistedRelayer(_taker)) {
-            bytes32[] memory takerIntents = IOrchestratorV4(msg.sender).getAccountIntents(_taker);
-            if (takerIntents.length > 0) revert AccountHasActiveIntent(_taker, takerIntents[0]);
-        }
-
         // With the whitelist off, anyone may signal and groupId is ignored; a group taker gets its group's arbitrator.
         if (whitelistPolicy.enabled(_params.escrow, _params.depositId)) {
             takerWhitelisted = whitelistPolicy.isWhitelisted(_params.escrow, _params.depositId, _taker, _params.groupId);
