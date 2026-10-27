@@ -254,7 +254,7 @@ export async function deploySuite(hre: HardhatRuntimeEnvironment, journal: Trans
   await deploy("StakeVaultV2", [c.signer, c.stakeToken]);
   await deploy("AddressGroupRegistryV4", []);
   await deploy("WhitelistPolicyV2", [fresh("AddressGroupRegistryV4")]);
-  await deploy("IntentSignalPolicy", [c.gatingService, fresh("WhitelistPolicyV2"), a("RelayerRegistry"), c.allowMultipleIntents]);
+  await deploy("IntentSignalPolicy", [c.gatingService, fresh("WhitelistPolicyV2")]);
   await deploy("DisputeProtectionPolicyV2", [c.signer, fresh("StakeVaultV2"), a("DisputeVerifier"), a("DisputeNullifierRegistry"), a("OrchestratorRegistry")]);
   await call("StakeVaultV2", "setController", [fresh("DisputeProtectionPolicyV2"), true]);
   await deploy("UnifiedPaymentVerifierV4", [a("OrchestratorRegistry"), a("NullifierRegistryV2"), a("MultiAttestationVerifier")]);
@@ -475,14 +475,14 @@ export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: Trans
   const expectedFields: Array<[Contract, string, string]> = [
     [o, "signalPolicy", signal.address], [o, "settlementPolicy", p.address],
     [o, "escrowRegistry", c.existing.EscrowRegistry.address], [o, "paymentVerifierRegistry", c.existing.PaymentVerifierRegistry.address],
-    [signal, "gatingService", c.gatingService], [signal, "whitelistPolicy", contracts.WhitelistPolicyV2.address], [signal, "relayerRegistry", c.existing.RelayerRegistry.address],
+    [signal, "gatingService", c.gatingService], [signal, "whitelistPolicy", contracts.WhitelistPolicyV2.address],
     [o, "protocolFeeRecipient", c.protocolFeeRecipient], [vault, "stakeToken", c.stakeToken], [p, "stakeVault", vault.address],
     [p, "disputeVerifier", c.existing.DisputeVerifier.address], [p, "disputeNullifierRegistry", c.existing.DisputeNullifierRegistry.address], [p, "orchestratorRegistry", c.existing.OrchestratorRegistry.address],
     [v, "orchestratorRegistry", c.existing.OrchestratorRegistry.address], [v, "nullifierRegistry", c.existing.NullifierRegistryV2.address], [v, "attestationVerifier", c.existing.MultiAttestationVerifier.address],
     [contracts.WhitelistPolicyV2, "groupRegistry", contracts.AddressGroupRegistryV4.address],
   ];
   for (const [contract, field, expected] of expectedFields) check(same(await contract[field](), expected), `${contract.address} ${field} mismatch`);
-  check((await o.protocolFee()).eq(c.protocolFee) && await signal.allowMultipleIntents() === c.allowMultipleIntents && !await o.paused(), "O4 fee, intent limit or pause mismatch");
+  check((await o.protocolFee()).eq(c.protocolFee) && !await o.paused(), "O4 fee or pause mismatch");
   check(await vault.isController(p.address), "Policy is not the vault controller");
   check(equal(await v.getPaymentMethods(), c.paymentMethods.map((method) => method.method)), "UPV4 method catalog mismatch");
   for (const contract of [o, v, vault, p]) {

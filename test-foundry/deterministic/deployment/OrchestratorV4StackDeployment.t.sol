@@ -126,9 +126,7 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         for (uint256 index; index < originalMethods.length; index++) {
             successor.addPaymentMethod(originalMethods[index]);
         }
-        freshSignalPolicy = new IntentSignalPolicy(
-            vm.addr(GATING_KEY), freshWhitelist, orchestrator.relayerRegistry(), orchestrator.allowMultipleIntents()
-        );
+        freshSignalPolicy = new IntentSignalPolicy(vm.addr(GATING_KEY), freshWhitelist);
         orchestratorV4 = new OrchestratorV4(
             address(this),
             address(orchestrator.escrowRegistry()),
@@ -283,8 +281,6 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         assertEq(address(orchestratorV4.settlementPolicy()), address(freshPolicy));
         assertEq(address(orchestratorV4.signalPolicy()), address(freshSignalPolicy));
         assertEq(freshSignalPolicy.gatingService(), vm.addr(GATING_KEY));
-        assertEq(address(freshSignalPolicy.relayerRegistry()), address(orchestrator.relayerRegistry()));
-        assertEq(freshSignalPolicy.allowMultipleIntents(), orchestrator.allowMultipleIntents());
         assertEq(address(freshSignalPolicy.whitelistPolicy()), address(freshWhitelist));
         assertNotEq(address(freshWhitelist), address(whitelist));
         assertEq(address(freshWhitelist.groupRegistry()), address(freshGroupRegistry));

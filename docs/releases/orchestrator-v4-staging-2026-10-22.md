@@ -18,6 +18,18 @@ previous source and do not implement the new O4 or UPV4 ABIs; they are not
 redeployed by this update. The next staging deployment starts a new manifest and
 records these seven as historical, as was done for the October 16 suite.
 
+Source update, 2026-10-27: main now includes #367 (O4 always allows multiple
+intents), #368 (`IntentSignaled` ends with `groupId` and `arbitrator`) and #369
+(`AddressGroupRegistry.groupArbitrator`). The runner deploys
+`IntentSignalPolicy` with only the configured `gatingService` and the fresh
+WhitelistPolicyV2; the policy no longer takes the RelayerRegistry or
+`allowMultipleIntents`. The config's `allowMultipleIntents` now describes only
+the O3 predecessor and is checked against its snapshot. O4 lets every account
+hold multiple intents, so concurrent Pay intents on O4 do not need the relayer
+registration described below. The fresh `IntentSignalPolicy` reads
+`groupArbitrator`, so it must run against the fresh `AddressGroupRegistryV4`
+from the same deployment, never the recorded October 22 registry.
+
 The operator-local [historical-owner handoff](orchestrator-v4-historical-owner-handoff.md)
 defines the exact seven allowed calls, signing isolation, plan hash and recovery
 procedure. Ownership handoff alone does not authorize activation.
