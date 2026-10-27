@@ -93,7 +93,7 @@ abstract contract OrchestratorV4Fixture is Test {
             0,
             protocolFeeRecipient
         );
-        signalPolicy = new IntentSignalPolicy(gatingService, whitelist, relayerRegistry, true);
+        signalPolicy = new IntentSignalPolicy(gatingService, whitelist);
         orchestrator.setSignalPolicy(signalPolicy);
         postIntentHook = new PostIntentHookV2Mock(address(token), address(orchestrator));
         orchestratorMock = new OrchestratorMock(address(escrow));

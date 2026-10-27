@@ -6,10 +6,6 @@ import {IntentSignalPolicy} from "contracts/hooks/IntentSignalPolicy.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 
 contract IntentSignalPolicyTest is OrchestratorV4Fixture {
-    function _limitIntents() internal {
-        orchestrator.setSignalPolicy(new IntentSignalPolicy(gatingService, whitelist, relayerRegistry, false));
-    }
-
     function test_AcceptsGatingServiceSignature() public {
         IOrchestratorV4.SignalIntentParams memory params = _gatedParams(gatingServiceKey, taker, block.timestamp + 1 days);
         bytes32 id = _intentHash(orchestrator.intentCounter());
@@ -86,20 +82,8 @@ contract IntentSignalPolicyTest is OrchestratorV4Fixture {
         signalPolicy.validateSignalIntent(taker, params);
     }
 
-    function test_AccountWithActiveIntentRevertsWhenMultipleIntentsDisabled() public {
-        _limitIntents();
-        bytes32 first = _signalDefault();
-        vm.expectRevert(abi.encodeWithSelector(IntentSignalPolicy.AccountHasActiveIntent.selector, taker, first));
-        _signalCall(taker, _defaultParams());
-
-        vm.prank(taker);
-        orchestrator.cancelIntent(first);
-        _signalDefault();
-    }
-
-    function test_RelayerMayHoldMultipleIntentsWhenDisabled() public {
-        _limitIntents();
-        relayerRegistry.addRelayer(taker);
+    function test_NonRelayerMayHoldTwoOpenIntents() public {
+        assertFalse(relayerRegistry.isWhitelistedRelayer(taker));
         _signalDefault();
         _signalDefault();
         assertEq(orchestrator.getAccountIntents(taker).length, 2);
