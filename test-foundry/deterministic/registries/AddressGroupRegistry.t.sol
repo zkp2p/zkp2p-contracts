@@ -396,6 +396,27 @@ contract AddressGroupRegistryTest is Test {
         assertEq(arbitrator, address(0));
     }
 
+    function test_GroupArbitratorMatchesGetGroup() public {
+        bytes32 groupId = _createGroup(alice);
+
+        vm.prank(alice);
+        registry.setArbitrator(groupId, bob);
+        (,,,,, address arbitrator) = registry.getGroup(groupId);
+        assertEq(arbitrator, bob);
+        assertEq(registry.groupArbitrator(groupId), arbitrator);
+
+        vm.prank(alice);
+        registry.setArbitrator(groupId, address(0));
+        (,,,,, arbitrator) = registry.getGroup(groupId);
+        assertEq(arbitrator, address(0));
+        assertEq(registry.groupArbitrator(groupId), arbitrator);
+
+        bytes32 nonexistentGroupId = bytes32(uint256(42));
+        (,,,,, arbitrator) = registry.getGroup(nonexistentGroupId);
+        assertEq(arbitrator, address(0));
+        assertEq(registry.groupArbitrator(nonexistentGroupId), arbitrator);
+    }
+
     function test_NonCuratorCannotSetArbitrator() public {
         bytes32 groupId = _createGroup(alice);
         vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedGroupCurator.selector, bob, alice));
