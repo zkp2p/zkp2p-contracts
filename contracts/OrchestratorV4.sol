@@ -155,7 +155,9 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
             _params.amount, 
             _params.fiatCurrency, 
             _params.conversionRate, 
-            block.timestamp
+            block.timestamp,
+            _params.groupId,
+            arbitrator
         );
 
         // Emit manager fee snapshot last for easier indexing

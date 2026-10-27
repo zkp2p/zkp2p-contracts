@@ -9,6 +9,20 @@ import {OrchestratorV4Fixture} from "../helpers/OrchestratorV4Fixture.sol";
 import {IntentSignalPolicy} from "contracts/hooks/IntentSignalPolicy.sol";
 
 contract OrchestratorV4ArbitratorTest is OrchestratorV4Fixture {
+    event IntentSignaled(
+        bytes32 indexed intentHash,
+        address indexed escrow,
+        uint256 indexed depositId,
+        bytes32 paymentMethod,
+        address owner,
+        address to,
+        uint256 amount,
+        bytes32 fiatCurrency,
+        uint256 conversionRate,
+        uint256 timestamp,
+        bytes32 groupId,
+        address arbitrator
+    );
     event IntentFulfilled(bytes32 indexed intentHash, address indexed fundsTransferredTo, uint256 amount, address releasedBy);
 
     IAddressGroupRegistry internal groupRegistry;
@@ -27,6 +41,54 @@ contract OrchestratorV4ArbitratorTest is OrchestratorV4Fixture {
 
         groupId = _createGroup(curator, taker);
         _gateWithGroup(depositId, groupId);
+    }
+
+    function test_SignalEventIncludesGroupAndSnapshottedArbitrator() public {
+        _setArbitrator(arbitrator);
+        bytes32 intentHash = _intentHash(orchestrator.intentCounter());
+
+        vm.expectEmit(true, true, true, true, address(orchestrator));
+        emit IntentSignaled(
+            intentHash, address(escrow), depositId, METHOD, taker, taker, INTENT_AMOUNT, USD,
+            CONVERSION_RATE, block.timestamp, groupId, arbitrator
+        );
+        _signalDefault();
+
+        assertEq(orchestrator.getIntent(intentHash).arbitrator, arbitrator);
+    }
+
+    function test_SignalEventIncludesZeroGroupAndArbitratorForDirectTaker() public {
+        _setArbitrator(arbitrator);
+        address[] memory direct = new address[](1);
+        direct[0] = taker;
+        vm.prank(depositor);
+        whitelist.setTakers(address(escrow), depositId, direct, true);
+        bytes32 intentHash = _intentHash(orchestrator.intentCounter());
+
+        vm.expectEmit(true, true, true, true, address(orchestrator));
+        emit IntentSignaled(
+            intentHash, address(escrow), depositId, METHOD, taker, taker, INTENT_AMOUNT, USD,
+            CONVERSION_RATE, block.timestamp, bytes32(0), address(0)
+        );
+        _signal(taker, super._defaultParams());
+
+        assertEq(orchestrator.getIntent(intentHash).arbitrator, address(0));
+    }
+
+    function test_SignalEventPreservesPassedGroupWhenWhitelistIsDisabled() public {
+        _setArbitrator(arbitrator);
+        vm.prank(depositor);
+        whitelist.setEnabled(address(escrow), depositId, false);
+        bytes32 intentHash = _intentHash(orchestrator.intentCounter());
+
+        vm.expectEmit(true, true, true, true, address(orchestrator));
+        emit IntentSignaled(
+            intentHash, address(escrow), depositId, METHOD, other, taker, INTENT_AMOUNT, USD,
+            CONVERSION_RATE, block.timestamp, groupId, address(0)
+        );
+        _signal(other, _defaultParams());
+
+        assertEq(orchestrator.getIntent(intentHash).arbitrator, address(0));
     }
 
     function test_SignalCopiesGroupArbitratorAndChangesOnlyReachNewIntents() public {
