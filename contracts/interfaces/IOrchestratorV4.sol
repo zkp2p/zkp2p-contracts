@@ -58,6 +58,8 @@ interface IOrchestratorV4 {
 
     event IntentPayoutDeferred(bytes32 indexed intentHash, address indexed recipient, address indexed vault, uint256 amount);
 
+    /// @dev groupId is the value the taker passed in SignalIntentParams; the signal policy ignores it when the
+    /// deposit's whitelist is off. arbitrator is the arbitrator stored on the intent, zero when none.
     event IntentSignaled(
         bytes32 indexed intentHash,
         address indexed escrow,
@@ -68,7 +70,9 @@ interface IOrchestratorV4 {
         uint256 amount,
         bytes32 fiatCurrency,
         uint256 conversionRate,
-        uint256 timestamp
+        uint256 timestamp,
+        bytes32 groupId,
+        address arbitrator
     );
 
     event IntentPruned(
