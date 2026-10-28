@@ -147,7 +147,7 @@ function harness({ mode = "execute", selectedTag = tag, network = "base_staging"
   return {
     run: () => lane(hre), ready: () => binding.paymentBindingCutoverReady(hre),
     runLive: () => liveLane(hre), skipLive: () => liveLane.skip(hre),
-    calls, contracts, provider, hre, registryMethods, verifierMethods,
+    calls, contracts, provider, hre, registryMethods, verifierMethods, binding, ethers: dependencies.hardhat.ethers,
     actions: () => calls.filter((call) => call !== "read"),
   };
 }
@@ -209,16 +209,40 @@ test("the mounted lane preserves local deployment and skip behavior", async () =
 });
 
 test("the lane 31 wrapper defers to active UPV4 and propagates drift before historical checks", async () => {
-  for (const network of ["localhost", "base"]) {
-    const hre = { deployments: { getNetworkName: () => network } };
+  for (const network of ["localhost", "base", "base_staging"]) {
+    const h = network === "localhost" ? null : harness({ network, registryHas: true, verifierHas: true });
+    const hre = h?.hre ?? { deployments: {
+      getNetworkName: () => network,
+      get: async () => assert.fail("local deferral must not read deployment records"),
+    } };
+    const upv4 = parameters.UPV4_BASE_RELEASE.unifiedPaymentVerifierV4;
+    const abi = ["function owner() view returns (address)"];
+    const iface = new ethers.utils.Interface(abi);
+    let liveReads = 0;
+    if (h) {
+      const get = hre.deployments.get;
+      hre.deployments.get = async (name) => name === "UnifiedPaymentVerifierV4" ? { address: upv4, abi } : get(name);
+      h.contracts.UnifiedPaymentVerifierV4 = { address: upv4, owner: h.contracts.UnifiedPaymentVerifierV3.owner };
+      h.contracts.PaymentVerifierRegistry.getVerifier = async () => upv4;
+      h.provider._isProvider = true;
+      h.provider.call = async (request) => {
+        liveReads++;
+        assert.equal((await request.to).toLowerCase(), upv4.toLowerCase());
+        assert.equal(iface.parseTransaction({ data: await request.data }).name, "owner");
+        return iface.encodeFunctionResult("owner", [await h.contracts.UnifiedPaymentVerifierV4.owner()]);
+      };
+    }
     let drift = false;
     let checks = 0;
     const historical = async () => assert.fail("historical deployment must not run");
     historical.skip = async () => assert.fail("historical skip must not run");
     const lane = loadLane("../deployments/activeDeploymentLanes/31_deploy_v3_payment_binding_stack.ts", {
       "node:assert/strict": assert,
-      hardhat: { ethers },
+      hardhat: { ethers: h?.ethers ?? {
+        ...ethers, getContractAt: async () => assert.fail("local deferral must not read contracts"),
+      } },
       "../../deploy/31_deploy_v3_payment_binding_stack": {
+        ...h?.binding,
         default: historical,
         assertPaymentBindingReady: async () => assert.fail("UPV3 readiness must not run"),
       },
@@ -234,10 +258,33 @@ test("the lane 31 wrapper defers to active UPV4 and propagates drift before hist
     }, {}).default;
     assert.equal(await lane.skip(hre), true);
     await lane(hre);
+    assert.equal(liveReads, h ? 2 : 0);
+    if (h) {
+      const currencies = h.contracts.PaymentVerifierRegistry.getCurrencies;
+      const mutations = [
+        ["PaymentVerifierRegistry", "getCurrencies", (method) => method === hash("alipay") ? [hash("USD")] : currencies(method), /Payment currencies mismatch: alipay/],
+        ["PaymentVerifierRegistry", "getVerifier", () => parameters.UPV4_BASE_RELEASE.unifiedPaymentVerifierV3, /verifier route mismatch/],
+        ["PaymentVerifierRegistry", "owner", () => ethers.constants.AddressZero, /Payment registry owner mismatch/],
+        ["NullifierRegistry", "owner", () => ethers.constants.AddressZero, /Legacy nullifier registry owner mismatch/],
+        ["NullifierRegistryV2", "owner", () => ethers.constants.AddressZero, /Nullifier registry V2 owner mismatch/],
+        ["UnifiedPaymentVerifierV4", "owner", () => ethers.constants.AddressZero, /Payment registry owner mismatch/],
+        ["OrchestratorV3", "paymentVerifierRegistry", () => ethers.constants.AddressZero, /target address mismatch/],
+        ["PaymentVerifierRegistry", "getPaymentMethods", () => [...h.registryMethods].reverse(), /method order mismatch/],
+        ["NullifierRegistry", "getWriters", () => [upv4], /legacy nullifier writers remain/],
+      ];
+      for (const [name, method, mutate, expected] of mutations) {
+        const original = h.contracts[name][method];
+        h.contracts[name][method] = async (...args) => mutate(...args);
+        await assert.rejects(lane.skip(hre), expected);
+        await assert.rejects(lane(hre), expected);
+        h.contracts[name][method] = original;
+      }
+      assert.deepEqual(h.actions(), []);
+    }
     drift = true;
     await assert.rejects(lane.skip(hre), /UPV4 writer drift/);
     await assert.rejects(lane(hre), /UPV4 writer drift/);
-    assert.equal(checks, 4);
+    assert.equal(checks, h ? 22 : 4);
   }
 });
 
