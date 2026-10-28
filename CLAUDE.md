@@ -170,6 +170,12 @@ Current numbered lanes include:
   under its tag with `ENABLE_BASE_FX_RATE_FEEDS_DEPLOYMENT=true`. It seeds both
   feeds, then hands ownership to `MULTI_SIG.base`. It was executed on Base on
   2026-10-01 from `88be796` and is still mounted; tagged reruns only verify.
+- `47`: Base production `UnifiedPaymentVerifierV4` for the live O3 (prepared,
+  not executed; tag plus `ENABLE_BASE_UPV4_DEPLOYMENT` plus
+  `CONFIRM_BASE_UPV4_RELEASE_READY_SHA`). It deploys UPV4, hands it to the Safe,
+  and writes the cutover, UPV3-writer-removal and rollback Safe batches. It skips
+  `base_staging`, and wires UPV4 fully on local networks. See
+  `docs/releases/upv4-base-production-cutover.md`.
 
 There is no `26` script. Numbered files are identities, not proof that every
 script should execute. A numbered script is immutable after any production
