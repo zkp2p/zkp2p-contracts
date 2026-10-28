@@ -130,6 +130,8 @@ test("tool-only upgrade needs an exact explicit revision while compiled source a
     mkdirSync(join(directory, "scripts")); mkdirSync(join(directory, "contracts"));
     git("init"); git("config", "user.name", "Fixture"); git("config", "user.email", "fixture@example.test");
     writeFileSync(join(directory, "scripts/deploy-orchestrator-v4.ts"), "original"); writeFileSync(join(directory, "contracts/Contract.sol"), "immutable");
+    const deployedPaths = ["hardhat.config.ts", "deployments/canonicalDeployment.ts", "deployments/orchestrator-v4/base_staging.json", "scripts/verify-orchestrator-v4-source.ts"];
+    for (const path of deployedPaths) { mkdirSync(join(directory, require("node:path").dirname(path)), { recursive: true }); writeFileSync(join(directory, path), "immutable deployment input"); }
     for (const wrapper of ["hardhat.readonly.config.ts", "hardhat.canonical.config.ts"]) writeFileSync(join(directory, wrapper), "reviewed execution wrapper");
     const historyPaths = ["deployments/base_staging/OrchestratorV4Historical20261022.json", "deployments/orchestrator-v4/historical/2026-10-22/provenance.json"];
     for (const path of historyPaths) { mkdirSync(join(directory, require("node:path").dirname(path)), { recursive: true }); writeFileSync(join(directory, path), "immutable history"); }
@@ -141,6 +143,14 @@ test("tool-only upgrade needs an exact explicit revision while compiled source a
     assert.throws(() => assertReleaseProvenance(source, "0".repeat(40), "base_staging"));
     assertReleaseProvenance(source, tool, "base_staging");
     assertReleaseProvenance(tool, undefined, "base_staging");
+    // Recording a new tool SHA never permits a different compiler, configuration or deployed helper.
+    for (const path of deployedPaths) {
+      writeFileSync(join(directory, path), "changed deployment input");
+      git("add", "."); git("commit", "-m", "deployed input drift");
+      assert.throws(() => assertReleaseProvenance(source, git("rev-parse", "HEAD"), "base_staging"));
+      git("restore", "--source", source, path); git("add", "."); git("commit", "-m", "restore deployment input");
+    }
+    assertReleaseProvenance(source, tool, "base_staging");
     for (const wrapper of ["hardhat.readonly.config.ts", "hardhat.canonical.config.ts", ...historyPaths]) {
       writeFileSync(join(directory, wrapper), "unreviewed runtime override");
       assert.throws(() => assertReleaseProvenance(source, tool, "base_staging"));

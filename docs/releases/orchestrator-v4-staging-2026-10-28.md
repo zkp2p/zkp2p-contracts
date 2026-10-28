@@ -49,8 +49,9 @@ HARDHAT_CONFIG=hardhat.readonly.config.ts yarn deploy:orchestrator-v4 base_stagi
 
 No group or membership bootstrap belongs to this deployment. Existing Peer Pay
 and QA groups and previous privacy migrations belong to the October 22 registry
-and policy only. Activation still requires fresh-policy privacy enablement by
-the required depositors, current post-pause drain evidence, correct ownership,
+and policy only. Activation requires fresh-policy privacy enablement by
+the required depositors or the explicit staging acknowledgement described below,
+current post-pause drain evidence, correct ownership,
 writer sets and routes. An old passive deployment or an archived migration is
 not activation evidence for the fresh suite.
 
@@ -131,6 +132,65 @@ compile, `pkg:build`, `pkg:test`, the payment-method and signer tests,
 `typecheck:dispute-deployment`, `test:orchestrator-v4-release`,
 `deploy:localhost` and the complete Foundry suite (1872 passed, 0 failed).
 
-Not done here, each separately approved: package export, downstream re-vendor,
-relayer allowlists, privacy re-migration on the new WhitelistPolicyV2, group
-recreation on the new registry, and activation.
+Not done in that deployment, each separately approved: package export,
+downstream re-vendor, relayer allowlists, privacy re-migration on the new
+WhitelistPolicyV2, group recreation on the new registry, and activation.
+
+## Staging public-deposit acknowledgement
+
+The product owner approved staging activation with existing private deposits
+starting public on the fresh WhitelistPolicyV2. No privacy migration is required
+for this staging activation. Production retains the privacy-preservation gate.
+
+For `base_staging activate` only, the operator may explicitly supply
+`O4_STAGING_ACCEPT_PUBLIC_PRIVATE_DEPOSITS=N`, where `N` is the exact positive
+decimal count of existing private deposits not enabled on the fresh policy.
+Unset input preserves the original rejection; empty, zero, nondecimal,
+leading-zero and mismatched counts fail. `base` rejects the input regardless of
+its value, before loading Hardhat or a signer. Other CLI actions reject the input.
+This input never comes from `deployments/orchestrator-v4/base_staging.json`;
+that configuration and its manifest hash remain unchanged.
+
+The full checkpoint/event discovery still runs, including other escrows,
+retained empty deposits and later privacy events, and excluding deleted deposits.
+Before the first activation write and again immediately before O4 registration,
+the runner requires the count to match and appends an entry to manifest
+`stagingPublicPrivateDepositAcceptances`: `checkedAtBlock`, predecessor and fresh
+policy addresses, the exact acknowledgement, and every accepted `(escrow,
+depositId)` pair. A count change stops activation. The journal retains previous
+entries across retries; every activation invocation needs explicit input again.
+Acceptance evidence is a privacy decision, not proof that activation completed.
+
+Read-only active verification repeats discovery and permits only the exact
+deposit identities in the latest recorded acceptance. It does not create a new
+acceptance or read the operator input. Newly private deposits still fail;
+accepted deposits subsequently enabled or deleted no longer need the exception.
+All ownership, drain, bytecode, wiring, route order, writer and confirmed-prefix
+checks remain in place. Registration remains last.
+
+### Execution-tool pin advancement
+
+Use the existing explicit two-commit procedure from the October 22 release:
+commit the reviewed runner/tests first, then set this manifest's top-level
+`executionToolCommit` to that full commit SHA in a separate recording commit.
+Do not replace `sourceCommit`
+`0749b75f235c6d90079c1e261f46d67778f7c389`, modify the deployment configuration,
+or copy the pin from the archived suite. There is no automatic advancement.
+
+`assertReleaseProvenance` is unchanged: both SHAs must be ancestors of HEAD,
+all protected paths must be clean, deployed paths must still match source
+`0749b75`, and execution paths must match the explicit tool SHA. The deployed
+paths include `contracts/`, `hardhat.config.ts`, the source verifier,
+`deployments/canonicalDeployment.ts` and the environment's deployment
+configuration. Regression tests also reject a new tool SHA that changes any
+of those deployment inputs.
+
+### Acknowledgement change validation
+
+- `HARDHAT_CONFIG=hardhat.canonical.config.ts HARDHAT_NETWORK=hardhat yarn test:orchestrator-v4-release`: 32 passed, including the local eight-contract deploy/resume/activate/verify regression, explicit staging acceptance, omitted/invalid/mismatched input, production refusal, fresh privacy discovery at registration and preservation of the other activation gates.
+- `yarn test:release-policy`: 114 passed.
+- `yarn typecheck:dispute-deployment`: passed.
+- `git diff --check`: passed; deployed protected paths remain byte-identical to `0749b75`.
+
+These are local tool checks, not live activation evidence. Test transactions use
+only the public Hardhat fixture on its in-memory network.

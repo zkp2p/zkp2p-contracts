@@ -4,6 +4,7 @@ const { existsSync, mkdtempSync, readFileSync, rmSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const { test } = require("node:test");
+const { spawnSync } = require("node:child_process");
 const hre = require("hardhat");
 const { ContractFactory, VoidSigner, Wallet, utils, constants } = require("ethers");
 const { inspect, assertFreshDeploymentPreflight, assertBaseline, validateConfig, TransactionJournal, deploySuite, activate, verifySuite, activationTransactions, DRAIN_QUERY, recordDrainEvidence, assertPrivateDepositsPreserved } = require("./deploy-orchestrator-v4.ts");
@@ -339,6 +340,106 @@ test("a private deposit on another registered escrow introduced during cutover b
     await activate(hre, new TransactionJournal(f.path, JSON.parse(readFileSync(f.path)), wallet));
     assert.equal(await f.deployed.OrchestratorRegistry.isOrchestrator(f.manifest.contracts.OrchestratorV4.address), true);
   } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
+test("staging acknowledgement discovers all private deposits and records the exact public exception through activation and verification", async () => {
+  const f = await fixture();
+  try {
+    const empty = await createPrivateDeposit(f), deleted = await createPrivateDeposit(f, false);
+    await (await f.deployed.EscrowV2.withdrawDeposit(empty.depositId)).wait();
+    await (await f.deployed.EscrowV2.withdrawDeposit(deleted.depositId)).wait();
+    f.config.legacyWhitelistCheckpoint = { indexedBlock: await hre.ethers.provider.getBlockNumber(), enabled: [empty, deleted] };
+    const later = await createPrivateDeposit(f), preserved = await createPrivateDeposit(f);
+    await deploySuite(hre, f.journal);
+    const whitelist = await hre.ethers.getContractAt("WhitelistPolicyV2", f.manifest.contracts.WhitelistPolicyV2.address, wallet);
+    await (await whitelist.setEnabled(preserved.escrow, preserved.depositId, true)).wait();
+    const nonce = await wallet.getTransactionCount(), block = await hre.ethers.provider.getBlockNumber();
+    await assert.rejects(activate(hre, f.journal), /depositors to enable WhitelistPolicyV2/);
+    for (const input of ["", "true", "02", " 2", "-2", "0"]) await assert.rejects(activate(hre, f.journal, input), /exact positive decimal count/);
+    await assert.rejects(activate(hre, f.journal, "3"), /count mismatch: discovered 2/);
+    assert.equal(f.manifest.stagingPublicPrivateDepositAcceptances, undefined);
+    assert.equal(await wallet.getTransactionCount(), nonce);
+    await activate(hre, f.journal, "2");
+    const saved = JSON.parse(readFileSync(f.path));
+    const expected = [empty, later].map(({ escrow, depositId }) => ({ escrow, depositId }));
+    assert.equal(saved.stagingPublicPrivateDepositAcceptances.length, 2);
+    assert.equal(saved.stagingPublicPrivateDepositAcceptances[0].checkedAtBlock, block);
+    assert.equal(saved.stagingPublicPrivateDepositAcceptances[1].checkedAtBlock, saved.transactions.find((tx) => tx.step === "retire-payment-writer").receipt.blockNumber);
+    for (const acceptance of saved.stagingPublicPrivateDepositAcceptances) {
+      assert.equal(acceptance.acknowledgement, "2");
+      assert.equal(acceptance.predecessorPolicy, f.deployed.PredecessorWhitelistPolicy.address);
+      assert.equal(acceptance.whitelistPolicy, whitelist.address);
+      assert.deepEqual(acceptance.acceptedDeposits, expected);
+    }
+    assert.deepEqual(saved.verification.privateDeposits.acceptedPublicDeposits, expected);
+    assert.deepEqual(saved.verification.privateDeposits.deletedDeposits, [{ escrow: deleted.escrow, depositId: deleted.depositId }]);
+    assert.equal(saved.verification.active, true);
+    const readonly = new TransactionJournal(`${f.path}.verification`, saved, new VoidSigner(wallet.address, hre.ethers.provider));
+    await verifySuite(hre, readonly, true);
+    assert.deepEqual(saved.stagingPublicPrivateDepositAcceptances, f.manifest.stagingPublicPrivateDepositAcceptances);
+    const finalNonce = await wallet.getTransactionCount();
+    // Saved evidence authorizes read-only verification, never another activation invocation.
+    await assert.rejects(activate(hre, f.journal), /depositors to enable WhitelistPolicyV2/);
+    assert.equal(await wallet.getTransactionCount(), finalNonce);
+    // Enabling one accepted deposit later is fine; a newly private deposit is never silently accepted.
+    await (await whitelist.setEnabled(empty.escrow, empty.depositId, true)).wait();
+    await verifySuite(hre, readonly, true);
+    await createPrivateDeposit(f);
+    await assert.rejects(verifySuite(hre, readonly, true), /depositors to enable WhitelistPolicyV2/);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
+test("staging acknowledgement cannot bypass ownership, drain, registry prefix, or new private deposits during activation", async () => {
+  const f = await fixture();
+  try {
+    await createPrivateDeposit(f);
+    await deploySuite(hre, f.journal);
+    const nonce = await wallet.getTransactionCount(), evidence = f.manifest.activationDrainEvidence;
+    f.manifest.activationDrainEvidence = null;
+    await assert.rejects(activate(hre, f.journal, "1"), /Post-pause indexer drain evidence is required/);
+    f.manifest.activationDrainEvidence = evidence;
+    await hre.network.provider.send("hardhat_setStorageAt", [f.deployed.OrchestratorRegistry.address, "0x0", utils.hexZeroPad(other, 32)]);
+    await assert.rejects(activate(hre, f.journal, "1"), /Activation ownership missing/);
+    await hre.network.provider.send("hardhat_setStorageAt", [f.deployed.OrchestratorRegistry.address, "0x0", utils.hexZeroPad(wallet.address, 32)]);
+    assert.equal(await wallet.getTransactionCount(), nonce);
+    class IntroducePrivateDepositJournal extends TransactionJournal {
+      async execute(step, request) {
+        const result = await super.execute(step, request);
+        if (step === "authorize-policy-writer") await createPrivateDeposit(f);
+        return result;
+      }
+    }
+    await assert.rejects(activate(hre, new IntroducePrivateDepositJournal(f.path, f.manifest, wallet), "1"), /count mismatch: discovered 2/);
+    assert.equal(f.manifest.transactions.some((tx) => tx.step === "register-orchestrator"), false);
+    assert.equal(f.manifest.stagingPublicPrivateDepositAcceptances.length, 1);
+    await (await f.deployed.NullifierRegistryV2.addWritePermission(other)).wait();
+    const beforeResume = await wallet.getTransactionCount();
+    await assert.rejects(activate(hre, f.journal, "2"), /Payment writers differ/);
+    assert.equal(await wallet.getTransactionCount(), beforeResume);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
+test("base refuses public private-deposit acknowledgement and recorded staging exceptions", async () => {
+  const f = await fixture();
+  try {
+    f.config.environment = "base";
+    const nonce = await wallet.getTransactionCount();
+    await assert.rejects(activate(hre, f.journal, "1"), /staging-only; forbidden on base/);
+    await assert.rejects(assertPrivateDepositsPreserved(hre, f.journal, { acknowledgement: "1" }), /staging-only; forbidden on base/);
+    f.manifest.stagingPublicPrivateDepositAcceptances = [{ acknowledgement: "1" }];
+    await assert.rejects(assertPrivateDepositsPreserved(hre, f.journal, { verifyRecordedAcceptance: true }), /staging-only; forbidden on base/);
+    assert.equal(await wallet.getTransactionCount(), nonce);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
+test("CLI refuses acknowledgement on base or outside activate before loading Hardhat or a signer", () => {
+  for (const [environment, action, error] of [["base", "activate", /staging-only; forbidden on base/], ["base", "prepare-governance", /staging-only; forbidden on base/], ["base_staging", "record-drain", /only accepted by activate/]]) {
+    const result = spawnSync(process.execPath, ["-r", "ts-node/register/transpile-only", "scripts/deploy-orchestrator-v4.ts", environment, action], {
+      encoding: "utf8", env: { ...process.env, HARDHAT_CONFIG: "nonexistent-config-to-prove-early-refusal.ts", O4_STAGING_ACCEPT_PUBLIC_PRIVATE_DEPOSITS: "1" },
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, error);
+  }
 });
 
 

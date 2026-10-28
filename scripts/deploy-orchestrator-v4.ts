@@ -39,10 +39,16 @@ export type DrainEvidence = {
   response: { data: { Intent: Array<{ intentHash: string; orchestratorAddress: string; status: string }>; chain_metadata: Array<{ latest_processed_block: number }> } };
   legacySignals: Record<string, Array<{ transactionHash: string; logIndex: number; unlock?: { transactionHash: string; logIndex: number } }>>;
 };
+type PrivateDeposit = { escrow: string; depositId: string };
+type StagingPublicPrivateDepositAcceptance = {
+  checkedAtBlock: number; predecessorPolicy: string; whitelistPolicy: string;
+  acknowledgement: string; acceptedDeposits: PrivateDeposit[];
+};
 export type Manifest = {
   version: 1; sourceCommit: string; executionToolCommit?: string; configurationHash: string; configuration: ReleaseConfig;
   baseline: Awaited<ReturnType<typeof inspect>>; transactions: Transaction[]; activationDrainEvidence: DrainEvidence | null;
   contracts: Partial<Record<NewName, NewContract>>; verification: Record<string, unknown>; governanceTransactions: Array<{ to: string; data: string; value: string }>;
+  stagingPublicPrivateDepositAcceptances?: StagingPublicPrivateDepositAcceptance[];
 };
 class ReleaseError extends Error {}
 function check(condition: unknown, message: string): asserts condition { if (!condition) throw new ReleaseError(message); }
@@ -297,12 +303,19 @@ export async function activationTransactions(hre: HardhatRuntimeEnvironment, m: 
   return transactions;
 }
 
-export async function activate(hre: HardhatRuntimeEnvironment, journal: TransactionJournal): Promise<void> {
+export function assertStagingPublicDepositAcknowledgement(environment: string, acknowledgement: string | undefined): void {
+  if (acknowledgement === undefined) return;
+  check(environment === "base_staging", "Public private-deposit acknowledgement is staging-only; forbidden on base");
+  check(/^[1-9]\d*$/.test(acknowledgement), "O4_STAGING_ACCEPT_PUBLIC_PRIVATE_DEPOSITS must be the exact positive decimal count of private deposits accepted as public");
+}
+
+export async function activate(hre: HardhatRuntimeEnvironment, journal: TransactionJournal, acknowledgement?: string): Promise<void> {
   const c = journal.manifest.configuration;
+  assertStagingPublicDepositAcknowledgement(c.environment, acknowledgement);
   check(c.environment === "base_staging" && same(journal.wallet.address, c.governance), "Direct activation is staging-only; production uses its Safe batch");
   assertRegistryOwnership(await inspect(hre, c));
   await assertDrainEvidence(hre, c, journal.manifest.activationDrainEvidence);
-  await assertPrivateDepositsPreserved(hre, journal);
+  await assertPrivateDepositsPreserved(hre, journal, { acknowledgement });
   const transactions = await activationTransactions(hre, journal.manifest);
   const started = transactions.some((tx) => journal.manifest.transactions.some((entry) => entry.step === tx.step));
   if (!started) await verifySuite(hre, journal, false);
@@ -328,7 +341,7 @@ export async function activate(hre: HardhatRuntimeEnvironment, journal: Transact
   await assertActivationState();
   // No writes to the old orchestrator, escrow, deposits, relayer registry or old dispute policies.
   for (const tx of transactions.slice(completed.length)) {
-    if (tx.step === "register-orchestrator") await assertPrivateDepositsPreserved(hre, journal);
+    if (tx.step === "register-orchestrator") await assertPrivateDepositsPreserved(hre, journal, { acknowledgement });
     await journal.execute(tx.step, tx);
     completed.push(tx.step);
     await assertActivationState();
@@ -336,9 +349,12 @@ export async function activate(hre: HardhatRuntimeEnvironment, journal: Transact
   await verifySuite(hre, journal, true);
 }
 
-/** Preserve existing private liquidity even when it is currently empty or not accepting intents. */
-export async function assertPrivateDepositsPreserved(hre: HardhatRuntimeEnvironment, journal: TransactionJournal): Promise<void> {
+/** Discover all private liquidity; only explicit staging activation may record a public exception. */
+export async function assertPrivateDepositsPreserved(hre: HardhatRuntimeEnvironment, journal: TransactionJournal, options: { acknowledgement?: string; verifyRecordedAcceptance?: boolean } = {}): Promise<void> {
   const m = journal.manifest, c = m.configuration, checkpoint = c.legacyWhitelistCheckpoint;
+  assertStagingPublicDepositAcknowledgement(c.environment, options.acknowledgement);
+  check(c.environment === "base_staging" || !m.stagingPublicPrivateDepositAcceptances?.length, "Recorded public private-deposit acceptance is staging-only; forbidden on base");
+  check(options.acknowledgement === undefined || !options.verifyRecordedAcceptance, "Verification cannot record a new private-deposit acknowledgement");
   const policy = await existing(hre, c, "PredecessorWhitelistPolicy");
   const fresh = m.contracts.WhitelistPolicyV2; check(fresh, "Fresh whitelist policy is missing");
   const whitelist = new Contract(fresh.address, (await hre.artifacts.readArtifact("WhitelistPolicyV2")).abi, hre.ethers.provider);
@@ -361,16 +377,27 @@ export async function assertPrivateDepositsPreserved(hre: HardhatRuntimeEnvironm
   const privateDeposits = new Map<string, { escrow: string; depositId: string }>();
   for (const row of candidates.values()) if (await policy.enabled(row.escrow, row.depositId, row.paymentMethod, at))
     privateDeposits.set(`${row.escrow.toLowerCase()}:${row.depositId}`, { escrow: row.escrow, depositId: row.depositId });
-  const required: Array<{ escrow: string; depositId: string }> = [], deleted: typeof required = [], missing: string[] = [];
+  const required: PrivateDeposit[] = [], deleted: PrivateDeposit[] = [], missing: PrivateDeposit[] = [];
   for (const deposit of privateDeposits.values()) {
     const escrow = new Contract(deposit.escrow, (await hre.artifacts.readArtifact("EscrowV2")).abi, hre.ethers.provider);
     // Escrow IDs are monotonic. Deleted deposits cannot be re-created or funded again.
     if (same((await escrow.getDeposit(deposit.depositId, at)).depositor, ZERO)) { deleted.push(deposit); continue; }
     required.push(deposit);
-    if (!await whitelist.enabled(deposit.escrow, deposit.depositId, at)) missing.push(`${deposit.escrow}:${deposit.depositId}`);
+    if (!await whitelist.enabled(deposit.escrow, deposit.depositId, at)) missing.push(deposit);
   }
-  check(missing.length === 0, `Existing private deposits require their depositors to enable WhitelistPolicyV2: ${missing.join(", ")}`);
-  m.verification.privateDeposits = { checkedAtBlock: block, predecessorPolicy: policy.address, requiredDeposits: required, deletedDeposits: deleted };
+  if (options.acknowledgement !== undefined) {
+    check(options.acknowledgement === String(missing.length), `O4_STAGING_ACCEPT_PUBLIC_PRIVATE_DEPOSITS count mismatch: discovered ${missing.length} private deposits not enabled on WhitelistPolicyV2`);
+    (m.stagingPublicPrivateDepositAcceptances ??= []).push({ checkedAtBlock: block, predecessorPolicy: policy.address, whitelistPolicy: fresh.address, acknowledgement: options.acknowledgement, acceptedDeposits: missing });
+  } else {
+    const acceptance = options.verifyRecordedAcceptance ? m.stagingPublicPrivateDepositAcceptances?.slice(-1)[0] : undefined;
+    if (acceptance) {
+      assertStagingPublicDepositAcknowledgement(c.environment, acceptance.acknowledgement);
+      check(Number.isSafeInteger(acceptance.checkedAtBlock) && acceptance.checkedAtBlock > 0 && acceptance.checkedAtBlock <= block && same(acceptance.predecessorPolicy, policy.address) && same(acceptance.whitelistPolicy, fresh.address) && acceptance.acknowledgement === String(acceptance.acceptedDeposits.length), "Recorded staging private-deposit acceptance differs from this suite");
+    }
+    const unaccepted = missing.filter((deposit) => !acceptance?.acceptedDeposits.some((accepted) => same(accepted.escrow, deposit.escrow) && accepted.depositId === deposit.depositId));
+    check(unaccepted.length === 0, `Existing private deposits require their depositors to enable WhitelistPolicyV2: ${unaccepted.map((deposit) => `${deposit.escrow}:${deposit.depositId}`).join(", ")}`);
+  }
+  m.verification.privateDeposits = { checkedAtBlock: block, predecessorPolicy: policy.address, requiredDeposits: required, deletedDeposits: deleted, acceptedPublicDeposits: missing };
   journal.save();
 }
 
@@ -502,7 +529,7 @@ export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: Trans
   check(registered === active, "O4 registration does not match release phase");
   if (active) {
     await assertDrainEvidence(hre, c, m.activationDrainEvidence);
-    await assertPrivateDepositsPreserved(hre, journal);
+    await assertPrivateDepositsPreserved(hre, journal, { verifyRecordedAcceptance: true });
     check(snapshot.paymentMethods.every((method) => same(method.verifier, v.address)), "Not all payment routes select UPV4");
     check(equal(snapshot.nullifierWriters, [v.address]), "UPV4 must be the only payment nullifier writer");
     check(equal(snapshot.disputeWriters, [...c.retainedDisputeWriters, p.address]), "Policy writer missing or predecessor writer changed");
@@ -514,6 +541,9 @@ export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: Trans
 async function main(): Promise<void> {
   const [environment, action, evidencePath] = process.argv.slice(2);
   check(["base_staging", "base"].includes(environment) && ["inspect", "deploy", "activate", "prepare-governance", "verify", "verify-source", "record-drain"].includes(action), "Usage: deploy-orchestrator-v4.ts base_staging|base inspect|deploy|activate|prepare-governance|verify|verify-source|record-drain [EVIDENCE_JSON]");
+  const acknowledgement = process.env.O4_STAGING_ACCEPT_PUBLIC_PRIVATE_DEPOSITS;
+  assertStagingPublicDepositAcknowledgement(environment, acknowledgement);
+  check(acknowledgement === undefined || action === "activate", "O4_STAGING_ACCEPT_PUBLIC_PRIVATE_DEPOSITS is only accepted by activate");
   process.env.HARDHAT_NETWORK = environment;
   const hre = require("hardhat") as HardhatRuntimeEnvironment;
   const configPath = resolve(`deployments/orchestrator-v4/${environment}.json`);
@@ -566,7 +596,7 @@ async function main(): Promise<void> {
       check(evidencePath, "record-drain requires the post-pause indexer evidence JSON");
       await recordDrainEvidence(hre, journal, JSON.parse(readFileSync(evidencePath, "utf8")));
     }
-    if (action === "activate") await activate(hre, journal);
+    if (action === "activate") await activate(hre, journal, acknowledgement);
     if (action === "prepare-governance") {
       check(environment === "base", "Governance batch is only for Base production");
       await verifySuite(hre, journal, false);
