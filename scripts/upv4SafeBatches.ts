@@ -1,6 +1,11 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import * as assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { utils } from "ethers";
+import { UPV4_BASE_RELEASE } from "../deployments/parameters";
+import { installSafeArtifactPair } from "../deployments/safeArtifacts";
+import { buildSafeTransaction, safeTransactionHash } from "./proposeSafeBatchChunks";
 import {
   assertUpv4SafeBatch, baseCutoverConfig, buildUpv4ReleasePlan, buildUpv4SafeCalls,
   decodeUpv4SafeBatch, encodeUpv4SafeCall, formatUpv4PlanMarkdown, renderUpv4SafeBatch,
@@ -16,42 +21,65 @@ function requireBytes(file: string, expected: string): void {
   if (readFileSync(file, "utf8") !== expected) throw new Error(`${file}: bytes differ from fresh render`);
 }
 
-function sourceSha(batch: Upv4SafeBatch): string {
-  const tokens = [...batch.meta.description.matchAll(/\bSource ([0-9a-fA-F]{40})\./g)];
-  if (tokens.length !== 1) throw new Error(`${batch.meta.name}: expected one Source <40-hex>. token`);
-  return tokens[0][1];
+function pinnedRecordAddress(): string {
+  const recordFile = resolve(ROOT, "deployments/base/UnifiedPaymentVerifierV4.json");
+  assert.ok(existsSync(recordFile), "UnifiedPaymentVerifierV4 record missing; run the tagged lane-47 adoption");
+  const record: { address: string } = JSON.parse(readFileSync(recordFile, "utf8"));
+  assert.equal(record.address?.toLowerCase(), UPV4_BASE_RELEASE.unifiedPaymentVerifierV4.toLowerCase(),
+    "UnifiedPaymentVerifierV4 record address mismatch");
+  return UPV4_BASE_RELEASE.unifiedPaymentVerifierV4;
 }
 
-/**
- * Lane 47 uses the deployment block timestamp (ms) and release SHA in every batch.
- * Recover those inputs from cutover, require all batches to agree, then compare all
- * six committed files byte-for-byte against fresh renders from the deployment record.
- */
+function renderedArtifacts(address: string) {
+  const options = {
+    createdAt: UPV4_BASE_RELEASE.deployment.blockTimestamp * 1000,
+    sourceSha: UPV4_BASE_RELEASE.deployment.sourceSha,
+  };
+  return Object.values(Upv4SafeBatchKind).map((kind) => {
+    const fileName = UPV4_SAFE_BATCH_FILES[kind];
+    const batch = renderUpv4SafeBatch(kind, baseCutoverConfig(), address, options);
+    const contents = serializeUpv4SafeBatch(batch);
+    return { kind, fileName, batch, contents, sidecar: serializeUpv4SafeBatchSidecar(fileName, contents) };
+  });
+}
+
+function write(): void {
+  const address = pinnedRecordAddress();
+  const artifacts = renderedArtifacts(address);
+  mkdirSync(BATCH_DIRECTORY, { recursive: true });
+  for (const { kind, fileName, batch, contents, sidecar } of artifacts) {
+    assertUpv4SafeBatch(kind, batch, baseCutoverConfig(), address);
+    const batchPath = resolve(BATCH_DIRECTORY, fileName);
+    const result = installSafeArtifactPair({
+      batchPath, sidecarPath: batchPath.replace(/\.json$/, ".sha256.json"),
+      supersededDir: resolve(BATCH_DIRECTORY, "superseded"), supersededSuffix: randomUUID(),
+      batchContents: contents, sidecarContents: sidecar,
+    });
+    process.stdout.write(`${fileName}: ${result}\n`);
+  }
+}
+
+/** All six files are reproduced from pinned deployment provenance, never from their own metadata. */
 function verify(): void {
-  const recordFile = resolve(ROOT, "deployments/base/UnifiedPaymentVerifierV4.json");
-  if (!existsSync(recordFile)) throw new Error("UnifiedPaymentVerifierV4 is not deployed on Base yet");
-  const record: { address: string } = JSON.parse(readFileSync(recordFile, "utf8"));
+  const address = pinnedRecordAddress();
   const config = baseCutoverConfig();
-  const cutover: Upv4SafeBatch = JSON.parse(readFileSync(
-    resolve(BATCH_DIRECTORY, UPV4_SAFE_BATCH_FILES[Upv4SafeBatchKind.Cutover]), "utf8",
-  ));
-  const options = { createdAt: cutover.createdAt, sourceSha: sourceSha(cutover) };
   const plan = buildUpv4ReleasePlan();
-  for (const batchPlan of plan.batches) {
-    const fileName = UPV4_SAFE_BATCH_FILES[batchPlan.kind];
+  for (const { kind, fileName, contents, sidecar } of renderedArtifacts(address)) {
     const file = resolve(BATCH_DIRECTORY, fileName);
     const committed: Upv4SafeBatch = JSON.parse(readFileSync(file, "utf8"));
-    if (committed.createdAt !== options.createdAt) throw new Error(`${fileName}: createdAt mismatch`);
-    if (sourceSha(committed) !== options.sourceSha) throw new Error(`${fileName}: source SHA mismatch`);
-    assertUpv4SafeBatch(batchPlan.kind, committed, config, record.address);
-    const fresh = renderUpv4SafeBatch(batchPlan.kind, config, record.address, options);
-    const contents = serializeUpv4SafeBatch(fresh);
+    assertUpv4SafeBatch(kind, committed, config, address);
     requireBytes(file, contents);
-    requireBytes(file.replace(/\.json$/, ".sha256.json"),
-      serializeUpv4SafeBatchSidecar(fileName, contents));
-    batchPlan.rows = decodeUpv4SafeBatch(committed, config);
+    requireBytes(file.replace(/\.json$/, ".sha256.json"), sidecar);
+    plan.batches.find((batch) => batch.kind === kind)!.rows = decodeUpv4SafeBatch(committed, config);
   }
+  const calls = buildUpv4SafeCalls(Upv4SafeBatchKind.Cutover, config, address)
+    .map((call) => ({ ...encodeUpv4SafeCall(call), operation: 0 }));
+  const transaction = buildSafeTransaction(calls, UPV4_BASE_RELEASE.cutoverSafeNonce);
+  const hash = safeTransactionHash(transaction);
+  assert.equal(hash, UPV4_BASE_RELEASE.cutoverSafeTxHash, "UPV4 cutover safeTxHash mismatch");
   process.stdout.write(formatUpv4PlanMarkdown(plan));
+  process.stdout.write(`MultiSend target=${transaction.to} operation=${transaction.operation} ` +
+    `data keccak=${utils.keccak256(transaction.data)} safeTxHash=${hash}\n`);
 }
 
 function main(args: string[]): void {
@@ -63,6 +91,7 @@ function main(args: string[]): void {
     else requireBytes(PLAN_FILE, contents);
     return;
   }
+  if (args[0] === "write" && args.length === 1) return write();
   if (args[0] === "verify" && args.length === 1) return verify();
   if (args[0] === "ffi" && args.length === 3) {
     const kind = Object.values(Upv4SafeBatchKind).find((candidate) => candidate === args[1]);
@@ -73,7 +102,7 @@ function main(args: string[]): void {
     ) + "\n");
     return;
   }
-  throw new Error("Usage: upv4SafeBatches.ts plan [--write] | verify | ffi <cutover|upv3-writer-removal|rollback> <upv4Address>");
+  throw new Error("Usage: upv4SafeBatches.ts plan [--write] | write | verify | ffi <cutover|upv3-writer-removal|rollback> <upv4Address>");
 }
 
 try {

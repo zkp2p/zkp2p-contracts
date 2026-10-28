@@ -167,11 +167,11 @@ export const BASE_ACTIVE_PAYMENT_METHODS: string[] = [
   "monobank",
 ];
 
-// Lane 47: pinned from Base block 53209611; the lane fails closed on drift.
+// Lane 47: routes are pinned from Base block 53209611; UPV4 is pinned from the deployment below.
 export const UPV4_BASE_RELEASE = {
   pinnedBlock: 53209611,
   chainId: 8453,
-  deployer: "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+  deployer: "0x41123d6419C7b8e44157f6F3b0088442116641eC",
   safe: "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
   orchestratorRegistry: "0xBe9fED15ED7A4B915C03EFcEcb9662739C3382A9",
   nullifierRegistryV2: "0x5455e761b866dfa6A2f5Dc6d6525825bf9C09aeB",
@@ -179,7 +179,18 @@ export const UPV4_BASE_RELEASE = {
   paymentVerifierRegistry: "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
   unifiedPaymentVerifierV3: "0xC6F4a193576C60892a47e111Bb5706c30162502B",
   orchestratorV3: "0x014025fDE093f8701d86e9f38e2C3a9b779cb5c7",
-  stagingUnifiedPaymentVerifierV4: "0x7Da43ba0F85cfb64733216C4A2288f80dFfe1EAb",
+  unifiedPaymentVerifierV4: "0x7bE50E6206a9b3AdF36dbEAFac0e45Cc03A72048",
+  deployment: {
+    transactionHash: "0xa6fa3ce43ca5352460be4ce917709f17d60fda677fa48a1fbc6f081902dcf931",
+    blockNumber: 53210472,
+    blockTimestamp: 1793210291,
+    deployerNonce: 117,
+    ownershipTransferTransactionHash: "0xa9abe1334345ea502e059c769db50bc31153d229c8f05e85e01d5c1d8ff54ce6",
+    ownershipTransferBlock: 53210497,
+    sourceSha: "646898f2afa2d0e114a7f44e96fc6222aa1c7a91",
+  },
+  cutoverSafeNonce: 86,
+  cutoverSafeTxHash: "0xe22ba698b10018c270a658525412b5e9cd81db2a4f42f9dd58983b639a2f8c70",
   paymentRoutes: [
     { method: "alipay", currencies: ["CNY"] },
     { method: "chime", currencies: ["USD"] },

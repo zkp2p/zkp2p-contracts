@@ -8,7 +8,7 @@ const { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileS
 const { tmpdir } = require("node:os");
 const { resolve } = require("node:path");
 const { test } = require("node:test");
-const { BigNumber, constants, utils } = require("ethers");
+const { ContractFactory, constants, utils } = require("ethers");
 const { BASE_ACTIVE_PAYMENT_METHODS, MULTI_SIG, UPV4_BASE_RELEASE } = require("../deployments/parameters.ts");
 const {
   Upv4SafeBatchKind: Kind, Upv4SafeContract: Contract, Upv4SafeFunction: Function,
@@ -18,8 +18,9 @@ const {
 } = require("../deployments/upv4BaseCutover.ts");
 
 const ROOT = resolve(__dirname, "..");
-const UPV4 = "0x1000000000000000000000000000000000000001";
-const OPTIONS = { createdAt: 1793188800000, sourceSha: "cb116d102b36c60e1502a902bb7fd6646e7f2f43" };
+const UPV4 = "0x7bE50E6206a9b3AdF36dbEAFac0e45Cc03A72048";
+const OTHER_ADDRESS = "0x1000000000000000000000000000000000000001";
+const OPTIONS = { createdAt: 1793210291000, sourceSha: "646898f2afa2d0e114a7f44e96fc6222aa1c7a91" };
 const ABI = new utils.Interface(Object.values(Function).map((signature) => `function ${signature}`));
 // Lane 31 imports Hardhat; keep an independent literal fixture instead of initializing HRE.
 const EXPECTED_ROUTES = [
@@ -53,7 +54,7 @@ test("pins the exact Base block, addresses, catalog order, currencies and endpoi
   const { paymentRoutes, ...pins } = UPV4_BASE_RELEASE;
   assert.deepEqual(pins, {
     pinnedBlock: 53209611, chainId: 8453,
-    deployer: "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+    deployer: "0x41123d6419C7b8e44157f6F3b0088442116641eC",
     safe: "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
     orchestratorRegistry: "0xBe9fED15ED7A4B915C03EFcEcb9662739C3382A9",
     nullifierRegistryV2: "0x5455e761b866dfa6A2f5Dc6d6525825bf9C09aeB",
@@ -61,7 +62,15 @@ test("pins the exact Base block, addresses, catalog order, currencies and endpoi
     paymentVerifierRegistry: "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
     unifiedPaymentVerifierV3: "0xC6F4a193576C60892a47e111Bb5706c30162502B",
     orchestratorV3: "0x014025fDE093f8701d86e9f38e2C3a9b779cb5c7",
-    stagingUnifiedPaymentVerifierV4: "0x7Da43ba0F85cfb64733216C4A2288f80dFfe1EAb",
+    unifiedPaymentVerifierV4: UPV4,
+    deployment: {
+      transactionHash: "0xa6fa3ce43ca5352460be4ce917709f17d60fda677fa48a1fbc6f081902dcf931",
+      blockNumber: 53210472, blockTimestamp: 1793210291, deployerNonce: 117,
+      ownershipTransferTransactionHash: "0xa9abe1334345ea502e059c769db50bc31153d229c8f05e85e01d5c1d8ff54ce6",
+      ownershipTransferBlock: 53210497, sourceSha: OPTIONS.sourceSha,
+    },
+    cutoverSafeNonce: 86,
+    cutoverSafeTxHash: "0xe22ba698b10018c270a658525412b5e9cd81db2a4f42f9dd58983b639a2f8c70",
   });
   assert.equal(pins.safe, MULTI_SIG.base);
   assert.deepEqual(paymentRoutes, EXPECTED_ROUTES);
@@ -71,10 +80,28 @@ test("pins the exact Base block, addresses, catalog order, currencies and endpoi
   const config = baseCutoverConfig();
   assert.equal(config.routes[0].method, "0xcac9daea62d7b89d75ac73af4ee14dcf25721012ae82b568c2ea5c808eaa04ff");
   assert.equal(config.routes[12].method, "0x1d966dbd6aeb8674d7c05174bd0ded7b56a798672bfb862ef20bbe8c2bbfce18");
-  for (const value of Object.values(pins).filter((value) => typeof value === "string")) {
+  for (const value of Object.values(pins).filter((value) => typeof value === "string" && value.length === 42)) {
     assert.equal(utils.getAddress(value), value);
   }
   assert.equal(Object.keys(require.cache).some((file) => file.includes("/hardhat/")), false);
+});
+
+test("cutover matches the imported Safe transaction at nonce 86 without loading Hardhat", () => {
+  const { buildSafeTransaction, safeTransactionHash } = require("./proposeSafeBatchChunks.ts");
+  const calls = buildUpv4SafeCalls(Kind.Cutover, baseCutoverConfig(), UPV4).map(encodeUpv4SafeCall);
+  const transaction = buildSafeTransaction(calls.map((call) => ({ ...call, operation: 0 })), 86);
+  assert.equal(transaction.to, "0x40A2aCCbd92BCA938b02010E17A5b8929b49130D");
+  assert.equal(transaction.operation, 1);
+  assert.equal(utils.hexDataLength(transaction.data), 6916);
+  assert.equal(utils.keccak256(transaction.data), "0x6d61bafbe0947c6db17eec69fedd7b485062d712ee66c7cbb3dacd3575d9ae58");
+  assert.equal(safeTransactionHash(transaction), "0xe22ba698b10018c270a658525412b5e9cd81db2a4f42f9dd58983b639a2f8c70");
+  assert.equal(Object.keys(require.cache).some((file) => file.includes("/hardhat/")), false);
+});
+
+test("UPV4 release sources never reference the compromised deployer or its key", () => {
+  for (const file of ["deploy/47_deploy_unified_payment_verifier_v4.ts", "deployments/upv4BaseCutover.ts", "scripts/upv4SafeBatches.ts"]) {
+    assert.doesNotMatch(readFileSync(resolve(ROOT, file), "utf8"), /0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929|BASE_DEPLOY_PRIVATE_KEY/i, file);
+  }
 });
 
 test("cutover has exactly one writer addition, reverse removals, and original-order UPV4 routes", () => {
@@ -378,7 +405,10 @@ function cliFixture(context) {
     mkdirSync(resolve(root, directory), { recursive: true });
   }
   symlinkSync(resolve(ROOT, "node_modules"), resolve(root, "node_modules"));
-  symlinkSync(resolve(ROOT, "deployments/upv4BaseCutover.ts"), resolve(root, "deployments/upv4BaseCutover.ts"));
+  for (const file of ["deployments/upv4BaseCutover.ts", "deployments/parameters.ts", "deployments/safeArtifacts.ts",
+    "scripts/proposeSafeBatchChunks.ts"]) {
+    symlinkSync(resolve(ROOT, file), resolve(root, file));
+  }
   const script = resolve(root, "scripts/upv4SafeBatches.ts");
   copyFileSync(resolve(ROOT, "scripts/upv4SafeBatches.ts"), script);
   const batchFile = (kind) => resolve(root, "deployments/outputs/safe-batches", UPV4_SAFE_BATCH_FILES[kind]);
@@ -408,17 +438,61 @@ test("plan CLI writes the golden file and detects byte drift", (context) => {
   assert.match(drifted.stderr, /bytes differ from fresh render/);
 });
 
-test("verify CLI fails before deployment, then checks shared provenance and all six exact files", (context) => {
+test("CLI write requires the pinned record, renders six files, archives changes and verifies the Safe hash", (context) => {
   const fixture = cliFixture(context);
-  const missing = fixture.run(["verify"]);
-  assert.equal(missing.status, 1);
-  assert.equal(missing.stdout, "");
-  assert.match(missing.stderr, /UnifiedPaymentVerifierV4 is not deployed on Base yet/);
+  const recordFile = resolve(fixture.root, "deployments/base/UnifiedPaymentVerifierV4.json");
+  const batchDirectory = resolve(fixture.root, "deployments/outputs/safe-batches");
+  for (const command of ["write", "verify"]) {
+    const missing = fixture.run([command]);
+    assert.equal(missing.status, 1);
+    assert.match(missing.stderr, /UnifiedPaymentVerifierV4 record missing/);
+    writeFileSync(recordFile, JSON.stringify({ address: OTHER_ADDRESS }));
+    const wrong = fixture.run([command]);
+    assert.equal(wrong.status, 1);
+    assert.match(wrong.stderr, /record address mismatch/);
+    rmSync(recordFile);
+    assert.deepEqual(readdirSync(batchDirectory), []);
+  }
+  writeFileSync(recordFile, JSON.stringify({ address: UPV4 }));
+  const written = fixture.run(["write"]);
+  assert.equal(written.status, 0, written.stderr);
+  assert.equal(readdirSync(batchDirectory).length, 6);
+  for (const kind of Object.values(Kind)) {
+    const contents = readFileSync(fixture.batchFile(kind), "utf8");
+    assert.equal(contents, serializeUpv4SafeBatch(render(kind)));
+    assertUpv4SafeBatch(kind, JSON.parse(contents), baseCutoverConfig(), UPV4);
+    assert.equal(readFileSync(fixture.batchFile(kind).replace(/\.json$/, ".sha256.json"), "utf8"),
+      JSON.stringify(upv4SafeBatchSidecar(UPV4_SAFE_BATCH_FILES[kind], contents), null, 2) + "\n");
+  }
+  const checked = fixture.run(["verify"]);
+  assert.equal(checked.status, 0, checked.stderr);
+  assert.ok(checked.stdout.includes(UPV4));
+  assert.match(checked.stdout, /0x40A2aCCbd92BCA938b02010E17A5b8929b49130D/);
+  assert.match(checked.stdout, /operation[=: ]+1/);
+  assert.match(checked.stdout, /0x6d61bafbe0947c6db17eec69fedd7b485062d712ee66c7cbb3dacd3575d9ae58/);
+  assert.match(checked.stdout, /0xe22ba698b10018c270a658525412b5e9cd81db2a4f42f9dd58983b639a2f8c70/);
+  assert.equal(fixture.run(["write"]).status, 0);
+  assert.equal(existsSync(resolve(batchDirectory, "superseded")), false);
+  const file = fixture.batchFile(Kind.Cutover);
+  const sidecar = file.replace(/\.json$/, ".sha256.json");
+  const oldBatch = readFileSync(file, "utf8") + "\n";
+  const oldSidecar = readFileSync(sidecar, "utf8") + "\n";
+  writeFileSync(file, oldBatch);
+  writeFileSync(sidecar, oldSidecar);
+  assert.equal(fixture.run(["write"]).status, 0);
+  const archived = readdirSync(resolve(batchDirectory, "superseded"));
+  assert.equal(archived.length, 2);
+  for (const name of archived) {
+    assert.equal(readFileSync(resolve(batchDirectory, "superseded", name), "utf8"),
+      name.endsWith(".sha256.json") ? oldSidecar : oldBatch);
+  }
+  assert.equal(fixture.run(["verify"]).status, 0);
+});
+
+test("verify CLI checks the pinned provenance and all six exact files", (context) => {
+  const fixture = cliFixture(context);
   writeFileSync(resolve(fixture.root, "deployments/base/UnifiedPaymentVerifierV4.json"), JSON.stringify({ address: UPV4 }));
   fixture.writeBatches();
-  const valid = fixture.run(["verify"]);
-  assert.equal(valid.status, 0, valid.stderr);
-  assert.ok(valid.stdout.includes(UPV4));
   for (const kind of Object.values(Kind)) {
     for (const sidecar of [false, true]) {
       const file = sidecar ? fixture.batchFile(kind).replace(/\.json$/, ".sha256.json") : fixture.batchFile(kind);
@@ -429,25 +503,29 @@ test("verify CLI fails before deployment, then checks shared provenance and all 
       fixture.writeBatches();
     }
   }
-  const cases = [
-    [Kind.Rollback, (batch) => { batch.createdAt += 1; }, /createdAt mismatch/],
-    [Kind.Upv3WriterRemoval, (batch) => { batch.meta.description = batch.meta.description.replace(OPTIONS.sourceSha, "a".repeat(40)); }, /source SHA mismatch/],
-    [Kind.Cutover, (batch) => { batch.meta.description = "missing source"; }, /expected one Source/],
-    [Kind.Cutover, (batch) => { batch.meta.description += ` Source ${OPTIONS.sourceSha}.`; }, /expected one Source/],
-    [Kind.Cutover, (batch) => { [batch.transactions[1], batch.transactions[2]] = [batch.transactions[2], batch.transactions[1]]; }, /transaction\[1\].paymentMethod/],
-  ];
-  for (const [kind, mutate, error] of cases) {
-    const batch = render(kind);
-    mutate(batch);
-    writeFileSync(fixture.batchFile(kind), serializeUpv4SafeBatch(batch));
+  // Changing every file consistently must not replace the trusted provenance inputs.
+  for (const field of ["createdAt", "sourceSha"]) {
+    for (const kind of Object.values(Kind)) {
+      const options = { ...OPTIONS, [field]: field === "createdAt" ? OPTIONS.createdAt + 1 : "a".repeat(40) };
+      const contents = serializeUpv4SafeBatch(renderUpv4SafeBatch(kind, baseCutoverConfig(), UPV4, options));
+      writeFileSync(fixture.batchFile(kind), contents);
+      writeFileSync(fixture.batchFile(kind).replace(/\.json$/, ".sha256.json"),
+        JSON.stringify(upv4SafeBatchSidecar(UPV4_SAFE_BATCH_FILES[kind], contents), null, 2) + "\n");
+    }
     const rejected = fixture.run(["verify"]);
     assert.equal(rejected.status, 1);
-    assert.match(rejected.stderr, error);
+    assert.match(rejected.stderr, /bytes differ from fresh render/);
     fixture.writeBatches();
   }
+  const batch = render();
+  [batch.transactions[1], batch.transactions[2]] = [batch.transactions[2], batch.transactions[1]];
+  writeFileSync(fixture.batchFile(Kind.Cutover), serializeUpv4SafeBatch(batch));
+  const rejected = fixture.run(["verify"]);
+  assert.equal(rejected.status, 1);
+  assert.match(rejected.stderr, /transaction\[1\].paymentMethod|bytes differ from fresh render/);
 });
 
-function laneFixture(context, network = "base", root) {
+function laneFixture(context, network = "base") {
   const lane = require("../deploy/47_deploy_unified_payment_verifier_v4.ts");
   const savedEnv = { ...process.env };
   context.after(() => {
@@ -455,74 +533,63 @@ function laneFixture(context, network = "base", root) {
     Object.assign(process.env, savedEnv);
   });
   process.env.DEPLOY_ACTIVE_TAG = lane.TAG;
-  process.env[lane.LIVE_FLAG] = "true";
-  process.env[lane.RELEASE_SHA_FLAG] = OPTIONS.sourceSha;
-  const artifactRoot = root ?? mkdtempSync(resolve(tmpdir(), "upv4-lane-"));
-  if (!root) context.after(() => rmSync(artifactRoot, { recursive: true, force: true }));
+  const artifactRoot = mkdtempSync(resolve(tmpdir(), "upv4-lane-"));
+  context.after(() => rmSync(artifactRoot, { recursive: true, force: true }));
   const pins = UPV4_BASE_RELEASE;
+  const local = network === "localhost" || network === "hardhat";
   const model = registryModel();
+  const args = [pins.orchestratorRegistry, pins.nullifierRegistryV2, pins.multiAttestationVerifier];
+  const artifact = {
+    abi: ["constructor(address,address,address)",
+      ...["orchestratorRegistry", "nullifierRegistry", "attestationVerifier", "owner"].map((name) => `function ${name}() view returns (address)`),
+      "function DOMAIN_SEPARATOR() view returns (bytes32)", "function getPaymentMethods() view returns (bytes32[])"],
+    bytecode: "0x60006000a161010003", deployedBytecode: "0x60006000a161010003",
+  };
+  const iface = new utils.Interface(artifact.abi);
   const records = new Map(Object.entries({
     OrchestratorRegistry: pins.orchestratorRegistry, NullifierRegistryV2: pins.nullifierRegistryV2,
     MultiAttestationVerifier: pins.multiAttestationVerifier, PaymentVerifierRegistry: pins.paymentVerifierRegistry,
-    UnifiedPaymentVerifierV3: pins.unifiedPaymentVerifierV3, OrchestratorV3: pins.orchestratorV3,
+    UnifiedPaymentVerifierV3: pins.unifiedPaymentVerifierV3,
     NullifierRegistry: "0x2000000000000000000000000000000000000002",
   }).map(([name, address]) => [name, { address }]));
   const state = {
-    chainId: network === "base" ? 8453 : 31337, deployer: pins.deployer,
-    head: OPTIONS.sourceSha, dirty: "", block: 100, writes: [], reads: [],
-    missingCode: new Set(), model, owners: new Map([...records.keys()].map((name) => [name, pins.safe])),
-    registered: true, o3Registry: pins.paymentVerifierRegistry, upv3Methods: [...EXPECTED_METHODS],
-    requiredSignatures: 1, witnesses: [pins.deployer], legacyWriters: [],
-    upv3Bindings: [pins.orchestratorRegistry, pins.nullifierRegistryV2, pins.multiAttestationVerifier],
-    upv4Bindings: [pins.orchestratorRegistry, pins.nullifierRegistryV2, pins.multiAttestationVerifier],
-    upv4Owner: pins.deployer, upv4Methods: [], domain: undefined,
-    compiled: "0x60006000a161010003", staging: "0x60016001a161010003",
+    chainId: local ? 31337 : 8453, deployer: pins.deployer, block: 53210521,
+    writes: [], saves: [], accounts: [], reads: [], missingCode: new Set(), model, legacyWriters: [],
+    upv4Bindings: [...args], upv4Owner: local ? pins.deployer : pins.safe,
+    upv4Methods: local ? [] : [...EXPECTED_METHODS], domain: undefined,
+    runtime: "0x60016001a161010003",
+    transaction: { from: pins.deployer, to: null, nonce: 117,
+      data: new ContractFactory(artifact.abi, artifact.bytecode).getDeployTransaction(...args).data },
+    receipt: { status: 1, contractAddress: UPV4, blockNumber: 53210472, from: pins.deployer,
+      transactionHash: "0xa6fa3ce43ca5352460be4ce917709f17d60fda677fa48a1fbc6f081902dcf931" },
   };
   function read(label, value, options) {
-    assert.equal(typeof options?.blockTag, "number", `${label} must pin its read`);
-    assert.equal(options.blockTag, state.block, `${label} must use the current snapshot block`);
-    state.reads.push({ label, block: options.blockTag, writes: state.writes.length });
+    assert.equal(options?.blockTag, state.block, `${label} must use the snapshot block`);
+    state.reads.push({ label, block: options.blockTag });
     return value;
   }
   function tx(action) {
     state.writes.push(action);
+    assert.ok(local, "Base must never send or deploy");
     state.block++;
     return { wait: async () => ({ blockNumber: state.block, status: 1 }) };
+  }
+  function account(action) {
+    state.accounts.push(action);
+    assert.ok(local, "Base must never access accounts or signers");
   }
   const domain = () => utils._TypedDataEncoder.hashDomain({
     name: "UnifiedPaymentVerifier", version: "1", chainId: state.chainId, verifyingContract: UPV4,
   });
-  const contracts = new Map([...records].map(([name, record]) => [record.address, {
-    address: record.address, owner: async (options) => read(`${name}.owner`, state.owners.get(name), options),
-  }]));
-  Object.assign(contracts.get(pins.paymentVerifierRegistry), {
-    getPaymentMethods: async (options) => read("pvr.methods", [...model.methods], options),
-    getCurrencies: async (method, options) => read("pvr.currencies", [...model.store.get(method).currencies], options),
-    getVerifier: async (method, options) => read("pvr.verifier", model.store.get(method).verifier, options),
-  });
-  Object.assign(contracts.get(pins.nullifierRegistryV2), {
-    getWriters: async (options) => read("nrv2.writers", [...model.writers], options),
-  });
-  Object.assign(contracts.get(records.get("NullifierRegistry").address), {
-    getWriters: async (options) => read("legacy.writers", state.legacyWriters, options),
-  });
-  Object.assign(contracts.get(pins.orchestratorRegistry), {
-    isOrchestrator: async (address, options) => {
-      assert.equal(address, pins.orchestratorV3);
-      return read("orchestrator.registered", state.registered, options);
-    },
-  });
-  Object.assign(contracts.get(pins.orchestratorV3), {
-    paymentVerifierRegistry: async (options) => read("o3.pvr", state.o3Registry, options),
-  });
-  Object.assign(contracts.get(pins.multiAttestationVerifier), {
-    requiredSignatures: async (options) => read("mav.threshold", BigNumber.from(state.requiredSignatures), options),
-    witnesses: async (options) => read("mav.witnesses", state.witnesses, options),
-  });
-  for (const [index, method] of ["orchestratorRegistry", "nullifierRegistry", "attestationVerifier"].entries()) {
-    contracts.get(pins.unifiedPaymentVerifierV3)[method] = async (options) => read(`upv3.${method}`, state.upv3Bindings[index], options);
-  }
-  contracts.get(pins.unifiedPaymentVerifierV3).getPaymentMethods = async (options) => read("upv3.methods", state.upv3Methods, options);
+  const contracts = new Map([
+    [pins.paymentVerifierRegistry, {
+      getPaymentMethods: async (options) => read("pvr.methods", [...model.methods], options),
+      getCurrencies: async (method, options) => read("pvr.currencies", [...model.store.get(method).currencies], options),
+      getVerifier: async (method, options) => read("pvr.verifier", model.store.get(method).verifier, options),
+    }],
+    [pins.nullifierRegistryV2, { getWriters: async (options) => read("nrv2.writers", [...model.writers], options) }],
+    [records.get("NullifierRegistry").address, { getWriters: async (options) => read("legacy.writers", state.legacyWriters, options) }],
+  ]);
   const verifier = {
     address: UPV4,
     owner: async (options) => read("upv4.owner", state.upv4Owner, options),
@@ -534,7 +601,6 @@ function laneFixture(context, network = "base", root) {
       return tx({ action: "addPaymentMethod", method });
     },
     transferOwnership: async (owner) => {
-      assert.equal(state.upv4Owner, pins.deployer);
       state.upv4Owner = owner;
       return tx({ action: "transferOwnership", owner });
     },
@@ -554,204 +620,172 @@ function laneFixture(context, network = "base", root) {
       getNetworkName: () => network,
       getOrNull: async (name) => records.get(name) ?? null,
       get: async (name) => { assert.ok(records.has(name), `missing ${name}`); return records.get(name); },
-      getArtifact: async (name) => { assert.equal(name, lane.DEPLOYMENT_NAME); return { deployedBytecode: state.compiled }; },
+      getArtifact: async () => artifact,
+      getExtendedArtifact: async () => artifact,
+      save: async (name, record) => { state.saves.push({ name, record }); records.set(name, record); },
       deploy: async (name, options) => {
         assert.equal(name, lane.DEPLOYMENT_NAME);
         assert.equal(records.has(name), false, "must never redeploy a recorded UPV4");
         await tx({ action: "deploy", name, ...options }).wait();
-        const record = { address: UPV4, receipt: { blockNumber: state.block }, transactionHash: "0x" + "1".repeat(64) };
+        const record = { address: UPV4, receipt: { blockNumber: state.block } };
         records.set(name, record);
         return record;
       },
     },
-    getUnnamedAccounts: async () => [state.deployer],
+    getUnnamedAccounts: async () => { account("getUnnamedAccounts"); return [state.deployer]; },
     ethers: {
-      getSigner: async (address) => { assert.equal(address, state.deployer); return signer; },
+      getSigner: async () => { account("getSigner"); return signer; },
       getContractAt: async (_name, address) => { assert.ok(contracts.has(address), `unknown ${address}`); return contracts.get(address); },
       provider: {
+        _isProvider: true,
         getNetwork: async () => ({ chainId: state.chainId }),
         getBlockNumber: async () => state.block,
-        getBlock: async (block) => {
-          assert.equal(block, records.get(lane.DEPLOYMENT_NAME).receipt.blockNumber);
-          return { timestamp: OPTIONS.createdAt / 1000 };
+        getTransaction: async (hash) => { assert.equal(hash, state.receipt?.transactionHash ?? pins.deployment.transactionHash); return state.transaction; },
+        getTransactionReceipt: async (hash) => { assert.equal(hash, pins.deployment.transactionHash); return state.receipt; },
+        getCode: async (address, blockTag) => read("code", state.missingCode.has(address) ? "0x" : state.runtime, { blockTag }),
+        call: async (request, blockTag) => {
+          assert.equal((await request.to).toLowerCase(), UPV4.toLowerCase());
+          const parsed = iface.parseTransaction({ data: await request.data });
+          return iface.encodeFunctionResult(parsed.name, [await verifier[parsed.name]({ blockTag })]);
         },
-        getCode: async (address, blockTag) => read("code", state.missingCode.has(address) ? "0x" :
-          address === pins.stagingUnifiedPaymentVerifierV4 ? state.staging : "0x6000", { blockTag }),
+        sendTransaction: async () => tx({ action: "provider.sendTransaction" }),
       },
     },
   };
-  const func = lane.createUpv4DeploymentLane({
-    artifactRoot,
-    git: (args) => {
-      if (args[0] === "rev-parse") return state.head;
-      assert.deepEqual(args, ["status", "--porcelain", "--untracked-files=all"]);
-      return state.dirty;
-    },
-  });
+  const func = lane.createUpv4DeploymentLane();
   function recordUpv4(count = 13, owner = pins.safe) {
-    records.set(lane.DEPLOYMENT_NAME, { address: UPV4, receipt: { blockNumber: 90 } });
+    records.set(lane.DEPLOYMENT_NAME, { ...artifact, address: UPV4, transactionHash: state.receipt.transactionHash,
+      args: [...args], receipt: { ...state.receipt } });
     state.upv4Methods = EXPECTED_METHODS.slice(0, count);
     state.upv4Owner = owner;
   }
-  return { state, hre, lane, func, records, artifactRoot, recordUpv4,
-    run: () => func(hre), skip: () => func.skip(hre),
-    file: (kind, sidecar = false) => resolve(artifactRoot, UPV4_SAFE_BATCH_FILES[kind].replace(/\.json$/, sidecar ? ".sha256.json" : ".json")),
-  };
+  return { state, hre, lane, func, records, artifactRoot, recordUpv4, args, artifact,
+    run: () => func(hre), skip: () => func.skip(hre) };
 }
 
-test("lane 47 exports exact identity without dependencies", (context) => {
+test("lane 47 exports exact identity without dependencies or deployment flags", (context) => {
   const { lane } = laneFixture(context);
   assert.equal(lane.TAG, "47_deploy_unified_payment_verifier_v4");
-  assert.equal(lane.LIVE_FLAG, "ENABLE_BASE_UPV4_DEPLOYMENT");
-  assert.equal(lane.RELEASE_SHA_FLAG, "CONFIRM_BASE_UPV4_RELEASE_READY_SHA");
   assert.equal(lane.DEPLOYMENT_NAME, "UnifiedPaymentVerifierV4");
   assert.deepEqual(lane.default.tags, [lane.TAG, lane.DEPLOYMENT_NAME]);
   assert.equal(lane.default.dependencies, undefined);
+  assert.equal(lane.LIVE_FLAG, undefined);
+  assert.equal(lane.RELEASE_SHA_FLAG, undefined);
 });
 
-test("lane 47 skip matrix and flags require the canonical tag", async (context) => {
-  for (const network of ["localhost", "hardhat", "base_staging", "base", "sepolia"]) {
-    const fixture = laneFixture(context, network);
-    for (const tagged of [true, false]) {
-      delete process.env[fixture.lane.LIVE_FLAG];
-      delete process.env[fixture.lane.RELEASE_SHA_FLAG];
-      if (tagged) process.env.DEPLOY_ACTIVE_TAG = fixture.lane.TAG;
-      else delete process.env.DEPLOY_ACTIVE_TAG;
-      assert.equal(await fixture.skip(), !["localhost", "hardhat"].includes(network) && (network !== "base" || !tagged));
-      if (!tagged) for (const flag of [fixture.lane.LIVE_FLAG, fixture.lane.RELEASE_SHA_FLAG]) {
-        process.env[flag] = "false";
-        await assert.rejects(fixture.skip(), /Lane 47 flags require DEPLOY_ACTIVE_TAG=47_deploy_unified_payment_verifier_v4/);
-        delete process.env[flag];
-      }
-    }
-    assert.deepEqual(fixture.state.writes, []);
-  }
-});
-
-const baseFailures = [
-  ["missing live flag", (f) => { delete process.env[f.lane.LIVE_FLAG]; }, /ENABLE_BASE_UPV4_DEPLOYMENT=true required/],
-  ["missing SHA", (f) => { delete process.env[f.lane.RELEASE_SHA_FLAG]; }, /40.*hex|release SHA/i],
-  ["malformed SHA", (f) => { process.env[f.lane.RELEASE_SHA_FLAG] = "A".repeat(40); }, /40.*hex|release SHA/i],
-  ["different HEAD", (f) => { f.state.head = "a".repeat(40); }, /HEAD/],
-  ["unrelated dirty file", (f) => { f.state.dirty = " M contracts/EscrowV2.sol\n"; }, /dirty|worktree/],
-  ["rename from unrelated file", (f) => { f.state.dirty = "R  package.json -> deployments/base/UnifiedPaymentVerifierV4.json\n"; }, /dirty|worktree/],
-  ["wrong chain", (f) => { f.state.chainId = 1; }, /chainId/],
-  ["wrong deployer", (f) => { f.state.deployer = UPV4; }, /deployer/],
-  ["record address drift", (f) => { f.records.get("OrchestratorRegistry").address = UPV4; }, /OrchestratorRegistry.*address/],
-  ["missing record", (f) => { f.records.delete("OrchestratorV3"); }, /OrchestratorV3/],
-  ["missing runtime", (f) => { f.state.missingCode.add(UPV4_BASE_RELEASE.orchestratorRegistry); }, /runtime/],
-  ...["PaymentVerifierRegistry", "NullifierRegistryV2", "OrchestratorRegistry", "UnifiedPaymentVerifierV3", "MultiAttestationVerifier"].map((name) =>
-    [`${name} owner`, (f) => { f.state.owners.set(name, UPV4); }, new RegExp(`${name}.*owner`)]),
-  ["method order", (f) => { f.state.model.methods.reverse(); }, /method order/],
-  ["currencies", (f) => { f.state.model.store.get(EXPECTED_METHODS[0]).currencies = [utils.id("USD")]; }, /currenc/],
-  ["route drift", (f) => { f.state.model.store.get(EXPECTED_METHODS[0]).verifier = UPV4; }, /route/],
-  ["writers", (f) => { f.state.model.writers.add(UPV4); }, /writers/],
-  ["O3 unregistered", (f) => { f.state.registered = false; }, /OrchestratorV3.*registered/],
-  ["O3 registry", (f) => { f.state.o3Registry = UPV4; }, /OrchestratorV3.*registry/],
-  ["UPV3 bindings", (f) => { f.state.upv3Bindings[1] = UPV4; }, /UnifiedPaymentVerifierV3.*nullifier/],
-  ["UPV3 catalog", (f) => { f.state.upv3Methods.reverse(); }, /UnifiedPaymentVerifierV3.*method/],
-  ["MAV zero threshold", (f) => { f.state.requiredSignatures = 0; }, /witness|threshold/],
-  ["MAV insufficient witnesses", (f) => { f.state.requiredSignatures = 2; }, /witness|threshold/],
-  ["staging metadata", (f) => { f.state.staging = "0x60006000a162010003"; }, /UPV4 artifact differs from the reviewed staging source/],
-  ["staging length", (f) => { f.state.staging = "0x600060006000a161010003"; }, /UPV4 artifact differs from the reviewed staging source/],
-  ["truncated staging metadata", (f) => { f.state.staging = "0x60006000a16101ffff"; }, /UPV4 artifact differs from the reviewed staging source/],
-];
-for (const [name, mutate, expected] of baseFailures) {
-  test(`Base preflight rejects ${name} before any write`, async (context) => {
-    const fixture = laneFixture(context);
-    mutate(fixture);
-    await assert.rejects(fixture.run(), expected);
-    assert.deepEqual(fixture.state.writes, []);
-    assert.deepEqual(readdirSync(fixture.artifactRoot), []);
-  });
-}
-
-test("Base deploys, registers 13 methods, hands off once, and lane-written pairs pass CLI verify", async (context) => {
-  const cli = cliFixture(context);
-  const f = laneFixture(context, "base", resolve(cli.root, "deployments/outputs/safe-batches"));
-  await f.run();
-  assert.deepEqual(f.state.writes, [
-    { action: "deploy", name: f.lane.DEPLOYMENT_NAME, contract: "UnifiedPaymentVerifierV4", from: UPV4_BASE_RELEASE.deployer,
-      args: [UPV4_BASE_RELEASE.orchestratorRegistry, UPV4_BASE_RELEASE.nullifierRegistryV2, UPV4_BASE_RELEASE.multiAttestationVerifier], log: true },
-    ...EXPECTED_METHODS.map((method) => ({ action: "addPaymentMethod", method })),
-    { action: "transferOwnership", owner: UPV4_BASE_RELEASE.safe },
-  ]);
-  assert.deepEqual(new Set(f.state.reads.filter((read) => read.writes === 0).map((read) => read.block)), new Set([100]));
-  assert.equal(readdirSync(f.artifactRoot).length, 6);
-  for (const [index, kind] of Object.values(Kind).entries()) {
-    const contents = readFileSync(f.file(kind), "utf8");
-    const batch = JSON.parse(contents);
-    assertUpv4SafeBatch(kind, batch, baseCutoverConfig(), UPV4);
-    assert.equal(batch.transactions.length, [27, 1, 26][index]);
-    assert.equal(batch.createdAt, OPTIONS.createdAt);
-    assert.equal(contents, serializeUpv4SafeBatch(render(kind)));
-    assert.equal(readFileSync(f.file(kind, true), "utf8"),
-      require("../deployments/upv4BaseCutover.ts").serializeUpv4SafeBatchSidecar(UPV4_SAFE_BATCH_FILES[kind], contents));
-    const decoded = decodeUpv4SafeBatch(batch, baseCutoverConfig());
-    assert.equal(decoded.some((row) => row.function === "acceptOwnership"), false);
-    assert.equal(decoded.some((row) => row.function === "removeWritePermission"), kind === Kind.Upv3WriterRemoval);
-  }
-  writeFileSync(resolve(cli.root, "deployments/base/UnifiedPaymentVerifierV4.json"), JSON.stringify({ address: UPV4 }));
-  const checked = cli.run(["verify"]);
-  assert.equal(checked.status, 0, checked.stderr);
-  assert.ok(checked.stdout.includes(UPV4));
-  f.state.writes.length = 0;
-  assert.equal(await f.skip(), true);
-  await f.run();
-  assert.deepEqual(f.state.writes, []);
-});
-
-test("complete Base skip detects each missing or changed artifact and resumes without transactions", async (context) => {
+test("tagged Base adoption saves exactly one pinned record without accounts or chain writes", async (context) => {
   const f = laneFixture(context);
-  f.recordUpv4();
-  await f.run();
-  for (const kind of Object.values(Kind)) for (const sidecar of [false, true]) {
-    const file = f.file(kind, sidecar);
-    rmSync(file);
-    assert.equal(await f.skip(), false);
-    await f.run();
-    assert.equal(await f.skip(), true);
-    writeFileSync(file, readFileSync(file, "utf8") + "\n");
-    assert.equal(await f.skip(), false);
-    await f.run();
-    assert.equal(await f.skip(), true);
-  }
-  assert.deepEqual(f.state.writes, []);
-  assert.ok(readdirSync(resolve(f.artifactRoot, "superseded")).length > 0);
-});
-
-test("Base resumes a five-method prefix without redeployment", async (context) => {
-  const f = laneFixture(context);
-  f.recordUpv4(5, UPV4_BASE_RELEASE.deployer);
-  f.state.dirty = [
-    "?? deployments/base/UnifiedPaymentVerifierV4.json", " M deployments/base/.migrations.json",
-    "?? deployments/base/solcInputs/source.json", "?? deployments/outputs/safe-batches/base_upv4_cutover.json",
-  ].join("\n") + "\n";
   assert.equal(await f.skip(), false);
   await f.run();
-  assert.deepEqual(f.state.writes, [
-    ...EXPECTED_METHODS.slice(5).map((method) => ({ action: "addPaymentMethod", method })),
-    { action: "transferOwnership", owner: UPV4_BASE_RELEASE.safe },
-  ]);
+  assert.equal(f.state.saves.length, 1);
+  assert.equal(f.state.saves[0].name, f.lane.DEPLOYMENT_NAME);
+  assert.deepEqual(f.state.saves[0].record, {
+    ...f.artifact, address: UPV4, args: f.args,
+    transactionHash: UPV4_BASE_RELEASE.deployment.transactionHash, receipt: f.state.receipt,
+  });
+  assert.equal(f.state.saves[0].record.receipt.from, UPV4_BASE_RELEASE.deployer);
+  assert.deepEqual(f.state.writes, []);
+  assert.deepEqual(f.state.accounts, []);
+  assert.deepEqual(readdirSync(f.artifactRoot), []);
+  delete process.env.DEPLOY_ACTIVE_TAG;
+  assert.equal(await f.skip(), true);
 });
 
-for (const [name, mutate, expected] of [
-  ["non-prefix catalog", (s) => { s.upv4Methods.reverse(); }, /ordered prefix/],
-  ["unknown owner", (s) => { s.upv4Owner = UPV4; }, /owner/],
-  ["Safe with partial catalog", (s) => { s.upv4Methods.pop(); }, /catalog/],
-  ["immutable drift", (s) => { s.upv4Bindings[0] = UPV4; }, /orchestratorRegistry/],
-  ["domain drift", (s) => { s.domain = constants.HashZero; }, /DOMAIN_SEPARATOR/],
-  ["absent code", (s) => { s.missingCode.add(UPV4); }, /runtime/],
-]) {
-  test(`Base resume and skip reject ${name} without writes`, async (context) => {
+test("skip requires tagged adoption only when Base has no record", async (context) => {
+  const f = laneFixture(context);
+  delete process.env.DEPLOY_ACTIVE_TAG;
+  await assert.rejects(f.skip(), /UnifiedPaymentVerifierV4 record missing; run the tagged lane-47 adoption/);
+  await assert.rejects(f.run(), /DEPLOY_ACTIVE_TAG/);
+  assert.deepEqual(f.state.saves, []);
+  for (const network of ["localhost", "hardhat", "base_staging", "sepolia"]) {
+    const other = laneFixture(context, network);
+    for (const tagged of [true, false]) {
+      if (tagged) process.env.DEPLOY_ACTIVE_TAG = other.lane.TAG;
+      else delete process.env.DEPLOY_ACTIVE_TAG;
+      assert.equal(await other.skip(), !["localhost", "hardhat"].includes(network));
+    }
+    assert.deepEqual(other.state.writes, []);
+  }
+});
+
+const adoptionFailures = [
+  ["wrong chain", (f) => { f.state.chainId = 1; }, /chainId/],
+  ["missing transaction", (f) => { f.state.transaction = null; }, /transaction.*missing/i],
+  ["tx.from", (f) => { f.state.transaction.from = OTHER_ADDRESS; }, /from/],
+  ["tx.to", (f) => { f.state.transaction.to = UPV4; }, /creation|to/],
+  ["nonce", (f) => { f.state.transaction.nonce++; }, /nonce/],
+  ["creation bytecode", (f) => { f.state.transaction.data = f.state.transaction.data.replace(/^0x60/, "0x61"); }, /creation input/],
+  ["creation args", (f) => { f.state.transaction.data = new ContractFactory(f.artifact.abi, f.artifact.bytecode)
+    .getDeployTransaction(OTHER_ADDRESS, ...f.args.slice(1)).data; }, /creation input/],
+  ["missing receipt", (f) => { f.state.receipt = null; }, /receipt.*missing/i],
+  ["receipt status", (f) => { f.state.receipt.status = 0; }, /status/],
+  ["receipt contractAddress", (f) => { f.state.receipt.contractAddress = OTHER_ADDRESS; }, /contractAddress/],
+  ["receipt block", (f) => { f.state.receipt.blockNumber++; }, /block/],
+  ["absent code", (f) => { f.state.missingCode.add(UPV4); }, /runtime/],
+  ["runtime length", (f) => { f.state.runtime = "0x6000" + f.state.runtime.slice(2); }, /runtime/],
+  ["runtime metadata", (f) => { f.state.runtime = "0x60016001a162010003"; }, /runtime/],
+  ["invalid metadata length", (f) => { f.state.runtime = "0x60016001a16101ffff"; }, /runtime/],
+  ...["orchestratorRegistry", "nullifierRegistry", "attestationVerifier"].map((name, index) =>
+    [name, (f) => { f.state.upv4Bindings[index] = OTHER_ADDRESS; }, new RegExp(name)]),
+  ["DOMAIN_SEPARATOR", (f) => { f.state.domain = constants.HashZero; }, /DOMAIN_SEPARATOR/],
+  ["deployer owns UPV4", (f) => { f.state.upv4Owner = UPV4_BASE_RELEASE.deployer; }, /owner/],
+  ["unknown owner", (f) => { f.state.upv4Owner = OTHER_ADDRESS; }, /owner/],
+  ["catalog order", (f) => { f.state.upv4Methods.reverse(); }, /catalog/],
+  ["partial catalog", (f) => { f.state.upv4Methods.pop(); }, /catalog/],
+];
+for (const [name, mutate, expected] of adoptionFailures) {
+  test(`Base adoption and recorded skip reject ${name} before saving`, async (context) => {
     const f = laneFixture(context);
-    f.recordUpv4();
-    mutate(f.state);
-    await assert.rejects(f.skip(), expected);
+    mutate(f);
     await assert.rejects(f.run(), expected);
-    assert.deepEqual(f.state.writes, []);
+    assert.deepEqual(f.state.saves, []);
+    // Populate a separately valid record, then check the same on-chain drift on the skip path.
+    const recorded = laneFixture(context);
+    recorded.recordUpv4();
+    mutate(recorded);
+    delete process.env.DEPLOY_ACTIVE_TAG;
+    await assert.rejects(recorded.skip(), expected);
+    for (const fixture of [f, recorded]) {
+      assert.deepEqual(fixture.state.saves, []);
+      assert.deepEqual(fixture.state.writes, []);
+      assert.deepEqual(fixture.state.accounts, []);
+    }
   });
 }
+
+for (const [name, mutate] of [
+  ["address", (r) => { r.address = OTHER_ADDRESS; }],
+  ["transactionHash", (r) => { r.transactionHash = constants.HashZero; }],
+  ["args", (r) => { r.args.reverse(); }],
+  ["missing args", (r) => { delete r.args; }],
+  ["receipt.from", (r) => { r.receipt.from = OTHER_ADDRESS; }],
+  ["missing receipt", (r) => { delete r.receipt; }],
+  ["deployedBytecode", (r) => { r.deployedBytecode = "0x6000"; }],
+]) {
+  test(`recorded Base rejects record ${name} drift before saving`, async (context) => {
+    const f = laneFixture(context);
+    f.recordUpv4();
+    mutate(f.records.get(f.lane.DEPLOYMENT_NAME));
+    await assert.rejects(f.skip(), /record/i);
+    await assert.rejects(f.run(), /record/i);
+    assert.deepEqual(f.state.saves, []);
+    assert.deepEqual(f.state.writes, []);
+    assert.deepEqual(f.state.accounts, []);
+  });
+}
+
+test("recorded adoption is a no-op across batch lifecycle route and writer states", async (context) => {
+  const f = laneFixture(context);
+  f.recordUpv4();
+  for (const kind of [Kind.Cutover, Kind.Upv3WriterRemoval, Kind.Rollback]) {
+    for (const call of buildUpv4SafeCalls(kind, baseCutoverConfig(), UPV4)) f.state.model.apply(encodeUpv4SafeCall(call));
+    assert.equal(await f.skip(), true);
+    await f.run();
+  }
+  assert.deepEqual(f.state.saves, []);
+  assert.deepEqual(f.state.writes, []);
+  assert.deepEqual(f.state.accounts, []);
+});
 
 test("local first run uses exact 27 cutover calls, second run is a no-op", async (context) => {
   const f = laneFixture(context, "localhost");

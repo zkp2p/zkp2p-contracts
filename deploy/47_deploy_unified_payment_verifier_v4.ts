@@ -1,45 +1,21 @@
 import * as assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync } from "node:fs";
-import { basename, resolve } from "node:path";
-import { BigNumber, utils } from "ethers";
-import type { ContractTransaction } from "ethers";
+import { Contract, ContractFactory, utils } from "ethers";
+import type { ContractTransaction, providers } from "ethers";
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
-import type { DeployFunction, Deployment } from "hardhat-deploy/types";
+import type { ArtifactData, DeployFunction, Deployment } from "hardhat-deploy/types";
 import type {
-  MultiAttestationVerifier, NullifierRegistry, NullifierRegistryV2, OrchestratorRegistry,
-  OrchestratorV3, PaymentVerifierRegistry, UnifiedPaymentVerifierV3, UnifiedPaymentVerifierV4,
+  NullifierRegistry, NullifierRegistryV2, PaymentVerifierRegistry, UnifiedPaymentVerifierV3, UnifiedPaymentVerifierV4,
 } from "../typechain";
 import { waitForDeploymentDelay } from "../deployments/helpers";
 import { UPV4_BASE_RELEASE } from "../deployments/parameters";
-import { installSafeArtifactPair } from "../deployments/safeArtifacts";
 import {
-  assertUpv4SafeBatch, baseCutoverConfig, buildUpv4SafeCalls, decodeUpv4SafeBatch, encodeUpv4SafeCall,
-  renderUpv4SafeBatch, serializeUpv4SafeBatch, serializeUpv4SafeBatchSidecar, UPV4_SAFE_BATCH_FILES,
-  Upv4CutoverConfig, Upv4SafeBatch, Upv4SafeBatchKind,
+  baseCutoverConfig, buildUpv4SafeCalls, encodeUpv4SafeCall, Upv4CutoverConfig, Upv4SafeBatchKind,
 } from "../deployments/upv4BaseCutover";
 
 export const TAG = "47_deploy_unified_payment_verifier_v4";
-export const LIVE_FLAG = "ENABLE_BASE_UPV4_DEPLOYMENT";
-export const RELEASE_SHA_FLAG = "CONFIRM_BASE_UPV4_RELEASE_READY_SHA";
 export const DEPLOYMENT_NAME = "UnifiedPaymentVerifierV4";
 
-const ROOT = resolve(__dirname, "..");
 const PINS = UPV4_BASE_RELEASE;
-const RECORD_PINS = {
-  OrchestratorRegistry: PINS.orchestratorRegistry,
-  NullifierRegistryV2: PINS.nullifierRegistryV2,
-  MultiAttestationVerifier: PINS.multiAttestationVerifier,
-  PaymentVerifierRegistry: PINS.paymentVerifierRegistry,
-  UnifiedPaymentVerifierV3: PINS.unifiedPaymentVerifierV3,
-  OrchestratorV3: PINS.orchestratorV3,
-};
-
-interface LaneOptions {
-  git?: (args: string[]) => string;
-  artifactRoot?: string;
-}
 
 interface VerifierBindings {
   orchestratorRegistry: string;
@@ -59,18 +35,6 @@ interface Upv4Snapshot extends VerifierBindings {
   owner: string;
   domainSeparator: string;
   methods: string[];
-}
-
-interface BaseSnapshot {
-  owners: Record<string, string>;
-  catalog: CatalogSnapshot;
-  writers: string[];
-  orchestratorRegistered: boolean;
-  orchestratorPaymentRegistry: string;
-  upv3: VerifierBindings;
-  upv3Methods: string[];
-  requiredSignatures: BigNumber;
-  witnesses: string[];
 }
 
 const lower = (value: string): string => value.toLowerCase();
@@ -98,41 +62,6 @@ function baseBindings(): VerifierBindings {
   };
 }
 
-function assertTaggedFlags(): void {
-  if ([LIVE_FLAG, RELEASE_SHA_FLAG].some((flag) => process.env[flag] !== undefined) &&
-    process.env.DEPLOY_ACTIVE_TAG !== TAG) {
-    throw new Error(`Lane 47 flags require DEPLOY_ACTIVE_TAG=${TAG}`);
-  }
-}
-
-export function assertReviewedSource(releaseSha: string | undefined, head: string, status: string): string {
-  assert.ok(releaseSha && /^[0-9a-f]{40}$/.test(releaseSha), "release SHA must be 40 lowercase hex characters");
-  assert.equal(head.trim(), releaseSha, "HEAD differs from release SHA");
-  for (const entry of status.split("\n").filter(Boolean)) {
-    const paths = entry.slice(3).split(" -> ").map((path) => path.startsWith('"') ? JSON.parse(path) as string : path);
-    for (const path of paths) {
-      const allowed = path === "deployments/base/UnifiedPaymentVerifierV4.json" ||
-        path === "deployments/base/.migrations.json" || path.startsWith("deployments/base/solcInputs/") ||
-        /^deployments\/outputs\/safe-batches\/(?:superseded\/)?base_upv4_[^/]+$/.test(path);
-      assert.ok(allowed, `Unrelated dirty worktree path: ${path}`);
-    }
-  }
-  return releaseSha;
-}
-
-/** Immutable addresses differ across deployments; compiler metadata binds the reviewed staging source. */
-export function assertStagingSource(compiled: string, staging: string): void {
-  const error = "UPV4 artifact differs from the reviewed staging source";
-  function metadata(code: string): string {
-    assert.ok(/^0x(?:[0-9a-fA-F]{2})+$/.test(code) && code.length >= 6, error);
-    const length = parseInt(code.slice(-4), 16) + 2;
-    assert.ok(length > 2 && length <= (code.length - 2) / 2, error);
-    return code.slice(-length * 2).toLowerCase();
-  }
-  assert.equal(compiled.length, staging.length, error);
-  assert.equal(metadata(compiled), metadata(staging), error);
-}
-
 /** Only append to a known prefix so a resumed run cannot silently reorder payment methods. */
 export function assertUpv4Snapshot(
   snapshot: Upv4Snapshot, bindings: VerifierBindings, methods: string[],
@@ -151,19 +80,6 @@ export function assertUpv4Snapshot(
   if (!same(deployer, governance) && same(snapshot.owner, governance)) {
     assertOrder(snapshot.methods, methods, "Safe-owned UPV4 catalog");
   }
-}
-
-export function assertBaseSnapshot(snapshot: BaseSnapshot): void {
-  const config = baseCutoverConfig();
-  for (const [name, owner] of Object.entries(snapshot.owners)) assertAddress(owner, PINS.safe, `${name} owner`);
-  assertCatalog(snapshot.catalog, config, PINS.unifiedPaymentVerifierV3);
-  assertOrder(snapshot.writers, [PINS.unifiedPaymentVerifierV3], "NullifierRegistryV2 writers");
-  assert.ok(snapshot.orchestratorRegistered, "OrchestratorV3 is not registered");
-  assertAddress(snapshot.orchestratorPaymentRegistry, PINS.paymentVerifierRegistry, "OrchestratorV3 payment registry");
-  assertBindings(snapshot.upv3, baseBindings(), "UnifiedPaymentVerifierV3");
-  assertOrder(snapshot.upv3Methods, config.routes.map((route) => route.method), "UnifiedPaymentVerifierV3 method order");
-  assert.ok(snapshot.requiredSignatures.gte(1) && snapshot.requiredSignatures.lte(snapshot.witnesses.length),
-    "MultiAttestationVerifier witness threshold mismatch");
 }
 
 function assertCatalog(catalog: CatalogSnapshot, config: Upv4CutoverConfig, verifier: string): void {
@@ -206,76 +122,73 @@ async function readUpv4(
   };
 }
 
-async function readBaseSnapshot(hre: HardhatRuntimeEnvironment, blockTag: number): Promise<BaseSnapshot> {
-  for (const [name, address] of Object.entries(RECORD_PINS)) {
-    const record = await hre.deployments.getOrNull(name);
-    assert.ok(record, `${name} deployment is missing`);
-    assertAddress(record.address, address, `${name} record address`);
-    assert.notEqual(await hre.ethers.provider.getCode(address, blockTag), "0x", `${name} has no runtime code`);
+/** Exact creation input binds the artifact and constructor arguments to the mined deployment. */
+export function assertPinnedUpv4Transaction(
+  transaction: providers.TransactionResponse | null, artifact: ArtifactData, args: string[],
+): void {
+  assert.ok(transaction, "UPV4 deployment transaction missing");
+  assertAddress(transaction.from, PINS.deployer, "UPV4 deployment transaction from");
+  assert.equal(transaction.to, null, "UPV4 deployment transaction must be contract creation (to=null)");
+  assert.equal(transaction.nonce, PINS.deployment.deployerNonce, "UPV4 deployment nonce mismatch");
+  const expected = new ContractFactory(artifact.abi, artifact.bytecode).getDeployTransaction(...args).data;
+  assert.ok(typeof expected === "string", "UPV4 artifact creation input missing");
+  assert.equal(lower(transaction.data), lower(expected), "UPV4 creation input mismatch");
+}
+
+export function assertPinnedUpv4Receipt(receipt: providers.TransactionReceipt | null): asserts receipt is providers.TransactionReceipt {
+  assert.ok(receipt, "UPV4 deployment receipt missing");
+  assert.equal(receipt.status, 1, "UPV4 deployment receipt status mismatch");
+  assertAddress(receipt.contractAddress, PINS.unifiedPaymentVerifierV4, "UPV4 deployment receipt contractAddress");
+  assert.equal(receipt.blockNumber, PINS.deployment.blockNumber, "UPV4 deployment receipt block mismatch");
+  assertAddress(receipt.from, PINS.deployer, "UPV4 deployment receipt from");
+}
+
+/** Immutables differ from the artifact's placeholders; runtime length and CBOR metadata must match. */
+export function assertPinnedUpv4Runtime(runtime: string, compiled: string): void {
+  function metadata(code: string): string {
+    assert.ok(/^0x(?:[0-9a-fA-F]{2})+$/.test(code) && code.length >= 6, "UPV4 runtime code missing or malformed");
+    const length = parseInt(code.slice(-4), 16) + 2;
+    assert.ok(length > 2 && length <= (code.length - 2) / 2, "UPV4 runtime metadata length invalid");
+    return lower(code.slice(-length * 2));
   }
-  const registry = await hre.ethers.getContractAt("PaymentVerifierRegistry", PINS.paymentVerifierRegistry) as PaymentVerifierRegistry;
-  const nullifiers = await hre.ethers.getContractAt("NullifierRegistryV2", PINS.nullifierRegistryV2) as NullifierRegistryV2;
-  const orchestrators = await hre.ethers.getContractAt("OrchestratorRegistry", PINS.orchestratorRegistry) as OrchestratorRegistry;
-  const upv3 = await hre.ethers.getContractAt("UnifiedPaymentVerifierV3", PINS.unifiedPaymentVerifierV3) as UnifiedPaymentVerifierV3;
-  const mav = await hre.ethers.getContractAt("MultiAttestationVerifier", PINS.multiAttestationVerifier) as MultiAttestationVerifier;
-  const orchestrator = await hre.ethers.getContractAt("OrchestratorV3", PINS.orchestratorV3) as OrchestratorV3;
-  return {
-    owners: {
-      PaymentVerifierRegistry: await registry.owner({ blockTag }), NullifierRegistryV2: await nullifiers.owner({ blockTag }),
-      OrchestratorRegistry: await orchestrators.owner({ blockTag }), UnifiedPaymentVerifierV3: await upv3.owner({ blockTag }),
-      MultiAttestationVerifier: await mav.owner({ blockTag }),
-    },
-    catalog: await readCatalog(registry, blockTag), writers: await nullifiers.getWriters({ blockTag }),
-    orchestratorRegistered: await orchestrators.isOrchestrator(PINS.orchestratorV3, { blockTag }),
-    orchestratorPaymentRegistry: await orchestrator.paymentVerifierRegistry({ blockTag }),
-    upv3: await readBindings(upv3, blockTag), upv3Methods: await upv3.getPaymentMethods({ blockTag }),
-    requiredSignatures: await mav.requiredSignatures({ blockTag }), witnesses: await mav.witnesses({ blockTag }),
-  };
+  assert.equal(runtime.length, compiled.length, "UPV4 runtime length mismatch");
+  assert.equal(metadata(runtime), metadata(compiled), "UPV4 runtime metadata mismatch");
 }
 
-async function deploymentTimestamp(hre: HardhatRuntimeEnvironment, record: Deployment): Promise<number> {
-  const blockNumber = record.receipt?.blockNumber;
-  assert.ok(blockNumber !== undefined, "UPV4 deployment receipt block is missing");
-  const block = await hre.ethers.provider.getBlock(blockNumber);
-  assert.ok(block, "UPV4 deployment receipt block is unavailable");
-  return block.timestamp * 1000;
+export function assertPinnedUpv4Record(record: Deployment, artifact: ArtifactData, args: string[]): void {
+  assertAddress(record.address, PINS.unifiedPaymentVerifierV4, "UPV4 record address");
+  assert.equal(record.transactionHash, PINS.deployment.transactionHash, "UPV4 record transactionHash mismatch");
+  assert.ok(Array.isArray(record.args), "UPV4 record args missing");
+  assertOrder(record.args, args, "UPV4 record args");
+  assert.ok(record.receipt?.from, "UPV4 record receipt.from missing");
+  assertAddress(record.receipt.from, PINS.deployer, "UPV4 record receipt.from");
+  assert.equal(record.deployedBytecode, artifact.deployedBytecode, "UPV4 record deployedBytecode mismatch");
 }
 
-function renderedArtifacts(address: string, createdAt: number, sourceSha: string) {
-  return Object.values(Upv4SafeBatchKind).map((kind) => {
-    const fileName = UPV4_SAFE_BATCH_FILES[kind];
-    const batch = renderUpv4SafeBatch(kind, baseCutoverConfig(), address, { createdAt, sourceSha });
-    const contents = serializeUpv4SafeBatch(batch);
-    return { kind, fileName, contents, sidecar: serializeUpv4SafeBatchSidecar(fileName, contents) };
+/** Provider and deployment storage come from the injected HRE; this path never obtains an account. */
+export async function verifyPinnedUpv4(hre: HardhatRuntimeEnvironment) {
+  const { provider } = hre.ethers;
+  assert.equal((await provider.getNetwork()).chainId, PINS.chainId, "Base chainId mismatch");
+  const artifact = await hre.deployments.getExtendedArtifact(DEPLOYMENT_NAME);
+  assert.ok(artifact.deployedBytecode, "UPV4 artifact runtime code missing");
+  const args = [PINS.orchestratorRegistry, PINS.nullifierRegistryV2, PINS.multiAttestationVerifier];
+  const record = await hre.deployments.getOrNull(DEPLOYMENT_NAME);
+  if (record) assertPinnedUpv4Record(record, artifact, args);
+  assertPinnedUpv4Transaction(await provider.getTransaction(PINS.deployment.transactionHash), artifact, args);
+  const receipt = await provider.getTransactionReceipt(PINS.deployment.transactionHash);
+  assertPinnedUpv4Receipt(receipt);
+  const blockTag = await provider.getBlockNumber();
+  assertPinnedUpv4Runtime(await provider.getCode(PINS.unifiedPaymentVerifierV4, blockTag), artifact.deployedBytecode);
+  // Construct with the provider explicitly: HRE's default getContractAt may obtain an account.
+  const verifier = new Contract(PINS.unifiedPaymentVerifierV4, artifact.abi, provider) as UnifiedPaymentVerifierV4;
+  assertBindings(await readBindings(verifier, blockTag), baseBindings(), DEPLOYMENT_NAME);
+  const domain = utils._TypedDataEncoder.hashDomain({
+    name: "UnifiedPaymentVerifier", version: "1", chainId: PINS.chainId, verifyingContract: PINS.unifiedPaymentVerifierV4,
   });
-}
-
-function artifactsMatch(root: string, artifacts: ReturnType<typeof renderedArtifacts>): boolean {
-  return artifacts.every(({ fileName, contents, sidecar }) => [
-    [resolve(root, fileName), contents], [resolve(root, fileName.replace(/\.json$/, ".sha256.json")), sidecar],
-  ].every(([file, expected]) => existsSync(file) && readFileSync(file, "utf8") === expected));
-}
-
-function installArtifacts(root: string, artifacts: ReturnType<typeof renderedArtifacts>, address: string): void {
-  mkdirSync(root, { recursive: true });
-  const supersededDir = resolve(root, "superseded");
-  for (const { kind, fileName, contents, sidecar } of artifacts) {
-    const batchPath = resolve(root, fileName);
-    const sidecarPath = batchPath.replace(/\.json$/, ".sha256.json");
-    const supersededSuffix = randomUUID();
-    // A crash between the pair's two renames can leave one file; retain it before reinstalling.
-    if (existsSync(batchPath) !== existsSync(sidecarPath)) {
-      mkdirSync(supersededDir, { recursive: true });
-      const orphan = existsSync(batchPath) ? batchPath : sidecarPath;
-      renameSync(orphan, resolve(supersededDir, basename(orphan).replace(/\.json$/, `_${supersededSuffix}.json`)));
-    }
-    installSafeArtifactPair({ batchPath, sidecarPath, supersededDir,
-      batchContents: contents, sidecarContents: sidecar, supersededSuffix });
-    const written: Upv4SafeBatch = JSON.parse(readFileSync(batchPath, "utf8"));
-    assertUpv4SafeBatch(kind, written, baseCutoverConfig(), address);
-    console.log(`[${TAG}] ${fileName}`);
-    console.table(decodeUpv4SafeBatch(written, baseCutoverConfig()));
-  }
+  assert.equal(await verifier.DOMAIN_SEPARATOR({ blockTag }), domain, "UnifiedPaymentVerifierV4 DOMAIN_SEPARATOR mismatch");
+  assertAddress(await verifier.owner({ blockTag }), PINS.safe, "UPV4 owner");
+  assertOrder(await verifier.getPaymentMethods({ blockTag }), baseCutoverConfig().routes.map((route) => route.method), "UPV4 catalog");
+  return { artifact, args, receipt, record };
 }
 
 async function transact(hre: HardhatRuntimeEnvironment, transaction: Promise<ContractTransaction>): Promise<number> {
@@ -392,53 +305,30 @@ export async function upv4RoutesActive(hre: HardhatRuntimeEnvironment): Promise<
     legacy ? await legacy.getWriters({ blockTag }) : [], upv3.address, record.address);
 }
 
-export function createUpv4DeploymentLane(options: LaneOptions = {}): DeployFunction {
-  const git = options.git ?? ((args: string[]) => execFileSync("git", args, { cwd: ROOT, encoding: "utf8" }));
-  const artifactRoot = options.artifactRoot ?? resolve(ROOT, "deployments/outputs/safe-batches");
+export function createUpv4DeploymentLane(): DeployFunction {
   const func: DeployFunction = async (hre) => {
-    assertTaggedFlags();
     const network = hre.deployments.getNetworkName();
     if (network === "localhost" || network === "hardhat") return deployLocal(hre);
     if (network !== "base") return;
     assert.equal(process.env.DEPLOY_ACTIVE_TAG, TAG, `Lane 47 requires DEPLOY_ACTIVE_TAG=${TAG}`);
-    assert.equal(process.env[LIVE_FLAG], "true", `${LIVE_FLAG}=true required`);
-    const sourceSha = assertReviewedSource(process.env[RELEASE_SHA_FLAG], git(["rev-parse", "HEAD"]),
-      git(["status", "--porcelain", "--untracked-files=all"]));
-    const blockTag = await hre.ethers.provider.getBlockNumber();
-    assert.equal((await hre.ethers.provider.getNetwork()).chainId, PINS.chainId, "Base chainId mismatch");
-    const [deployer] = await hre.getUnnamedAccounts();
-    assertAddress(deployer, PINS.deployer, "Base deployer");
-    assertBaseSnapshot(await readBaseSnapshot(hre, blockTag));
-    const artifact = await hre.deployments.getArtifact(DEPLOYMENT_NAME);
-    assertStagingSource(artifact.deployedBytecode,
-      await hre.ethers.provider.getCode(PINS.stagingUnifiedPaymentVerifierV4, blockTag));
-    const record = await hre.deployments.getOrNull(DEPLOYMENT_NAME);
-    const snapshot = record ? await readUpv4(hre, record.address, blockTag) : null;
-    if (snapshot) assertUpv4Snapshot(snapshot, baseBindings(), baseCutoverConfig().routes.map((route) => route.method),
-      PINS.chainId, deployer, PINS.safe);
-    const createdAt = record ? await deploymentTimestamp(hre, record) : undefined;
-    const populated = await populateVerifier(hre, record, snapshot, baseCutoverConfig(), baseBindings(), deployer, blockTag);
-    installArtifacts(artifactRoot, renderedArtifacts(populated.record.address,
-      createdAt ?? await deploymentTimestamp(hre, populated.record), sourceSha), populated.record.address);
+    const { artifact, args, receipt, record } = await verifyPinnedUpv4(hre);
+    if (record) return;
+    await hre.deployments.save(DEPLOYMENT_NAME, {
+      ...artifact, address: PINS.unifiedPaymentVerifierV4, args,
+      transactionHash: PINS.deployment.transactionHash, receipt,
+    });
+    await verifyPinnedUpv4(hre);
   };
   func.skip = async (hre) => {
-    assertTaggedFlags();
     const network = hre.deployments.getNetworkName();
     if (network === "localhost" || network === "hardhat") return false;
-    if (network === "base_staging") {
-      if (process.env.DEPLOY_ACTIVE_TAG === TAG) console.log(`[${TAG}] Base staging already runs UPV4; skipped`);
+    if (network !== "base") return true;
+    if (await hre.deployments.getOrNull(DEPLOYMENT_NAME)) {
+      await verifyPinnedUpv4(hre);
       return true;
     }
-    if (network !== "base" || process.env.DEPLOY_ACTIVE_TAG !== TAG) return true;
-    const record = await hre.deployments.getOrNull(DEPLOYMENT_NAME);
-    if (!record) return false;
-    const snapshot = await readUpv4(hre, record.address, await hre.ethers.provider.getBlockNumber());
-    assertUpv4Snapshot(snapshot, baseBindings(), baseCutoverConfig().routes.map((route) => route.method),
-      PINS.chainId, PINS.deployer, PINS.safe);
-    if (!same(snapshot.owner, PINS.safe)) return false;
-    const sourceSha = git(["rev-parse", "HEAD"]).trim();
-    if (process.env[RELEASE_SHA_FLAG] !== undefined && process.env[RELEASE_SHA_FLAG] !== sourceSha) return false;
-    return artifactsMatch(artifactRoot, renderedArtifacts(record.address, await deploymentTimestamp(hre, record), sourceSha));
+    if (process.env.DEPLOY_ACTIVE_TAG === TAG) return false;
+    throw new Error("UnifiedPaymentVerifierV4 record missing; run the tagged lane-47 adoption");
   };
   func.tags = [TAG, DEPLOYMENT_NAME];
   return func;
