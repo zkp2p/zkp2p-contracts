@@ -2,6 +2,17 @@
 
 Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, and utilities.
 
+## Candidate 0.4.4-rc.10
+
+- Exports the fresh eight-contract passive O4 staging suite recorded in `bb9ceeb`,
+  including `IntentSignalPolicy`, with its current deployed ABIs. Base production
+  O4-stack addresses remain zero or absent; this package does not activate the suite.
+- Exports the 12-field Orchestrator V4 `IntentSignaled` event ending in `groupId`
+  and `arbitrator`, and the `AddressGroupRegistry` source ABI with `groupArbitrator`.
+- Keeps the October 22 suite under `Historical20261022` aliases with its original
+  deployed ABIs. This candidate is consumed as a local branch tarball; no npm
+  registry tag changes.
+
 ## Candidate 0.4.4-rc.9
 
 - Exports the `IntentSignalPolicy` source ABI and the Orchestrator V4 ABI that
