@@ -149,10 +149,11 @@ client must re-request it.
 
 After execution, lane 31's wrapper defers to lane 47, because every route then
 points at the recorded UPV4. Untagged Base runs keep working. The wrapper still
-checks the live registry against UPV4 and its owner: O3's registry, the PVR,
-legacy registry and NRV2 owners, the method order, every currency list, every
-route, and that no legacy writers remain. It skips only the UPV3-only writer
-check.
+runs lane 31's frozen readiness checks (O3, MultiAttestationVerifier witnesses
+and threshold, NRV2 and UPV3), accepting only the failure of their final
+UPV3-only writer check. It also checks the live registry against UPV4 and its
+owner: O3's registry, the PVR, legacy registry and NRV2 owners, the method
+order, every currency list, every route, and that no legacy writers remain.
 
 ## 5. Revoke the UPV3 writer later
 

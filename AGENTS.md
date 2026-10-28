@@ -190,7 +190,8 @@
     safeTxHash. `test-foundry/fork/UnifiedPaymentVerifierV4BaseCutover.t.sol` runs the same bytes against the real
     UPV4 on a Base fork.
   - **Lane 31:** its wrapper defers to lane 47 once every route points at the recorded UPV4. On live networks it
-    still checks the registry surface against UPV4 and its owner: O3's registry, the PVR, legacy registry and NRV2
+    still runs lane 31's frozen readiness checks, accepting only the failure of the final UPV3-only writer check,
+    and checks the registry surface against UPV4 and its owner: O3's registry, the PVR, legacy registry and NRV2
     owners, method order, currencies, routes, and no legacy writers.
 - `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the
   predecessor of the currently selected stack and feeds the lane-30 wrapper, the package's recognized-predecessor
