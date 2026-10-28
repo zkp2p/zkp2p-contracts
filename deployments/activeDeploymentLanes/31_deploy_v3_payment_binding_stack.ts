@@ -52,6 +52,16 @@ async function verifyLivePaymentBinding(hre: HardhatRuntimeEnvironment): Promise
   if (network !== "base" && network !== "base_staging") return upv4Active;
 
   if (upv4Active) {
+    try {
+      if ((await assertPaymentBindingReady(hre)) !== true) {
+        throw new Error("Live payment-binding artifacts are missing");
+      }
+    } catch (error) {
+      // The SHA-256-pinned lane 31 checks writers last, immediately before returning true.
+      // Only this exact error proves all earlier frozen checks passed; upv4RoutesActive checks the new writer set.
+      if (!(error instanceof Error) ||
+        error.message !== "NullifierRegistryV2 writers must contain only UnifiedPaymentVerifierV3") throw error;
+    }
     const record = await hre.deployments.get("UnifiedPaymentVerifierV4");
     const verifier = new ethers.Contract(record.address, record.abi, ethers.provider);
     const governance: string = await verifier.owner();

@@ -208,7 +208,8 @@ test("the mounted lane preserves local deployment and skip behavior", async () =
   assert.deepEqual(lane.tags, historical.tags);
 });
 
-test("the lane 31 wrapper defers to active UPV4 and propagates drift before historical checks", async () => {
+test("the lane 31 wrapper defers to active UPV4 and preserves frozen live checks", async () => {
+  const writerMessage = "NullifierRegistryV2 writers must contain only UnifiedPaymentVerifierV3";
   for (const network of ["localhost", "base", "base_staging"]) {
     const h = network === "localhost" ? null : harness({ network, registryHas: true, verifierHas: true });
     const hre = h?.hre ?? { deployments: {
@@ -234,6 +235,8 @@ test("the lane 31 wrapper defers to active UPV4 and propagates drift before hist
     }
     let drift = false;
     let checks = 0;
+    let bindingChecks = 0;
+    let bindingReady = async () => { throw new Error(writerMessage); };
     const historical = async () => assert.fail("historical deployment must not run");
     historical.skip = async () => assert.fail("historical skip must not run");
     const lane = loadLane("../deployments/activeDeploymentLanes/31_deploy_v3_payment_binding_stack.ts", {
@@ -244,7 +247,12 @@ test("the lane 31 wrapper defers to active UPV4 and propagates drift before hist
       "../../deploy/31_deploy_v3_payment_binding_stack": {
         ...h?.binding,
         default: historical,
-        assertPaymentBindingReady: async () => assert.fail("UPV3 readiness must not run"),
+        assertPaymentBindingReady: async (actual) => {
+          assert.ok(h, "local deferral must not run frozen readiness checks");
+          assert.equal(actual, hre);
+          bindingChecks++;
+          return bindingReady();
+        },
       },
       "../../deploy/47_deploy_unified_payment_verifier_v4": {
         upv4RoutesActive: async (actual) => {
@@ -259,7 +267,33 @@ test("the lane 31 wrapper defers to active UPV4 and propagates drift before hist
     assert.equal(await lane.skip(hre), true);
     await lane(hre);
     assert.equal(liveReads, h ? 2 : 0);
+    assert.equal(bindingChecks, h ? 2 : 0);
     if (h) {
+      bindingReady = async () => true;
+      assert.equal(await lane.skip(hre), true);
+      await lane(hre);
+      assert.equal(bindingChecks, 4);
+      assert.equal(liveReads, 4);
+
+      bindingReady = async () => false;
+      await assert.rejects(lane.skip(hre), { message: "Live payment-binding artifacts are missing" });
+      await assert.rejects(lane(hre), { message: "Live payment-binding artifacts are missing" });
+      assert.equal(bindingChecks, 6);
+      const failures = [
+        new Error("Attestation verifier witness configuration mismatch"),
+        new Error("Active OrchestratorV3 is paused"),
+        new Error(writerMessage + " (unexpected writer)"),
+        { message: writerMessage },
+      ];
+      for (const failure of failures) {
+        bindingReady = async () => { throw failure; };
+        await assert.rejects(lane.skip(hre), (error) => error === failure);
+        await assert.rejects(lane(hre), (error) => error === failure);
+      }
+      assert.equal(bindingChecks, 6 + failures.length * 2);
+      assert.equal(liveReads, 4, "frozen readiness failures must precede UPV4 registry-surface reads");
+
+      bindingReady = async () => true;
       const currencies = h.contracts.PaymentVerifierRegistry.getCurrencies;
       const mutations = [
         ["PaymentVerifierRegistry", "getCurrencies", (method) => method === hash("alipay") ? [hash("USD")] : currencies(method), /Payment currencies mismatch: alipay/],
@@ -281,10 +315,13 @@ test("the lane 31 wrapper defers to active UPV4 and propagates drift before hist
       }
       assert.deepEqual(h.actions(), []);
     }
+    const checksBeforeDrift = checks;
+    const bindingChecksBeforeDrift = bindingChecks;
     drift = true;
     await assert.rejects(lane.skip(hre), /UPV4 writer drift/);
     await assert.rejects(lane(hre), /UPV4 writer drift/);
-    assert.equal(checks, h ? 22 : 4);
+    assert.equal(checks, checksBeforeDrift + 2);
+    assert.equal(bindingChecks, bindingChecksBeforeDrift);
   }
 });
 
