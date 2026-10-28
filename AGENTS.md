@@ -174,7 +174,9 @@
       `deployments/base/UnifiedPaymentVerifierV4.json`. It checks sender, nonce, creation input
       (artifact + constructor args), receipt, runtime metadata, immutables, `DOMAIN_SEPARATOR`, Safe ownership,
       and the 13 methods in order.
-    - With the record present, every Base run re-checks it and skips.
+    - With the record present, every Base run re-checks it and skips. Those runs check the chain against the
+      record's own ABI, bytecode, metadata and receipt, never the compiled artifact, so later edits to UPV4 or its
+      imports (e.g. `IOrchestratorV4.sol`) do not break Base runs.
     - An untagged run without the record throws.
     - It sends no transaction and uses no signer.
   - **Other networks:** Base staging skips. Local networks deploy UPV4 and run the cutover calls directly.
@@ -187,7 +189,9 @@
   - **Checks:** `yarn verify:upv4-safe-batches` re-derives all three batches byte for byte and checks the cutover
     safeTxHash. `test-foundry/fork/UnifiedPaymentVerifierV4BaseCutover.t.sol` runs the same bytes against the real
     UPV4 on a Base fork.
-  - **Lane 31:** its wrapper defers to lane 47 once every route points at the recorded UPV4.
+  - **Lane 31:** its wrapper defers to lane 47 once every route points at the recorded UPV4. On live networks it
+    still checks the registry surface against UPV4 and its owner: O3's registry, the PVR, legacy registry and NRV2
+    owners, method order, currencies, routes, and no legacy writers.
 - `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the
   predecessor of the currently selected stack and feeds the lane-30 wrapper, the package's recognized-predecessor
   identities, and lane-34 tooling; `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS` describes what lane 37 replaces (the

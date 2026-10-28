@@ -53,7 +53,11 @@ It checks:
 - the 13 methods in order.
 
 The run sends no transaction and uses no signer. Once the record exists, every
-Base run re-checks it and skips; any mismatch throws.
+Base run re-checks it and skips; any mismatch throws. Those later runs check the
+chain against the record's own ABI, bytecode, metadata and receipt, not against
+the compiled artifact. A later edit to UPV4 or to a file it imports, such as
+`IOrchestratorV4.sol`, therefore does not break untagged Base runs. Only the
+adoption run compares the compiled artifact with the chain.
 
 ```bash
 yarn record:upv4:base        # read-only: check, save the record, export, extract
@@ -144,7 +148,11 @@ client must re-request it.
   `UPV: Invalid attestation` and `Nullifier has already been used` reverts.
 
 After execution, lane 31's wrapper defers to lane 47, because every route then
-points at the recorded UPV4. Untagged Base runs keep working.
+points at the recorded UPV4. Untagged Base runs keep working. The wrapper still
+checks the live registry against UPV4 and its owner: O3's registry, the PVR,
+legacy registry and NRV2 owners, the method order, every currency list, every
+route, and that no legacy writers remain. It skips only the UPV3-only writer
+check.
 
 ## 5. Revoke the UPV3 writer later
 
@@ -152,8 +160,12 @@ Approval: a separate Safe proposal and execution after a stable soak.
 
 `base_upv4_upv3_writer_removal.json` is one call:
 `NullifierRegistryV2.removeWritePermission(UPV3)`. It is prepared but not
-scheduled. After it executes, the rollback batch cannot run until UPV3 is added
-back as a writer.
+scheduled. After it executes, the rollback batch must not run until UPV3 is
+added back as a writer. Nothing on-chain stops it: the rollback makes only
+PaymentVerifierRegistry calls, so it would still execute and route every method
+to a UPV3 that can no longer write nullifiers, and every fulfil would revert.
+The batch's own description says the removal "disables" the rollback; treat
+that as this prohibition, not as an on-chain guard.
 
 ## Rollback
 
@@ -162,7 +174,13 @@ Approval: a Safe proposal and execution of the prepared rollback.
 `base_upv4_rollback.json` holds 26 calls. It removes all 13 routes in reverse
 order and re-adds them on UPV3 in the original order, with the same currencies.
 It changes no writer. It is valid only while UPV3 is still an NRV2 writer, which
-is true until step 5.
+is true until step 5. Before proposing or executing it, confirm that this
+returns `true`:
+
+```bash
+cast call 0x5455e761b866dfa6A2f5Dc6d6525825bf9C09aeB 'isWriter(address)(bool)' \
+  0xC6F4a193576C60892a47e111Bb5706c30162502B
+```
 
 The route-aware signers follow the route back by themselves. Replay protection
 holds across the switch, because UPV3 and UPV4 write one shared replay domain:
