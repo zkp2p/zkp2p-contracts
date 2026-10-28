@@ -3,8 +3,9 @@
 Status, 2026-10-28:
 
 - UPV4 is deployed on Base and owned by the Safe.
-- The cutover Safe transaction (nonce 86) is being signed. It has not been
-  executed.
+- The cutover Safe transaction (nonce 86) is signed 1 of 2: safeTxHash
+  `0x710ad4142115590996a2e9bc30af493252ad2a0a4a9e00b947d666277c447057`. The second
+  signature and execution are pending.
 - Routes are still on UPV3.
 
 Each remaining step is its own approval boundary (see
@@ -115,16 +116,39 @@ confirm in production that UPV3 proofs still fulfil.
 
 Approval: Safe execution.
 
+### The signed transaction
+
+This is the transaction to execute. It was proposed through the Safe UI's
+Transaction Builder on 2026-10-28 at 18:05:45 UTC. The first confirmation came
+from Safe owner `0xbD020867Cebdad3bf9F31480E4b01e9bbeFf7552`, and it is waiting
+for the second signature:
+
+https://app.safe.global/transactions/tx?safe=base:0x0bC26FF515411396DD588Abd6Ef6846E04470227&id=multisig_0x0bC26FF515411396DD588Abd6Ef6846E04470227_0x710ad4142115590996a2e9bc30af493252ad2a0a4a9e00b947d666277c447057
+
 | Field | Value |
 | --- | --- |
 | Safe nonce | 86 |
-| To | MultiSendCallOnly `0x40A2aCCbd92BCA938b02010E17A5b8929b49130D`, operation 1 (delegatecall) |
+| To | MultiSendCallOnly `0xA1dabEF33b3B82c7814B6D82A79e50F4AC44102B`, operation 1 (delegatecall) |
+| Value, safeTxGas, baseGas, gasPrice | all 0; gasToken and refundReceiver are the zero address |
 | Calls | 27 |
 | `multiSend` data keccak | `0x6d61bafbe0947c6db17eec69fedd7b485062d712ee66c7cbb3dacd3575d9ae58` (6,916 bytes) |
-| safeTxHash | `0xe22ba698b10018c270a658525412b5e9cd81db2a4f42f9dd58983b639a2f8c70` |
+| safeTxHash | `0x710ad4142115590996a2e9bc30af493252ad2a0a4a9e00b947d666277c447057` |
 
-`deployments/outputs/safe-batches/base_upv4_cutover.json` encodes to exactly
-this hash. `yarn verify:upv4-safe-batches` checks it.
+The Safe UI wrapped the calls with a different MultiSendCallOnly deployment
+than the repo's default `0x40A2aCCbd92BCA938b02010E17A5b8929b49130D`. That
+does not change the calls:
+
+- Both deployments' runtime code hashes to
+  `0xa9865ac2d9c7a1591619b188c4d88167b50df6cc0c5327fcbd1c8c75f7c066ad`.
+- The `multiSend` data is byte-identical. Its keccak matches the data the Safe
+  Transaction Service stores for `0x710a…`.
+- Wrapped with `0x40A2…`, the same calls hash to
+  `0xe22ba698b10018c270a658525412b5e9cd81db2a4f42f9dd58983b639a2f8c70`.
+
+`yarn verify:upv4-safe-batches` rebuilds both hashes from
+`deployments/outputs/safe-batches/base_upv4_cutover.json`, and the fork test
+checks both runtime code hashes. Before signing or executing, confirm that the
+Safe UI shows `0x710a…7057` and nonce 86.
 
 | # | Target | Call |
 | --- | --- | --- |
