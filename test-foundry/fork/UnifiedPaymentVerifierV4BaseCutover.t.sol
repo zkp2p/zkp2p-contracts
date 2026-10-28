@@ -21,17 +21,18 @@ import {UnifiedPaymentVerifierV4} from "contracts/unifiedVerifier/UnifiedPayment
 /// @notice Opt-in Base rehearsal of the exact lane-47 Safe batch bytes, outside coverage's deterministic tree.
 contract UnifiedPaymentVerifierV4BaseCutoverTest is Test {
     address internal constant SAFE = 0x0bC26FF515411396DD588Abd6Ef6846E04470227;
-    address internal constant DEPLOYER = 0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929;
+    address internal constant DEPLOYER = 0x41123d6419C7b8e44157f6F3b0088442116641eC;
     address internal constant PVR = 0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e;
     address internal constant NRV2 = 0x5455e761b866dfa6A2f5Dc6d6525825bf9C09aeB;
     address internal constant ORCHESTRATOR_REGISTRY = 0xBe9fED15ED7A4B915C03EFcEcb9662739C3382A9;
     address internal constant MAV = 0x9Fe920b24e50e6a6362BA71a1BeB502A99c402d5;
     address internal constant UPV3 = 0xC6F4a193576C60892a47e111Bb5706c30162502B;
+    address internal constant UPV4 = 0x7bE50E6206a9b3AdF36dbEAFac0e45Cc03A72048;
     address internal constant O3 = 0x014025fDE093f8701d86e9f38e2C3a9b779cb5c7;
     address internal constant LIFECYCLE_HOOK = 0x5Dd6C675a7406fE8C9f0D93394a36fd6e8c50031;
     address internal constant ESCROW = 0x777777779d229cdF3110e9de47943791c26300Ef;
     address internal constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
-    uint256 internal constant DEFAULT_FORK_BLOCK = 53209611;
+    uint256 internal constant DEFAULT_FORK_BLOCK = 53210521;
     uint256 internal constant WITNESS_KEY = 0xA11CE;
     uint256 internal constant DEPOSIT_AMOUNT = 1_000e6;
     uint256 internal constant INTENT_AMOUNT = 50e6;
@@ -48,7 +49,7 @@ contract UnifiedPaymentVerifierV4BaseCutoverTest is Test {
     OrchestratorV3 internal orchestrator = OrchestratorV3(O3);
     EscrowV2 internal escrow = EscrowV2(ESCROW);
     IERC20 internal token = IERC20(USDC);
-    UnifiedPaymentVerifierV4 internal upv4;
+    UnifiedPaymentVerifierV4 internal upv4 = UnifiedPaymentVerifierV4(UPV4);
     bytes32[] internal methodsBefore;
     bytes32[][] internal currenciesBefore;
     uint256 internal depositId;
@@ -71,7 +72,7 @@ contract UnifiedPaymentVerifierV4BaseCutoverTest is Test {
         bytes32 intent0 = _signal(0);
         _fulfillAndAssert(intent0, P0, _proofV3(intent0, P0));
 
-        _deployUPV4();
+        _assertUPV4();
         _applyBatch("cutover");
         _assertRoutes(address(upv4));
         _assertWriters(true, true);
@@ -94,7 +95,7 @@ contract UnifiedPaymentVerifierV4BaseCutoverTest is Test {
 
     function test_Upv3WriterRemovalLeavesUPV4SoleWriter() public onBaseFork {
         _prepareDepositAndWitness();
-        _deployUPV4();
+        _assertUPV4();
         _applyBatch("cutover");
         _assertRoutes(address(upv4));
         _assertWriters(true, true);
@@ -109,7 +110,7 @@ contract UnifiedPaymentVerifierV4BaseCutoverTest is Test {
     }
 
     function test_CutoverBatchShape() public onBaseFork {
-        _deployUPV4();
+        _assertUPV4();
         (address[] memory targets, bytes[] memory data) = _batch("cutover");
         assertEq(targets.length, 27);
         _assertWriterCall(targets[0], data[0], NullifierRegistryV2.addWritePermission.selector, address(upv4));
@@ -165,18 +166,9 @@ contract UnifiedPaymentVerifierV4BaseCutoverTest is Test {
         assertEq(nullifiers.isWriter(address(upv4)), hasUPV4);
     }
 
-    function _deployUPV4() internal {
-        vm.startPrank(DEPLOYER);
-        upv4 = new UnifiedPaymentVerifierV4(
-            IOrchestratorRegistry(ORCHESTRATOR_REGISTRY), nullifiers, MultiAttestationVerifier(MAV)
-        );
-        for (uint256 index; index < methodsBefore.length; ++index) upv4.addPaymentMethod(methodsBefore[index]);
-        upv4.transferOwnership(SAFE);
-        vm.stopPrank();
-        _assertUPV4();
-    }
-
     function _assertUPV4() internal view {
+        assertGt(UPV4.code.length, 0);
+        assertEq(vm.computeCreateAddress(DEPLOYER, 117), UPV4);
         assertEq(upv4.owner(), SAFE);
         assertEq(upv4.getPaymentMethods(), methodsBefore);
         assertEq(address(upv4.orchestratorRegistry()), ORCHESTRATOR_REGISTRY);
