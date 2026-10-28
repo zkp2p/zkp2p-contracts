@@ -118,8 +118,8 @@ cp .env.default .env
 Fill the relevant environment variables, including the ones used by deployment and verification flows:
 
 - `ALCHEMY_API_KEY`
-- `BASE_DEPLOY_PRIVATE_KEY`
-- `STAGING_DEPLOYER_KEY` (dedicated staging signer; no production-key fallback)
+- `BASE_DEPLOYER_KEY` (production signer `0x41123d6419C7b8e44157f6F3b0088442116641eC`)
+- `STAGING_DEPLOYER_KEY` (staging signer; no production-key fallback)
 - `TESTNET_DEPLOY_PRIVATE_KEY`
 - `BASESCAN_API_KEY`
 - `ETHERSCAN_KEY`
@@ -226,12 +226,16 @@ These parameters live in `deployments/parameters.ts`.
 
 ### Base staging ownership
 
-Base staging uses Base mainnet, chain ID **8453**, with the dedicated signer
+Base staging uses Base mainnet, chain ID **8453**, with signer
 [`0x41123d6419C7b8e44157f6F3b0088442116641eC`](https://basescan.org/address/0x41123d6419C7b8e44157f6F3b0088442116641eC).
 `base_staging` loads only `STAGING_DEPLOYER_KEY`, accepting the key with or without a `0x` prefix. If it is unset,
-the account list is empty. Production `base` continues to use `BASE_DEPLOY_PRIVATE_KEY`.
+the account list is empty. Production `base` uses the same signer via `BASE_DEPLOYER_KEY`, with the same prefix
+handling and no deployer account when unset. Delete `BASE_DEPLOY_PRIVATE_KEY` from the environment; config loading
+rejects it. Its former signer `0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929` was compromised on 2026-10-28,
+is retired, and must never sign again.
+All configured keys are checked against retired signers; Base vanity accounts are ignored without `BASE_DEPLOYER_KEY`.
 
-Use the dedicated signer for future staging deployments and as the owner of every ownable component in the
+Use this signer for future staging deployments and as the owner of every ownable component in the
 current staging stack. Historical contracts outside that stack do not need to migrate.
 
 At Base block **52976468** (23 October 2026), all **21 ownable contracts** in the supported V3 stack

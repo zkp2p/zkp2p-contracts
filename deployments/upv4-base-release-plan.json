@@ -1,0 +1,627 @@
+{
+  "pinnedBlock": 53209611,
+  "safe": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+  "batches": [
+    {
+      "kind": "cutover",
+      "name": "Base UPV4 payment-route cutover",
+      "callCount": 27,
+      "rows": [
+        {
+          "index": 0,
+          "to": "0x5455e761b866dfa6A2f5Dc6d6525825bf9C09aeB",
+          "contract": "NullifierRegistryV2",
+          "function": "addWritePermission",
+          "writer": "UnifiedPaymentVerifierV4"
+        },
+        {
+          "index": 1,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "monobank"
+        },
+        {
+          "index": 2,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "xmoney"
+        },
+        {
+          "index": 3,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "upi"
+        },
+        {
+          "index": 4,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "paypal"
+        },
+        {
+          "index": 5,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "monzo"
+        },
+        {
+          "index": 6,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "zelle"
+        },
+        {
+          "index": 7,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "mercadopago"
+        },
+        {
+          "index": 8,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "wise"
+        },
+        {
+          "index": 9,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "cashapp"
+        },
+        {
+          "index": 10,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "revolut"
+        },
+        {
+          "index": 11,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "venmo"
+        },
+        {
+          "index": 12,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "chime"
+        },
+        {
+          "index": 13,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "alipay"
+        },
+        {
+          "index": 14,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "alipay",
+          "verifier": "UnifiedPaymentVerifierV4",
+          "currencies": [
+            "CNY"
+          ]
+        },
+        {
+          "index": 15,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "chime",
+          "verifier": "UnifiedPaymentVerifierV4",
+          "currencies": [
+            "USD"
+          ]
+        },
+        {
+          "index": 16,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "venmo",
+          "verifier": "UnifiedPaymentVerifierV4",
+          "currencies": [
+            "USD"
+          ]
+        },
+        {
+          "index": 17,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "revolut",
+          "verifier": "UnifiedPaymentVerifierV4",
+          "currencies": [
+            "USD",
+            "EUR",
+            "GBP",
+            "SGD",
+            "NZD",
+            "AUD",
+            "CAD",
+            "JPY",
+            "HKD",
+            "MXN",
+            "SAR",
+            "AED",
+            "THB",
+            "TRY",
+            "PLN",
+            "CHF",
+            "ZAR",
+            "CNY",
+            "CZK",
+            "DKK",
+            "HUF",
+            "NOK",
+            "RON",
+            "SEK"
+          ]
+        },
+        {
+          "index": 18,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "cashapp",
+          "verifier": "UnifiedPaymentVerifierV4",
+          "currencies": [
+            "USD"
+          ]
+        },
+        {
+          "index": 19,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "wise",
+          "verifier": "UnifiedPaymentVerifierV4",
+          "currencies": [
+            "USD",
+            "CNY",
+            "EUR",
+            "GBP",
+            "AUD",
+            "NZD",
+            "CAD",
+            "AED",
+            "CHF",
+            "ZAR",
+            "SGD",
+            "ILS",
+            "HKD",
+            "JPY",
+            "PLN",
+            "TRY",
+            "IDR",
+            "KES",
+            "MYR",
+            "MXN",
+            "THB",
+            "VND",
+            "UGX",
+            "CZK",
+            "DKK",
+            "HUF",
+            "INR",
+            "NOK",
+            "PHP",
+            "RON",
+            "SEK"
+          ]
+        },
+        {
+          "index": 20,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "mercadopago",
+          "verifier": "UnifiedPaymentVerifierV4",
+          "currencies": [
+            "ARS"
+          ]
+        },
+        {
+          "index": 21,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "zelle",
+          "verifier": "UnifiedPaymentVerifierV4",
+          "currencies": [
+            "USD"
+          ]
+        },
+        {
+          "index": 22,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "monzo",
+          "verifier": "UnifiedPaymentVerifierV4",
+          "currencies": [
+            "GBP"
+          ]
+        },
+        {
+          "index": 23,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "paypal",
+          "verifier": "UnifiedPaymentVerifierV4",
+          "currencies": [
+            "USD",
+            "EUR",
+            "GBP",
+            "SGD",
+            "NZD",
+            "AUD",
+            "CAD"
+          ]
+        },
+        {
+          "index": 24,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "upi",
+          "verifier": "UnifiedPaymentVerifierV4",
+          "currencies": [
+            "INR"
+          ]
+        },
+        {
+          "index": 25,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "xmoney",
+          "verifier": "UnifiedPaymentVerifierV4",
+          "currencies": [
+            "USD"
+          ]
+        },
+        {
+          "index": 26,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "monobank",
+          "verifier": "UnifiedPaymentVerifierV4",
+          "currencies": [
+            "UAH"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "upv3-writer-removal",
+      "name": "Base UPV3 NullifierRegistryV2 writer removal",
+      "callCount": 1,
+      "rows": [
+        {
+          "index": 0,
+          "to": "0x5455e761b866dfa6A2f5Dc6d6525825bf9C09aeB",
+          "contract": "NullifierRegistryV2",
+          "function": "removeWritePermission",
+          "writer": "0xC6F4a193576C60892a47e111Bb5706c30162502B"
+        }
+      ]
+    },
+    {
+      "kind": "rollback",
+      "name": "Base UPV4 payment-route rollback to UPV3",
+      "callCount": 26,
+      "rows": [
+        {
+          "index": 0,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "monobank"
+        },
+        {
+          "index": 1,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "xmoney"
+        },
+        {
+          "index": 2,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "upi"
+        },
+        {
+          "index": 3,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "paypal"
+        },
+        {
+          "index": 4,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "monzo"
+        },
+        {
+          "index": 5,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "zelle"
+        },
+        {
+          "index": 6,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "mercadopago"
+        },
+        {
+          "index": 7,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "wise"
+        },
+        {
+          "index": 8,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "cashapp"
+        },
+        {
+          "index": 9,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "revolut"
+        },
+        {
+          "index": 10,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "venmo"
+        },
+        {
+          "index": 11,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "chime"
+        },
+        {
+          "index": 12,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "removePaymentMethod",
+          "paymentMethod": "alipay"
+        },
+        {
+          "index": 13,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "alipay",
+          "verifier": "0xC6F4a193576C60892a47e111Bb5706c30162502B",
+          "currencies": [
+            "CNY"
+          ]
+        },
+        {
+          "index": 14,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "chime",
+          "verifier": "0xC6F4a193576C60892a47e111Bb5706c30162502B",
+          "currencies": [
+            "USD"
+          ]
+        },
+        {
+          "index": 15,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "venmo",
+          "verifier": "0xC6F4a193576C60892a47e111Bb5706c30162502B",
+          "currencies": [
+            "USD"
+          ]
+        },
+        {
+          "index": 16,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "revolut",
+          "verifier": "0xC6F4a193576C60892a47e111Bb5706c30162502B",
+          "currencies": [
+            "USD",
+            "EUR",
+            "GBP",
+            "SGD",
+            "NZD",
+            "AUD",
+            "CAD",
+            "JPY",
+            "HKD",
+            "MXN",
+            "SAR",
+            "AED",
+            "THB",
+            "TRY",
+            "PLN",
+            "CHF",
+            "ZAR",
+            "CNY",
+            "CZK",
+            "DKK",
+            "HUF",
+            "NOK",
+            "RON",
+            "SEK"
+          ]
+        },
+        {
+          "index": 17,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "cashapp",
+          "verifier": "0xC6F4a193576C60892a47e111Bb5706c30162502B",
+          "currencies": [
+            "USD"
+          ]
+        },
+        {
+          "index": 18,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "wise",
+          "verifier": "0xC6F4a193576C60892a47e111Bb5706c30162502B",
+          "currencies": [
+            "USD",
+            "CNY",
+            "EUR",
+            "GBP",
+            "AUD",
+            "NZD",
+            "CAD",
+            "AED",
+            "CHF",
+            "ZAR",
+            "SGD",
+            "ILS",
+            "HKD",
+            "JPY",
+            "PLN",
+            "TRY",
+            "IDR",
+            "KES",
+            "MYR",
+            "MXN",
+            "THB",
+            "VND",
+            "UGX",
+            "CZK",
+            "DKK",
+            "HUF",
+            "INR",
+            "NOK",
+            "PHP",
+            "RON",
+            "SEK"
+          ]
+        },
+        {
+          "index": 19,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "mercadopago",
+          "verifier": "0xC6F4a193576C60892a47e111Bb5706c30162502B",
+          "currencies": [
+            "ARS"
+          ]
+        },
+        {
+          "index": 20,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "zelle",
+          "verifier": "0xC6F4a193576C60892a47e111Bb5706c30162502B",
+          "currencies": [
+            "USD"
+          ]
+        },
+        {
+          "index": 21,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "monzo",
+          "verifier": "0xC6F4a193576C60892a47e111Bb5706c30162502B",
+          "currencies": [
+            "GBP"
+          ]
+        },
+        {
+          "index": 22,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "paypal",
+          "verifier": "0xC6F4a193576C60892a47e111Bb5706c30162502B",
+          "currencies": [
+            "USD",
+            "EUR",
+            "GBP",
+            "SGD",
+            "NZD",
+            "AUD",
+            "CAD"
+          ]
+        },
+        {
+          "index": 23,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "upi",
+          "verifier": "0xC6F4a193576C60892a47e111Bb5706c30162502B",
+          "currencies": [
+            "INR"
+          ]
+        },
+        {
+          "index": 24,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "xmoney",
+          "verifier": "0xC6F4a193576C60892a47e111Bb5706c30162502B",
+          "currencies": [
+            "USD"
+          ]
+        },
+        {
+          "index": 25,
+          "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+          "contract": "PaymentVerifierRegistry",
+          "function": "addPaymentMethod",
+          "paymentMethod": "monobank",
+          "verifier": "0xC6F4a193576C60892a47e111Bb5706c30162502B",
+          "currencies": [
+            "UAH"
+          ]
+        }
+      ]
+    }
+  ]
+}
