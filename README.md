@@ -233,6 +233,7 @@ the account list is empty. Production `base` uses the same signer via `BASE_DEPL
 handling and no deployer account when unset. Delete `BASE_DEPLOY_PRIVATE_KEY` from the environment; config loading
 rejects it. Its former signer `0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929` was compromised on 2026-10-28,
 is retired, and must never sign again.
+All configured keys are checked against retired signers; Base vanity accounts are ignored without `BASE_DEPLOYER_KEY`.
 
 Use this signer for future staging deployments and as the owner of every ownable component in the
 current staging stack. Historical contracts outside that stack do not need to migrate.

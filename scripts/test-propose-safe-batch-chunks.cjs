@@ -65,13 +65,15 @@ test("Safe proposals require an explicit proposer key without deployer fallback"
 
 test("standalone Safe proposals reject the legacy deployer variable before any I/O", async () => {
   for (const proposerKey of [undefined, PROPOSER_PRIVATE_KEY]) {
-    await assert.rejects(
-      runProposeSafeBatchChunks(
-        { file: "unused.json", propose: true },
-        { env: { BASE_DEPLOY_PRIVATE_KEY: "11".repeat(32), SAFE_PROPOSER_PRIVATE_KEY: proposerKey } }
-      ),
-      { message: "BASE_DEPLOY_PRIVATE_KEY is retired; delete it and use BASE_DEPLOYER_KEY" }
-    );
+    for (const legacyKey of ["11".repeat(32), ""]) {
+      await assert.rejects(
+        runProposeSafeBatchChunks(
+          { file: "unused.json", propose: true },
+          { env: { BASE_DEPLOY_PRIVATE_KEY: legacyKey, SAFE_PROPOSER_PRIVATE_KEY: proposerKey } }
+        ),
+        { message: "BASE_DEPLOY_PRIVATE_KEY is retired; delete it and use BASE_DEPLOYER_KEY" }
+      );
+    }
   }
 });
 
@@ -84,7 +86,7 @@ test("Safe proposals reject retired signers case-insensitively without exposing 
   }
   assert.throws(
     () => getSafeProposerWallet({ SAFE_PROPOSER_PRIVATE_KEY: "not-a-private-key" }),
-    { message: "Safe proposer private key is invalid" }
+    { message: "SAFE_PROPOSER_PRIVATE_KEY private key is invalid" }
   );
 });
 

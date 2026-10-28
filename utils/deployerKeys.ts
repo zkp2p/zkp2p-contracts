@@ -8,8 +8,8 @@ export const RETIRED_DEPLOYERS: readonly string[] = [
 export function getDeployerAccounts(
   env: Record<string, string | undefined>,
   retiredDeployers: readonly string[] = RETIRED_DEPLOYERS
-): { base: string[]; base_staging: string[] } {
-  if (env.BASE_DEPLOY_PRIVATE_KEY) {
+): { base: string[]; base_staging: string[]; goerli: string[] } {
+  if (env.BASE_DEPLOY_PRIVATE_KEY !== undefined) {
     throw new Error("BASE_DEPLOY_PRIVATE_KEY is retired; delete it and use BASE_DEPLOYER_KEY");
   }
 
@@ -29,5 +29,12 @@ export function getDeployerAccounts(
     return [key];
   }
 
-  return { base: accounts("BASE_DEPLOYER_KEY"), base_staging: accounts("STAGING_DEPLOYER_KEY") };
+  const base = accounts("BASE_DEPLOYER_KEY");
+  const escrowVanity = accounts("VANITY_ESCROW_V2_PROD_PRIVATE_KEY");
+  const orchestratorVanity = accounts("VANITY_ORCHESTRATOR_V2_PROD_PRIVATE_KEY");
+  return {
+    base: base.length ? [...base, ...escrowVanity, ...orchestratorVanity] : [],
+    base_staging: accounts("STAGING_DEPLOYER_KEY"),
+    goerli: accounts("TESTNET_DEPLOY_PRIVATE_KEY"),
+  };
 }

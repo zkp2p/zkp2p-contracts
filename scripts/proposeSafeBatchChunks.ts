@@ -785,7 +785,7 @@ export function getSafeProposerWallet(
   try {
     wallet = new ethers.Wallet(privateKey);
   } catch {
-    throw new Error("Safe proposer private key is invalid");
+    throw new Error("SAFE_PROPOSER_PRIVATE_KEY private key is invalid");
   }
   if (retiredDeployers.some((retired) => retired.toLowerCase() === wallet.address.toLowerCase())) {
     throw new Error("SAFE_PROPOSER_PRIVATE_KEY signer is retired");

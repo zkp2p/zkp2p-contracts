@@ -46,10 +46,11 @@ test('Base accepts its scoped setting with or without a prefix and preserves van
   const escrow = '33'.repeat(32);
   const orchestrator = '44'.repeat(32);
   for (const key of [production, `0x${production}`]) {
+    const prefix = key.startsWith('0x') ? '0x' : '';
     const result = config({
       BASE_DEPLOYER_KEY: key,
-      VANITY_ESCROW_V2_PROD_PRIVATE_KEY: escrow,
-      VANITY_ORCHESTRATOR_V2_PROD_PRIVATE_KEY: orchestrator,
+      VANITY_ESCROW_V2_PROD_PRIVATE_KEY: `${prefix}${escrow}`,
+      VANITY_ORCHESTRATOR_V2_PROD_PRIVATE_KEY: `${prefix}${orchestrator}`,
     });
     assert.deepEqual(Array.from(result.networks.base.accounts), [
       `0x${production}`, `0x${escrow}`, `0x${orchestrator}`,
@@ -57,46 +58,78 @@ test('Base accepts its scoped setting with or without a prefix and preserves van
   }
 });
 
+test('Base skips absent vanity keys without changing the deployer', () => {
+  const production = '11'.repeat(32);
+  const vanity = '33'.repeat(32);
+  for (const envVar of ['VANITY_ESCROW_V2_PROD_PRIVATE_KEY', 'VANITY_ORCHESTRATOR_V2_PROD_PRIVATE_KEY']) {
+    const result = config({ BASE_DEPLOYER_KEY: production, [envVar]: vanity });
+    assert.deepEqual(Array.from(result.networks.base.accounts), [`0x${production}`, `0x${vanity}`]);
+  }
+});
+
+test('Goerli normalizes its key prefix and has no accounts when unset or empty', () => {
+  const testnet = '55'.repeat(32);
+  for (const key of [testnet, `0x${testnet}`, undefined, '']) {
+    const result = config({ TESTNET_DEPLOY_PRIVATE_KEY: key });
+    assert.deepEqual(Array.from(result.networks.goerli.accounts), key ? [`0x${testnet}`] : []);
+  }
+});
+
 test('Base has no deployer when its setting is unset or empty, even with a staging key', () => {
   for (const key of [undefined, '']) {
     const result = config({ BASE_DEPLOYER_KEY: key, STAGING_DEPLOYER_KEY: '22'.repeat(32) });
     assert.equal(result.networks.base.accounts.length, 0);
-    const withVanity = config({ BASE_DEPLOYER_KEY: key, VANITY_ESCROW_V2_PROD_PRIVATE_KEY: '33'.repeat(32) });
-    assert.deepEqual(Array.from(withVanity.networks.base.accounts), [`0x${'33'.repeat(32)}`]);
+    const withVanity = config({
+      BASE_DEPLOYER_KEY: key,
+      VANITY_ESCROW_V2_PROD_PRIVATE_KEY: '33'.repeat(32),
+      VANITY_ORCHESTRATOR_V2_PROD_PRIVATE_KEY: '44'.repeat(32),
+    });
+    assert.deepEqual(Array.from(withVanity.networks.base.accounts), []);
   }
 });
 
 test('the legacy production variable is rejected without inspecting or exposing its value', () => {
-  for (const legacy of ['11'.repeat(32), 'not-a-private-key', ' ']) {
+  for (const legacy of ['11'.repeat(32), 'not-a-private-key', ' ', '']) {
     assert.throws(
       () => config({ BASE_DEPLOY_PRIVATE_KEY: legacy, BASE_DEPLOYER_KEY: '22'.repeat(32) }),
       { message: 'BASE_DEPLOY_PRIVATE_KEY is retired; delete it and use BASE_DEPLOYER_KEY' }
     );
   }
-  assert.equal(config({ BASE_DEPLOY_PRIVATE_KEY: '' }).networks.base.accounts.length, 0);
 });
 
-test('both networks reject a retired signer case-insensitively at config load', () => {
+const deployerKeyVariables = [
+  'BASE_DEPLOYER_KEY',
+  'STAGING_DEPLOYER_KEY',
+  'VANITY_ESCROW_V2_PROD_PRIVATE_KEY',
+  'VANITY_ORCHESTRATOR_V2_PROD_PRIVATE_KEY',
+  'TESTNET_DEPLOY_PRIVATE_KEY',
+];
+
+test('every configured key rejects a retired signer even when excluded from the account list', () => {
   const key = '11'.repeat(32);
   const address = new Wallet(`0x${key}`).address;
-  for (const envVar of ['BASE_DEPLOYER_KEY', 'STAGING_DEPLOYER_KEY']) {
+  for (const envVar of deployerKeyVariables) {
     for (const privateKey of [key, `0x${key}`]) {
       for (const retired of [address.toLowerCase(), address.toUpperCase()]) {
-        assert.throws(
-          () => config({ [envVar]: privateKey }, [retired]),
-          { message: `${envVar} signer is retired` }
-        );
+        for (const baseKey of [undefined, '', '22'.repeat(32)]) {
+          assert.throws(
+            () => config({ BASE_DEPLOYER_KEY: baseKey, [envVar]: privateKey }, [retired]),
+            { message: `${envVar} signer is retired` }
+          );
+        }
       }
     }
   }
 });
 
 test('invalid deployer keys fail without exposing their value', () => {
-  for (const envVar of ['BASE_DEPLOYER_KEY', 'STAGING_DEPLOYER_KEY']) {
-    assert.throws(
-      () => config({ [envVar]: 'not-a-private-key' }),
-      { message: `${envVar} private key is invalid` }
-    );
+  for (const envVar of deployerKeyVariables) {
+    for (const baseKey of [undefined, '', '22'.repeat(32)]) {
+      assert.throws(
+        () => config({ BASE_DEPLOYER_KEY: baseKey, [envVar]: 'not-a-private-key' }),
+        { message: `${envVar} private key is invalid` }
+      );
+    }
   }
 });
 

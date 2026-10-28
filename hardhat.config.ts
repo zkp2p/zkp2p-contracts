@@ -81,23 +81,11 @@ const config: HardhatUserConfig = {
     },
     goerli: {
       url: "https://goerli.infura.io/v3/" + process.env.INFURA_TOKEN,
-      // @ts-ignore
-      accounts: [
-        `0x${process.env.TESTNET_DEPLOY_PRIVATE_KEY}`,
-      ]
+      accounts: deployerAccounts.goerli,
     },
     base: {
       url: "https://base-mainnet.g.alchemy.com/v2/" + process.env.ALCHEMY_API_KEY,
-      // @ts-ignore
-      accounts: [
-        ...deployerAccounts.base,
-        ...(process.env.VANITY_ESCROW_V2_PROD_PRIVATE_KEY
-          ? [`0x${process.env.VANITY_ESCROW_V2_PROD_PRIVATE_KEY}`]
-          : []),
-        ...(process.env.VANITY_ORCHESTRATOR_V2_PROD_PRIVATE_KEY
-          ? [`0x${process.env.VANITY_ORCHESTRATOR_V2_PROD_PRIVATE_KEY}`]
-          : []),
-      ]
+      accounts: deployerAccounts.base,
     },
   },
   // @ts-ignore
