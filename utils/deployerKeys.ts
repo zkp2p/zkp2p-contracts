@@ -5,6 +5,14 @@ export const RETIRED_DEPLOYERS: readonly string[] = [
   "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
 ];
 
+/**
+ * Fails closed if BASE_DEPLOY_PRIVATE_KEY is defined, even empty, or a configured
+ * BASE_DEPLOYER_KEY, STAGING_DEPLOYER_KEY, VANITY_ESCROW_V2_PROD_PRIVATE_KEY,
+ * VANITY_ORCHESTRATOR_V2_PROD_PRIVATE_KEY or TESTNET_DEPLOY_PRIVATE_KEY is invalid
+ * or derives a retired signer. Keys may include a 0x prefix.
+ * Without BASE_DEPLOYER_KEY, base is empty so vanity keys never become account 0,
+ * the deployer every lane uses. Errors never include key material.
+ */
 export function getDeployerAccounts(
   env: Record<string, string | undefined>,
   retiredDeployers: readonly string[] = RETIRED_DEPLOYERS
