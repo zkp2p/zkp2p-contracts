@@ -166,9 +166,11 @@
   Base `*OptIn` trio, the Base-staging lane-32 stack). Do not merge them until the method-scoped stack is activated.
 - `scripts/bootstrapWhitelistPolicy.ts` targets only `WhitelistPolicyMethodScoped` and refuses the lane-29 policy
   address. Its required `WHITELIST_GROUP_IDS` is an ordered, non-empty, distinct list; on Base every ID must be one
-  of the known production groups. Withdrawn, method-inactive, self-configured, and already-bootstrapped tuples are
-  skipped and reported; the expected count and selection digest cover only the eligible set. Until the lane-36
-  artifact exists for a network the script fails closed on the missing artifact.
+  of the known production groups. The Peer Pay group (Base `0x174b…5e48`, Base staging `0xc82c…00f7`) is retired
+  on both OrchestratorV3 and OrchestratorV4 and is rejected as a target on every network; never reintroduce or
+  replace it. Withdrawn, method-inactive, self-configured, and already-bootstrapped tuples are skipped and reported;
+  the expected count and selection digest cover only the eligible set. Until the lane-36 artifact exists for a
+  network the script fails closed on the missing artifact.
 - `IntentGuardian` and `WhitelistPolicy` remain part of the V2 policy history and are reused where the mounted V3
   lifecycle lane specifies. Do not redeploy a core stack merely to change an independently owned policy component.
 - The payment-verifier cutover is one-way. Before the governance batch, lane `31` must prove UPV3 is the sole

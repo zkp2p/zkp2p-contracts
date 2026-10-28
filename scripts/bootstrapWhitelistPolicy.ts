@@ -109,6 +109,10 @@ const TARGET_PAYMENT_METHOD_HASHES = TARGET_PAYMENT_METHODS.map(({ hash }) => ha
 const TARGET_PAYMENT_METHOD_HASH_SET = new Set<string>(TARGET_PAYMENT_METHOD_HASHES);
 
 const PRODUCTION_INDEXER_URL = "https://indexer.zkp2p.xyz/v1/graphql";
+const RETIRED_GROUPS: ReadonlyMap<string, string> = new Map([
+  ["0x174b8a29536721a3eae290bfd55651b85a53fc334b971d993fa93ed8dde15e48", "Peer Pay (Base)"],
+  ["0xc82c20c00033046a2f017b65532d7148a337282f17c73296663a530e49ba00f7", "Peer Pay (Base staging)"],
+]);
 const KNOWN_PRODUCTION_GROUPS = {
   peerTaker: {
     name: "peer-taker-peer-v1",
@@ -137,10 +141,6 @@ const KNOWN_PRODUCTION_GROUPS = {
   topChargebackMerchants: {
     name: "Top Chargeback Merchants",
     id: "0xdf1c64c54745aa1ce00642a5874f97e3183bf5e993c1f559d0a37a4df0b803c7",
-  },
-  peerPay: {
-    name: "Peer Pay",
-    id: "0x174b8a29536721a3eae290bfd55651b85a53fc334b971d993fa93ed8dde15e48",
   },
 } as const;
 const KNOWN_PRODUCTION_GROUP_NAMES = new Map<string, string>(
@@ -255,6 +255,9 @@ Optional environment:
 Validation-only:
   yarn whitelist:bootstrap --self-test
 
+Retired groups:
+  The Peer Pay group ids are rejected on base and base_staging and must not be bootstrapped.
+
 Base safety:
   Every WHITELIST_GROUP_IDS entry must be a known production AddressGroupRegistry group.
 `);
@@ -321,6 +324,12 @@ function parseGroupIds(): string[] {
     ));
   if (new Set(groupIds).size !== groupIds.length) {
     throw new Error("WHITELIST_GROUP_IDS entries must be distinct");
+  }
+  for (const groupId of groupIds) {
+    const retiredGroup = RETIRED_GROUPS.get(groupId);
+    if (retiredGroup) {
+      throw new Error(`${groupId} (${retiredGroup}) is a retired whitelist group and must not be bootstrapped`);
+    }
   }
   return groupIds;
 }
@@ -844,22 +853,88 @@ async function runSelfTest(): Promise<void> {
         throw error;
       }
     }
+
+    for (const retiredId of RETIRED_GROUPS.keys()) {
+      for (const input of [retiredId, `${groupIds[0]},${retiredId}`, ` 0x${retiredId.slice(2).toUpperCase()} `]) {
+        process.env.WHITELIST_GROUP_IDS = input;
+        try {
+          parseGroupIds();
+          throw new Error("Self-test accepted a retired whitelist group id");
+        } catch (error) {
+          if (
+            !(error instanceof Error)
+            || !error.message.includes(retiredId)
+            || !error.message.includes("is a retired whitelist group")
+            || !error.message.includes("must not be bootstrapped")
+          ) {
+            throw error;
+          }
+        }
+      }
+    }
   } finally {
     if (selfTestGroupIds === undefined) delete process.env.WHITELIST_GROUP_IDS;
     else process.env.WHITELIST_GROUP_IDS = selfTestGroupIds;
   }
-  assertKnownBaseGroupIds([KNOWN_PRODUCTION_GROUPS.peerPay.id]);
-  const unknownGroupId = `0x${"55".repeat(32)}`;
+
+  const selfTestConfigEnvironment = {
+    BOOTSTRAP_NETWORK: process.env.BOOTSTRAP_NETWORK,
+    BOOTSTRAP_WHITELIST_POLICY_ADDRESS: process.env.BOOTSTRAP_WHITELIST_POLICY_ADDRESS,
+    BOOTSTRAP_ESCROW_ADDRESSES: process.env.BOOTSTRAP_ESCROW_ADDRESSES,
+    WHITELIST_GROUP_IDS: process.env.WHITELIST_GROUP_IDS,
+  };
   try {
-    assertKnownBaseGroupIds([unknownGroupId]);
-    throw new Error("Self-test accepted an unknown Base whitelist group id");
-  } catch (error) {
-    if (
-      !(error instanceof Error)
-      || !error.message.includes(unknownGroupId)
-      || ![...KNOWN_PRODUCTION_GROUP_NAMES.values()].every((name) => error.message.includes(name))
-    ) {
-      throw error;
+    delete process.env.BOOTSTRAP_WHITELIST_POLICY_ADDRESS;
+    delete process.env.BOOTSTRAP_ESCROW_ADDRESSES;
+    for (const network of ["base_staging", "base", undefined]) {
+      if (network === undefined) delete process.env.BOOTSTRAP_NETWORK;
+      else process.env.BOOTSTRAP_NETWORK = network;
+      for (const retiredId of RETIRED_GROUPS.keys()) {
+        process.env.WHITELIST_GROUP_IDS = retiredId;
+        try {
+          loadConfig();
+          throw new Error(`Self-test accepted a retired whitelist group on ${network ?? "the default network"}`);
+        } catch (error) {
+          if (
+            !(error instanceof Error)
+            || !error.message.includes(retiredId)
+            || !error.message.includes("is a retired whitelist group")
+            || !error.message.includes("must not be bootstrapped")
+          ) {
+            throw error;
+          }
+        }
+      }
+    }
+  } finally {
+    for (const [name, value] of Object.entries(selfTestConfigEnvironment)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+
+  for (const { id } of Object.values(KNOWN_PRODUCTION_GROUPS)) {
+    if (RETIRED_GROUPS.has(id)) {
+      throw new Error(`Self-test found retired whitelist group ${id} in KNOWN_PRODUCTION_GROUPS`);
+    }
+  }
+  assertKnownBaseGroupIds(Object.values(KNOWN_PRODUCTION_GROUPS).map(({ id }) => id));
+  const rejectedGroupIds = [
+    `0x${"55".repeat(32)}`,
+    ...RETIRED_GROUPS.keys(),
+  ];
+  for (const groupId of rejectedGroupIds) {
+    try {
+      assertKnownBaseGroupIds([groupId]);
+      throw new Error("Self-test accepted an unknown or retired Base whitelist group id");
+    } catch (error) {
+      if (
+        !(error instanceof Error)
+        || !error.message.includes(groupId)
+        || ![...KNOWN_PRODUCTION_GROUP_NAMES.values()].every((name) => error.message.includes(name))
+      ) {
+        throw error;
+      }
     }
   }
   const paymentMethodHash = TARGET_PAYMENT_METHODS[0].hash;
