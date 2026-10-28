@@ -97,3 +97,40 @@ All transactions in these tests were confined to local in-memory chains. No live
 deployment, activation, source-verification submission, publication, key access,
 or push was performed. The current manifest and eight current Hardhat record
 names remain absent for the separately authorized deployment.
+
+## Passive deployment, 2026-10-28
+
+Deployed from `0749b75f235c6d90079c1e261f46d67778f7c389`, whose `contracts/` is
+byte-identical to main `646898f`. Signer `0x41123d6419C7b8e44157f6F3b0088442116641eC`,
+nonces 60–84, 25 confirmed transactions. The suite is passive: O4 is not
+registered, and no shared registry, route or ownership state changed.
+
+| Contract | Address | Block |
+| --- | --- | --- |
+| StakeVaultV2 | [`0xe6314251979b6185c6a1A265de82460EB180821c`](https://basescan.org/address/0xe6314251979b6185c6a1A265de82460EB180821c#code) | 53196135 |
+| AddressGroupRegistryV4 | [`0xD80e868d4682EF6760903aF7a00ace2C8D76EF62`](https://basescan.org/address/0xD80e868d4682EF6760903aF7a00ace2C8D76EF62#code) | 53196139 |
+| WhitelistPolicyV2 | [`0x226b5Fcb292b7F730562B51fd50a35045b16168e`](https://basescan.org/address/0x226b5Fcb292b7F730562B51fd50a35045b16168e#code) | 53196143 |
+| IntentSignalPolicy | [`0x0cc9A2fEF98fE535ca4aEb5bd708bf17E63e4A80`](https://basescan.org/address/0x0cc9A2fEF98fE535ca4aEb5bd708bf17E63e4A80#code) | 53196146 |
+| DisputeProtectionPolicyV2 | [`0x0d5a9162161d195577A3a3458524574bb462ccDc`](https://basescan.org/address/0x0d5a9162161d195577A3a3458524574bb462ccDc#code) | 53196150 |
+| UnifiedPaymentVerifierV4 | [`0x7Da43ba0F85cfb64733216C4A2288f80dFfe1EAb`](https://basescan.org/address/0x7Da43ba0F85cfb64733216C4A2288f80dFfe1EAb#code) | 53196158 |
+| OrchestratorV4 | [`0xd03674d06FB9d66C7F1dc9c8D45ADd314B604F2c`](https://basescan.org/address/0xd03674d06FB9d66C7F1dc9c8D45ADd314B604F2c#code) | 53196209 |
+| ProtocolViewerV4 | [`0xDe4a3DA259549f1e236B05D1158822D03b8f4ABc`](https://basescan.org/address/0xDe4a3DA259549f1e236B05D1158822D03b8f4ABc#code) | 53196219 |
+
+The runner's post-deploy verification passed (bytecode, constructors, wiring,
+ownership, payment catalog, escrow compatibility, predecessor preservation).
+All eight sources are exact Basescan matches. Independent reads confirmed O4's
+signal policy and settlement policy, `gatingService`
+`0x87eE8394DDa0F8CB89924e093f6209cfCA3045e0`, the registry's `groupArbitrator`,
+the 12-field `IntentSignaled` topic in O4's bytecode, DisputeProtectionPolicyV2 as
+the vault controller, 14 UPV4 payment methods, and O4 unregistered.
+
+CI gate deviation: Foundry CI and Release readiness fail repo-wide in the shared
+`patch-node24` runner step (main has been red since `948ca94`). Before broadcast,
+every CI command was run locally at `0749b75` and passed: release-policy,
+compile, `pkg:build`, `pkg:test`, the payment-method and signer tests,
+`typecheck:dispute-deployment`, `test:orchestrator-v4-release`,
+`deploy:localhost` and the complete Foundry suite (1872 passed, 0 failed).
+
+Not done here, each separately approved: package export, downstream re-vendor,
+relayer allowlists, privacy re-migration on the new WhitelistPolicyV2, group
+recreation on the new registry, and activation.
