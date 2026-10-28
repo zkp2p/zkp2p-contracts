@@ -160,6 +160,39 @@
     were written before the three `transferOwnership` calls to `MULTI_SIG.base`. The updater is
     `0x81630fb1ab2A7Eab137888b9746b66889f78F091`. All three contracts are Basescan-verified. The lane is immutable
     and pinned in `deployments/immutableDeploymentLanes.ts`.
+- Lane `47` (`deploy/47_deploy_unified_payment_verifier_v4.ts`) records the Base production
+  `UnifiedPaymentVerifierV4`, which ships before OrchestratorV4 and serves the live OrchestratorV3. Runbook:
+  `docs/releases/upv4-base-production-cutover.md`.
+  - **Deployment:** UPV4 was deployed outside the lane on 2026-10-28 from main `646898f`:
+    - `0x7bE50E6206a9b3AdF36dbEAFac0e45Cc03A72048`, deploy tx `0xa6fa…cf931` at block 53210472;
+    - deployer `0x41123d6419C7b8e44157f6F3b0088442116641eC`. The old `BASE_DEPLOY_PRIVATE_KEY` deployer is
+      compromised and must not sign;
+    - 13 `addPaymentMethod` calls, then `transferOwnership(Safe)`. It is single-step `Ownable`, so nothing to
+      accept.
+  - **Base is adopt-and-verify only; the lane never deploys there.**
+    - A tagged run with no record checks the pinned deployment on-chain and saves
+      `deployments/base/UnifiedPaymentVerifierV4.json`. It checks sender, nonce, creation input
+      (artifact + constructor args), receipt, runtime metadata, immutables, `DOMAIN_SEPARATOR`, Safe ownership,
+      and the 13 methods in order.
+    - With the record present, every Base run re-checks it and skips. Those runs check the chain against the
+      record's own ABI, bytecode, metadata and receipt, never the compiled artifact, so later edits to UPV4 or its
+      imports (e.g. `IOrchestratorV4.sol`) do not break Base runs.
+    - An untagged run without the record throws.
+    - It sends no transaction and uses no signer.
+  - **Other networks:** Base staging skips. Local networks deploy UPV4 and run the cutover calls directly.
+  - **Safe batches:** `yarn write:upv4-safe-batches` renders them from the record and the pins in
+    `UPV4_BASE_RELEASE` (`deployments/parameters.ts`):
+    - `base_upv4_cutover` (27 calls): adds the UPV4 writer, then removes every route in reverse and re-adds it on
+      UPV4. UPV3 stays a writer, so rollback still works. It is Safe nonce 86, safeTxHash `0xe22b…8c70`.
+    - `base_upv4_upv3_writer_removal` (1 call): prepared, not scheduled.
+    - `base_upv4_rollback` (26 calls): routes back to UPV3.
+  - **Checks:** `yarn verify:upv4-safe-batches` re-derives all three batches byte for byte and checks the cutover
+    safeTxHash. `test-foundry/fork/UnifiedPaymentVerifierV4BaseCutover.t.sol` runs the same bytes against the real
+    UPV4 on a Base fork.
+  - **Lane 31:** its wrapper defers to lane 47 once every route points at the recorded UPV4. On live networks it
+    still runs lane 31's frozen readiness checks, accepting only the failure of the final UPV3-only writer check,
+    and checks the registry surface against UPV4 and its owner: O3's registry, the PVR, legacy registry and NRV2
+    owners, method order, currencies, routes, and no legacy writers.
 - `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the
   predecessor of the currently selected stack and feeds the lane-30 wrapper, the package's recognized-predecessor
   identities, and lane-34 tooling; `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS` describes what lane 37 replaces (the

@@ -167,6 +167,60 @@ export const BASE_ACTIVE_PAYMENT_METHODS: string[] = [
   "monobank",
 ];
 
+// Lane 47: routes are pinned from Base block 53209611; UPV4 is pinned from the deployment below.
+export const UPV4_BASE_RELEASE = {
+  pinnedBlock: 53209611,
+  chainId: 8453,
+  deployer: "0x41123d6419C7b8e44157f6F3b0088442116641eC",
+  safe: "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+  orchestratorRegistry: "0xBe9fED15ED7A4B915C03EFcEcb9662739C3382A9",
+  nullifierRegistryV2: "0x5455e761b866dfa6A2f5Dc6d6525825bf9C09aeB",
+  multiAttestationVerifier: "0x9Fe920b24e50e6a6362BA71a1BeB502A99c402d5",
+  paymentVerifierRegistry: "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+  unifiedPaymentVerifierV3: "0xC6F4a193576C60892a47e111Bb5706c30162502B",
+  orchestratorV3: "0x014025fDE093f8701d86e9f38e2C3a9b779cb5c7",
+  unifiedPaymentVerifierV4: "0x7bE50E6206a9b3AdF36dbEAFac0e45Cc03A72048",
+  deployment: {
+    transactionHash: "0xa6fa3ce43ca5352460be4ce917709f17d60fda677fa48a1fbc6f081902dcf931",
+    blockNumber: 53210472,
+    blockTimestamp: 1793210291,
+    deployerNonce: 117,
+    ownershipTransferTransactionHash: "0xa9abe1334345ea502e059c769db50bc31153d229c8f05e85e01d5c1d8ff54ce6",
+    ownershipTransferBlock: 53210497,
+    sourceSha: "646898f2afa2d0e114a7f44e96fc6222aa1c7a91",
+  },
+  cutoverSafeNonce: 86,
+  cutoverSafeTxHash: "0xe22ba698b10018c270a658525412b5e9cd81db2a4f42f9dd58983b639a2f8c70",
+  signedCutover: {
+    multiSendCallOnly: "0xA1dabEF33b3B82c7814B6D82A79e50F4AC44102B",
+    safeTxHash: "0x710ad4142115590996a2e9bc30af493252ad2a0a4a9e00b947d666277c447057",
+    url: "https://app.safe.global/transactions/tx?safe=base:0x0bC26FF515411396DD588Abd6Ef6846E04470227&id=multisig_0x0bC26FF515411396DD588Abd6Ef6846E04470227_0x710ad4142115590996a2e9bc30af493252ad2a0a4a9e00b947d666277c447057",
+  },
+  multiSendCallOnlyCodehash: "0xa9865ac2d9c7a1591619b188c4d88167b50df6cc0c5327fcbd1c8c75f7c066ad",
+  paymentRoutes: [
+    { method: "alipay", currencies: ["CNY"] },
+    { method: "chime", currencies: ["USD"] },
+    { method: "venmo", currencies: ["USD"] },
+    { method: "revolut", currencies: [
+      "USD", "EUR", "GBP", "SGD", "NZD", "AUD", "CAD", "JPY", "HKD", "MXN", "SAR", "AED",
+      "THB", "TRY", "PLN", "CHF", "ZAR", "CNY", "CZK", "DKK", "HUF", "NOK", "RON", "SEK",
+    ] },
+    { method: "cashapp", currencies: ["USD"] },
+    { method: "wise", currencies: [
+      "USD", "CNY", "EUR", "GBP", "AUD", "NZD", "CAD", "AED", "CHF", "ZAR", "SGD", "ILS",
+      "HKD", "JPY", "PLN", "TRY", "IDR", "KES", "MYR", "MXN", "THB", "VND", "UGX", "CZK",
+      "DKK", "HUF", "INR", "NOK", "PHP", "RON", "SEK",
+    ] },
+    { method: "mercadopago", currencies: ["ARS"] },
+    { method: "zelle", currencies: ["USD"] },
+    { method: "monzo", currencies: ["GBP"] },
+    { method: "paypal", currencies: ["USD", "EUR", "GBP", "SGD", "NZD", "AUD", "CAD"] },
+    { method: "upi", currencies: ["INR"] },
+    { method: "xmoney", currencies: ["USD"] },
+    { method: "monobank", currencies: ["UAH"] },
+  ],
+} as const;
+
 // Base staging can carry a reviewed payment-method candidate before the
 // separately approved production activation. Keep the production list above
 // unchanged until that boundary is explicitly authorized.

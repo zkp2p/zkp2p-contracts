@@ -73,6 +73,12 @@
     "transpile": "tsc",
     "typecheck:dispute-deployment": "tsc -p tsconfig.dispute-deployment.json",
     "test:fx-rate-feeds-deployment": "node --test scripts/fx-rate-feeds-deployment.spec.cjs",
+    "upv4:safe-batches": "ts-node --transpile-only scripts/upv4SafeBatches.ts",
+    "write:upv4-safe-batches": "ts-node --transpile-only scripts/upv4SafeBatches.ts write",
+    "verify:upv4-safe-batches": "ts-node --transpile-only scripts/upv4SafeBatches.ts verify",
+    "test:upv4-base-release": "node --test scripts/upv4-base-release.spec.cjs",
+    "record:upv4:base": "ts-node --transpile-only scripts/deployActive.ts base 47_deploy_unified_payment_verifier_v4 && hardhat export --network base --export ./deployments/outputs/baseContracts.ts && ts-node --transpile-only scripts/canonicalizeDeploymentOutput.ts base ./deployments/outputs/baseContracts.ts && yarn workspace @zkp2p/contracts-v2 extract",
+    "verify:upv4:base": "yarn hardhat --network base etherscan-verify-with-delay --delay 600 --contracts UnifiedPaymentVerifierV4 --fail-on-error",
     "deploy:fx-rate-feeds:base": "ts-node --transpile-only scripts/deployActive.ts base 44_deploy_fx_rate_feeds && hardhat export --network base --export ./deployments/outputs/baseContracts.ts && ts-node --transpile-only scripts/canonicalizeDeploymentOutput.ts base ./deployments/outputs/baseContracts.ts && yarn workspace @zkp2p/contracts-v2 extract",
     "verify:fx-rate-feeds:base": "yarn hardhat --network base etherscan-verify-with-delay --delay 600 --contracts FxRateStore,FxRateFeedInrUsd,FxRateFeedCnyUsd --fail-on-error"
   },

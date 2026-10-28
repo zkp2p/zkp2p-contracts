@@ -82,7 +82,14 @@ Place additive real-contract properties under `test-foundry/fuzz/`. Document the
 
 Place handlers under `test-foundry/invariant/handlers/` and invariant contracts under `test-foundry/invariant/`. Target selectors deliberately, use multiple realistic actors, maintain sufficient ghost state, and assert both a protocol property and handler reachability. Expected reverting actions belong inside the handler; an uncaught revert must fail the run.
 
-There are no fork-dependent tests. Chain-dependent behavior was replaced with deterministic fixtures so every required suite runs on pushes to `main` and on every pull request without an RPC secret or mutable live-head state.
+Required suites have no fork-dependent tests. Chain-dependent behavior uses deterministic fixtures, so every required suite runs on pushes to `main` and on every pull request without an RPC secret or mutable live-head state.
+
+`test-foundry/fork/` holds opt-in release rehearsals against live Base state. They skip unless `BASE_FORK_RPC_URL` is set, and they live outside `deterministic/`, so coverage never runs them. `UnifiedPaymentVerifierV4BaseCutover.t.sol` forks Base at block `53210521` by default (override with `BASE_FORK_BLOCK`). It runs the lane-47 Safe batch bytes that `scripts/upv4SafeBatches.ts ffi` produces:
+
+```bash
+BASE_FORK_RPC_URL="https://base-mainnet.g.alchemy.com/v2/$ALCHEMY_API_KEY" \
+  forge test --match-path 'test-foundry/fork/UnifiedPaymentVerifierV4BaseCutover.t.sol' -vv
+```
 
 ## Expected local runtimes
 
