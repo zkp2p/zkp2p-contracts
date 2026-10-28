@@ -2,9 +2,9 @@ import * as assert from "node:assert/strict";
 import { Contract, ContractFactory, utils } from "ethers";
 import type { ContractTransaction, providers } from "ethers";
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
-import type { ArtifactData, DeployFunction, Deployment } from "hardhat-deploy/types";
+import type { DeployFunction, Deployment } from "hardhat-deploy/types";
 import type {
-  NullifierRegistry, NullifierRegistryV2, PaymentVerifierRegistry, UnifiedPaymentVerifierV3, UnifiedPaymentVerifierV4,
+  NullifierRegistry, NullifierRegistryV2, PaymentVerifierRegistry, UnifiedPaymentVerifierV4,
 } from "../typechain";
 import { waitForDeploymentDelay } from "../deployments/helpers";
 import { UPV4_BASE_RELEASE } from "../deployments/parameters";
@@ -100,7 +100,7 @@ async function readCatalog(registry: PaymentVerifierRegistry, blockTag: number):
 }
 
 async function readBindings(
-  verifier: UnifiedPaymentVerifierV3 | UnifiedPaymentVerifierV4, blockTag: number,
+  verifier: Contract, blockTag: number,
 ): Promise<VerifierBindings> {
   return {
     orchestratorRegistry: await verifier.orchestratorRegistry({ blockTag }),
@@ -122,16 +122,17 @@ async function readUpv4(
   };
 }
 
-/** Exact creation input binds the artifact and constructor arguments to the mined deployment. */
+/** Exact creation input binds the reference bytecode and constructor arguments to the mined deployment. */
 export function assertPinnedUpv4Transaction(
-  transaction: providers.TransactionResponse | null, artifact: ArtifactData, args: string[],
+  transaction: providers.TransactionResponse | null, reference: Pick<Deployment, "abi" | "bytecode">, args: string[],
 ): void {
   assert.ok(transaction, "UPV4 deployment transaction missing");
   assertAddress(transaction.from, PINS.deployer, "UPV4 deployment transaction from");
   assert.equal(transaction.to, null, "UPV4 deployment transaction must be contract creation (to=null)");
   assert.equal(transaction.nonce, PINS.deployment.deployerNonce, "UPV4 deployment nonce mismatch");
-  const expected = new ContractFactory(artifact.abi, artifact.bytecode).getDeployTransaction(...args).data;
-  assert.ok(typeof expected === "string", "UPV4 artifact creation input missing");
+  assert.ok(reference.bytecode, "UPV4 reference bytecode missing");
+  const expected = new ContractFactory(reference.abi, reference.bytecode).getDeployTransaction(...args).data;
+  assert.ok(typeof expected === "string", "UPV4 reference creation input missing");
   assert.equal(lower(transaction.data), lower(expected), "UPV4 creation input mismatch");
 }
 
@@ -155,32 +156,41 @@ export function assertPinnedUpv4Runtime(runtime: string, compiled: string): void
   assert.equal(metadata(runtime), metadata(compiled), "UPV4 runtime metadata mismatch");
 }
 
-export function assertPinnedUpv4Record(record: Deployment, artifact: ArtifactData, args: string[]): void {
+export function assertPinnedUpv4Record(record: Deployment, args: string[]): void {
   assertAddress(record.address, PINS.unifiedPaymentVerifierV4, "UPV4 record address");
   assert.equal(record.transactionHash, PINS.deployment.transactionHash, "UPV4 record transactionHash mismatch");
   assert.ok(Array.isArray(record.args), "UPV4 record args missing");
   assertOrder(record.args, args, "UPV4 record args");
   assert.ok(record.receipt?.from, "UPV4 record receipt.from missing");
   assertAddress(record.receipt.from, PINS.deployer, "UPV4 record receipt.from");
-  assert.equal(record.deployedBytecode, artifact.deployedBytecode, "UPV4 record deployedBytecode mismatch");
+  assert.equal(record.receipt.status, 1, "UPV4 record receipt status mismatch");
+  assert.equal(record.receipt.blockNumber, PINS.deployment.blockNumber, "UPV4 record receipt block mismatch");
+  assert.ok(record.receipt.contractAddress, "UPV4 record receipt contractAddress missing");
+  assertAddress(record.receipt.contractAddress, PINS.unifiedPaymentVerifierV4, "UPV4 record receipt contractAddress");
+  assert.equal(record.receipt.transactionHash, PINS.deployment.transactionHash, "UPV4 record receipt transactionHash mismatch");
+  assert.ok(record.metadata, "UPV4 record metadata missing");
+  const metadata: unknown = JSON.parse(record.metadata);
+  assert.ok(metadata && typeof metadata === "object" && "output" in metadata, "UPV4 record metadata output missing");
+  assert.ok(metadata.output && typeof metadata.output === "object" && "abi" in metadata.output, "UPV4 record ABI missing from metadata");
+  assert.deepEqual(record.abi, metadata.output.abi, "UPV4 record ABI mismatch with metadata");
 }
 
 /** Provider and deployment storage come from the injected HRE; this path never obtains an account. */
 export async function verifyPinnedUpv4(hre: HardhatRuntimeEnvironment) {
   const { provider } = hre.ethers;
   assert.equal((await provider.getNetwork()).chainId, PINS.chainId, "Base chainId mismatch");
-  const artifact = await hre.deployments.getExtendedArtifact(DEPLOYMENT_NAME);
-  assert.ok(artifact.deployedBytecode, "UPV4 artifact runtime code missing");
   const args = [PINS.orchestratorRegistry, PINS.nullifierRegistryV2, PINS.multiAttestationVerifier];
   const record = await hre.deployments.getOrNull(DEPLOYMENT_NAME);
-  if (record) assertPinnedUpv4Record(record, artifact, args);
-  assertPinnedUpv4Transaction(await provider.getTransaction(PINS.deployment.transactionHash), artifact, args);
+  if (record) assertPinnedUpv4Record(record, args);
+  const reference = record ?? await hre.deployments.getExtendedArtifact(DEPLOYMENT_NAME);
+  assert.ok(reference.deployedBytecode, "UPV4 reference runtime code missing");
+  assertPinnedUpv4Transaction(await provider.getTransaction(PINS.deployment.transactionHash), reference, args);
   const receipt = await provider.getTransactionReceipt(PINS.deployment.transactionHash);
   assertPinnedUpv4Receipt(receipt);
   const blockTag = await provider.getBlockNumber();
-  assertPinnedUpv4Runtime(await provider.getCode(PINS.unifiedPaymentVerifierV4, blockTag), artifact.deployedBytecode);
+  assertPinnedUpv4Runtime(await provider.getCode(PINS.unifiedPaymentVerifierV4, blockTag), reference.deployedBytecode);
   // Construct with the provider explicitly: HRE's default getContractAt may obtain an account.
-  const verifier = new Contract(PINS.unifiedPaymentVerifierV4, artifact.abi, provider) as UnifiedPaymentVerifierV4;
+  const verifier = new Contract(PINS.unifiedPaymentVerifierV4, reference.abi, provider);
   assertBindings(await readBindings(verifier, blockTag), baseBindings(), DEPLOYMENT_NAME);
   const domain = utils._TypedDataEncoder.hashDomain({
     name: "UnifiedPaymentVerifier", version: "1", chainId: PINS.chainId, verifyingContract: PINS.unifiedPaymentVerifierV4,
@@ -188,7 +198,7 @@ export async function verifyPinnedUpv4(hre: HardhatRuntimeEnvironment) {
   assert.equal(await verifier.DOMAIN_SEPARATOR({ blockTag }), domain, "UnifiedPaymentVerifierV4 DOMAIN_SEPARATOR mismatch");
   assertAddress(await verifier.owner({ blockTag }), PINS.safe, "UPV4 owner");
   assertOrder(await verifier.getPaymentMethods({ blockTag }), baseCutoverConfig().routes.map((route) => route.method), "UPV4 catalog");
-  return { artifact, args, receipt, record };
+  return { reference, args, receipt, record };
 }
 
 async function transact(hre: HardhatRuntimeEnvironment, transaction: Promise<ContractTransaction>): Promise<number> {
@@ -297,7 +307,7 @@ export async function upv4RoutesActive(hre: HardhatRuntimeEnvironment): Promise<
   const pvr = await hre.ethers.getContractAt("PaymentVerifierRegistry", (await hre.deployments.get("PaymentVerifierRegistry")).address) as PaymentVerifierRegistry;
   const catalog = await readCatalog(pvr, blockTag);
   if (catalog.methods.length > 0 && catalog.verifiers.every((verifier) => same(verifier, upv3.address))) return false;
-  const upv4 = await hre.ethers.getContractAt(DEPLOYMENT_NAME, record.address) as UnifiedPaymentVerifierV4;
+  const upv4 = new Contract(record.address, record.abi, hre.ethers.provider);
   const nrv2 = await hre.ethers.getContractAt("NullifierRegistryV2", (await hre.deployments.get("NullifierRegistryV2")).address) as NullifierRegistryV2;
   const legacyRecord = await hre.deployments.getOrNull("NullifierRegistry");
   const legacy = legacyRecord ? await hre.ethers.getContractAt("NullifierRegistry", legacyRecord.address) as NullifierRegistry : null;
@@ -311,10 +321,10 @@ export function createUpv4DeploymentLane(): DeployFunction {
     if (network === "localhost" || network === "hardhat") return deployLocal(hre);
     if (network !== "base") return;
     assert.equal(process.env.DEPLOY_ACTIVE_TAG, TAG, `Lane 47 requires DEPLOY_ACTIVE_TAG=${TAG}`);
-    const { artifact, args, receipt, record } = await verifyPinnedUpv4(hre);
+    const { reference, args, receipt, record } = await verifyPinnedUpv4(hre);
     if (record) return;
     await hre.deployments.save(DEPLOYMENT_NAME, {
-      ...artifact, address: PINS.unifiedPaymentVerifierV4, args,
+      ...reference, address: PINS.unifiedPaymentVerifierV4, args,
       transactionHash: PINS.deployment.transactionHash, receipt,
     });
     await verifyPinnedUpv4(hre);

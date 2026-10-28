@@ -545,6 +545,7 @@ function laneFixture(context, network = "base") {
       "function DOMAIN_SEPARATOR() view returns (bytes32)", "function getPaymentMethods() view returns (bytes32[])"],
     bytecode: "0x60006000a161010003", deployedBytecode: "0x60006000a161010003",
   };
+  artifact.metadata = JSON.stringify({ output: { abi: artifact.abi } });
   const iface = new utils.Interface(artifact.abi);
   const records = new Map(Object.entries({
     OrchestratorRegistry: pins.orchestratorRegistry, NullifierRegistryV2: pins.nullifierRegistryV2,
@@ -554,7 +555,7 @@ function laneFixture(context, network = "base") {
   }).map(([name, address]) => [name, { address }]));
   const state = {
     chainId: local ? 31337 : 8453, deployer: pins.deployer, block: 53210521,
-    writes: [], saves: [], accounts: [], reads: [], missingCode: new Set(), model, legacyWriters: [],
+    writes: [], saves: [], accounts: [], reads: [], artifactReads: 0, missingCode: new Set(), model, legacyWriters: [],
     upv4Bindings: [...args], upv4Owner: local ? pins.deployer : pins.safe,
     upv4Methods: local ? [] : [...EXPECTED_METHODS], domain: undefined,
     runtime: "0x60016001a161010003",
@@ -621,7 +622,7 @@ function laneFixture(context, network = "base") {
       getOrNull: async (name) => records.get(name) ?? null,
       get: async (name) => { assert.ok(records.has(name), `missing ${name}`); return records.get(name); },
       getArtifact: async () => artifact,
-      getExtendedArtifact: async () => artifact,
+      getExtendedArtifact: async () => { state.artifactReads++; return artifact; },
       save: async (name, record) => { state.saves.push({ name, record }); records.set(name, record); },
       deploy: async (name, options) => {
         assert.equal(name, lane.DEPLOYMENT_NAME);
@@ -640,7 +641,7 @@ function laneFixture(context, network = "base") {
         _isProvider: true,
         getNetwork: async () => ({ chainId: state.chainId }),
         getBlockNumber: async () => state.block,
-        getTransaction: async (hash) => { assert.equal(hash, state.receipt?.transactionHash ?? pins.deployment.transactionHash); return state.transaction; },
+        getTransaction: async (hash) => { assert.equal(hash, pins.deployment.transactionHash); return state.transaction; },
         getTransactionReceipt: async (hash) => { assert.equal(hash, pins.deployment.transactionHash); return state.receipt; },
         getCode: async (address, blockTag) => read("code", state.missingCode.has(address) ? "0x" : state.runtime, { blockTag }),
         call: async (request, blockTag) => {
@@ -654,7 +655,7 @@ function laneFixture(context, network = "base") {
   };
   const func = lane.createUpv4DeploymentLane();
   function recordUpv4(count = 13, owner = pins.safe) {
-    records.set(lane.DEPLOYMENT_NAME, { ...artifact, address: UPV4, transactionHash: state.receipt.transactionHash,
+    records.set(lane.DEPLOYMENT_NAME, { ...clone(artifact), address: UPV4, transactionHash: state.receipt.transactionHash,
       args: [...args], receipt: { ...state.receipt } });
     state.upv4Methods = EXPECTED_METHODS.slice(0, count);
     state.upv4Owner = owner;
@@ -687,9 +688,50 @@ test("tagged Base adoption saves exactly one pinned record without accounts or c
   assert.deepEqual(f.state.writes, []);
   assert.deepEqual(f.state.accounts, []);
   assert.deepEqual(readdirSync(f.artifactRoot), []);
+  assert.equal(f.state.artifactReads, 1);
   delete process.env.DEPLOY_ACTIVE_TAG;
   assert.equal(await f.skip(), true);
+  assert.equal(f.state.artifactReads, 1);
 });
+
+test("recorded Base verification ignores later compiled artifact changes", async (context) => {
+  const f = laneFixture(context);
+  f.recordUpv4();
+  f.artifact.abi = [];
+  f.artifact.metadata = JSON.stringify({ output: { abi: [] } });
+  f.artifact.bytecode = "0x6000";
+  f.artifact.deployedBytecode = "0x6000";
+  f.hre.deployments.getExtendedArtifact = async () => assert.fail("recorded verification must not load compiled artifacts");
+  f.hre.ethers.getContractAt = async () => assert.fail("recorded verification must use the record ABI and provider");
+  delete process.env.DEPLOY_ACTIVE_TAG;
+  assert.equal(await f.skip(), true);
+  process.env.DEPLOY_ACTIVE_TAG = f.lane.TAG;
+  await f.run();
+  assert.deepEqual(f.state.saves, []);
+  assert.deepEqual(f.state.writes, []);
+  assert.deepEqual(f.state.accounts, []);
+});
+
+test("the committed Base record satisfies the pinned record checks", (context) => {
+  const f = laneFixture(context);
+  const record = JSON.parse(readFileSync(resolve(ROOT, "deployments/base/UnifiedPaymentVerifierV4.json"), "utf8"));
+  f.lane.assertPinnedUpv4Record(record, f.args);
+});
+
+for (const [field, value, expected] of [
+  ["bytecode", "0x60016000a161010003", /creation input/],
+  ["deployedBytecode", "0x60006000a162010003", /runtime metadata/],
+]) {
+  test(`Base adoption rejects compiled ${field} drift against the deployment`, async (context) => {
+    const f = laneFixture(context);
+    f.artifact[field] = value;
+    await assert.rejects(f.run(), expected);
+    assert.equal(f.state.artifactReads, 1);
+    assert.deepEqual(f.state.saves, []);
+    assert.deepEqual(f.state.writes, []);
+    assert.deepEqual(f.state.accounts, []);
+  });
+}
 
 test("skip requires tagged adoption only when Base has no record", async (context) => {
   const f = laneFixture(context);
@@ -753,21 +795,33 @@ for (const [name, mutate, expected] of adoptionFailures) {
   });
 }
 
-for (const [name, mutate] of [
+for (const [name, mutate, expected = /record/i] of [
   ["address", (r) => { r.address = OTHER_ADDRESS; }],
   ["transactionHash", (r) => { r.transactionHash = constants.HashZero; }],
   ["args", (r) => { r.args.reverse(); }],
   ["missing args", (r) => { delete r.args; }],
+  ["empty ABI", (r) => { r.abi = []; }, /record ABI/],
+  ["ABI differs from metadata", (r) => { r.abi.pop(); }, /record ABI/],
+  ["missing metadata", (r) => { delete r.metadata; }, /metadata/],
+  ["malformed metadata", (r) => { r.metadata = "{"; }, /JSON/],
+  ["missing metadata ABI", (r) => { r.metadata = JSON.stringify({ output: {} }); }, /record ABI/],
+  ["bytecode", (r) => { r.bytecode = "0x60016000a161010003"; }, /creation input/],
+  ["missing bytecode", (r) => { delete r.bytecode; }, /bytecode/],
   ["receipt.from", (r) => { r.receipt.from = OTHER_ADDRESS; }],
+  ["receipt.status", (r) => { r.receipt.status = 0; }],
+  ["receipt.blockNumber", (r) => { r.receipt.blockNumber++; }],
+  ["receipt.contractAddress", (r) => { r.receipt.contractAddress = OTHER_ADDRESS; }],
+  ["receipt.transactionHash", (r) => { r.receipt.transactionHash = constants.HashZero; }],
   ["missing receipt", (r) => { delete r.receipt; }],
-  ["deployedBytecode", (r) => { r.deployedBytecode = "0x6000"; }],
+  ["deployedBytecode", (r) => { r.deployedBytecode = "0x6000"; }, /runtime/],
+  ["deployedBytecode metadata", (r) => { r.deployedBytecode = "0x60006000a162010003"; }, /runtime metadata/],
 ]) {
   test(`recorded Base rejects record ${name} drift before saving`, async (context) => {
     const f = laneFixture(context);
     f.recordUpv4();
     mutate(f.records.get(f.lane.DEPLOYMENT_NAME));
-    await assert.rejects(f.skip(), /record/i);
-    await assert.rejects(f.run(), /record/i);
+    await assert.rejects(f.skip(), expected);
+    await assert.rejects(f.run(), expected);
     assert.deepEqual(f.state.saves, []);
     assert.deepEqual(f.state.writes, []);
     assert.deepEqual(f.state.accounts, []);
@@ -836,6 +890,11 @@ test("upv4RoutesActive recognizes only complete routes with safe replay writers"
   const active = () => f.lane.upv4RoutesActive(f.hre);
   assert.equal(await active(), false);
   f.recordUpv4();
+  const getContractAt = f.hre.ethers.getContractAt;
+  f.hre.ethers.getContractAt = async (name, address) => {
+    assert.notEqual(name, f.lane.DEPLOYMENT_NAME, "active UPV4 reads must use the record ABI");
+    return getContractAt(name, address);
+  };
   assert.equal(await active(), false);
   f.state.model.store.get(EXPECTED_METHODS[0]).verifier = UPV4;
   await assert.rejects(active(), /route/);
