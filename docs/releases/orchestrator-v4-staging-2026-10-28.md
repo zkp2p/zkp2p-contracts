@@ -58,3 +58,42 @@ Before any separately approved broadcast, the exact final source SHA still
 needs green complete Foundry CI and Release readiness (including coverage and
 Codecov), plus a fresh nonce/ownership preflight. Local preparation checks do
 not replace those gates. No deployer key is needed for this preparation.
+
+## Preparation validation
+
+Read-only inspection at block `53195224` passed the baseline, reused bytecode,
+wiring, catalog, pending-nonce and clean-source gates. The configured deployer
+had nonce `60`, pending nonce `60`, and `0.041313152764110917 ETH`. All four
+mutable registries belonged to that deployer; `requiredOwnershipChanges` was
+empty. V1 and the October 16 O4 were paused with counters `290` and `38`; O3
+remained registered, unpaused, and wired to its pinned hook. There were no
+inspection warnings. Separate read-only enumeration confirmed the added
+relayer `0xBC6Ca58369853D77a9A2f33358334BF9E9B9094F`.
+
+`base_staging.json` required no edits: ownership and signer nonces are read live,
+and the additional relayer does not change the pinned O3 configuration. The
+gating service and all bytecode, wiring, catalog and witness pins are unchanged.
+
+| Command | Result |
+| --- | --- |
+| `yarn install` | Passed; dependencies were initially absent |
+| `forge build` | Passed; existing mutability/lint warnings only |
+| `forge test --match-path 'test-foundry/**/OrchestratorV4StackDeployment.t.sol'` | 19 passed |
+| `yarn test:orchestrator-v4-release` | 28 passed |
+| `yarn test:release-policy` | 114 passed, including archive integrity/export checks |
+| `yarn typecheck:dispute-deployment` | Passed |
+| `yarn pkg:extract` | Passed, including canonical Hardhat compilation and TypeChain |
+| `yarn pkg:build` | Passed |
+| `yarn workspace @zkp2p/contracts-v2 test` | 13 passed across 3 suites |
+| `yarn workspace @zkp2p/contracts-v2 verify:release` | Passed: 84 deployment-backed entries, 34 source ABI exports |
+
+The runner tests and `pkg:extract` used
+`HARDHAT_CONFIG=hardhat.canonical.config.ts HARDHAT_NETWORK=hardhat` to clear
+unused remote accounts while retaining public local fixtures. The runner suite
+includes the eight-contract deploy/resume/activate/verify regression (the
+successor of the former seven-contract rehearsal). Its first focused invocation
+was blocked by missing Hardhat artifacts; the full suite passed after extraction.
+All transactions in these tests were confined to local in-memory chains. No live
+deployment, activation, source-verification submission, publication, key access,
+or push was performed. The current manifest and eight current Hardhat record
+names remain absent for the separately authorized deployment.
