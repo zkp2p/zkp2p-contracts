@@ -125,6 +125,16 @@ contract UnifiedPaymentVerifierV4BaseCutoverTest is Test {
         _assertWriterCall(targets[0], data[0], NullifierRegistryV2.removeWritePermission.selector, UPV3);
     }
 
+    function test_SignedMultiSendMatchesTransactionBuilder() public onBaseFork {
+        address transactionBuilderMultiSend = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
+        address signedMultiSend = 0xA1dabEF33b3B82c7814B6D82A79e50F4AC44102B;
+        bytes32 expectedCodehash = 0xa9865ac2d9c7a1591619b188c4d88167b50df6cc0c5327fcbd1c8c75f7c066ad;
+        assertGt(transactionBuilderMultiSend.code.length, 0);
+        assertGt(signedMultiSend.code.length, 0);
+        assertEq(keccak256(transactionBuilderMultiSend.code), expectedCodehash);
+        assertEq(keccak256(signedMultiSend.code), expectedCodehash);
+    }
+
     function _snapshotPreState() internal {
         assertEq(block.chainid, 8453);
         assertEq(registry.owner(), SAFE);

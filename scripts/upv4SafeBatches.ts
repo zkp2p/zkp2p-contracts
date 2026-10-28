@@ -77,9 +77,15 @@ function verify(): void {
   const transaction = buildSafeTransaction(calls, UPV4_BASE_RELEASE.cutoverSafeNonce);
   const hash = safeTransactionHash(transaction);
   assert.equal(hash, UPV4_BASE_RELEASE.cutoverSafeTxHash, "UPV4 cutover safeTxHash mismatch");
+  const signedTransaction = { ...transaction, to: UPV4_BASE_RELEASE.signedCutover.multiSendCallOnly };
+  const signedHash = safeTransactionHash(signedTransaction);
+  assert.equal(signedHash, UPV4_BASE_RELEASE.signedCutover.safeTxHash, "UPV4 signed cutover safeTxHash mismatch");
   process.stdout.write(formatUpv4PlanMarkdown(plan));
   process.stdout.write(`MultiSend target=${transaction.to} operation=${transaction.operation} ` +
     `data keccak=${utils.keccak256(transaction.data)} safeTxHash=${hash}\n`);
+  process.stdout.write(`MultiSend target=${signedTransaction.to} operation=${signedTransaction.operation} ` +
+    `data keccak=${utils.keccak256(signedTransaction.data)} safeTxHash=${signedHash}\n`);
+  process.stdout.write(`Signed cutover URL=${UPV4_BASE_RELEASE.signedCutover.url}\n`);
 }
 
 function main(args: string[]): void {

@@ -191,6 +191,12 @@ export const UPV4_BASE_RELEASE = {
   },
   cutoverSafeNonce: 86,
   cutoverSafeTxHash: "0xe22ba698b10018c270a658525412b5e9cd81db2a4f42f9dd58983b639a2f8c70",
+  signedCutover: {
+    multiSendCallOnly: "0xA1dabEF33b3B82c7814B6D82A79e50F4AC44102B",
+    safeTxHash: "0x710ad4142115590996a2e9bc30af493252ad2a0a4a9e00b947d666277c447057",
+    url: "https://app.safe.global/transactions/tx?safe=base:0x0bC26FF515411396DD588Abd6Ef6846E04470227&id=multisig_0x0bC26FF515411396DD588Abd6Ef6846E04470227_0x710ad4142115590996a2e9bc30af493252ad2a0a4a9e00b947d666277c447057",
+  },
+  multiSendCallOnlyCodehash: "0xa9865ac2d9c7a1591619b188c4d88167b50df6cc0c5327fcbd1c8c75f7c066ad",
   paymentRoutes: [
     { method: "alipay", currencies: ["CNY"] },
     { method: "chime", currencies: ["USD"] },

@@ -71,6 +71,12 @@ test("pins the exact Base block, addresses, catalog order, currencies and endpoi
     },
     cutoverSafeNonce: 86,
     cutoverSafeTxHash: "0xe22ba698b10018c270a658525412b5e9cd81db2a4f42f9dd58983b639a2f8c70",
+    signedCutover: {
+      multiSendCallOnly: "0xA1dabEF33b3B82c7814B6D82A79e50F4AC44102B",
+      safeTxHash: "0x710ad4142115590996a2e9bc30af493252ad2a0a4a9e00b947d666277c447057",
+      url: "https://app.safe.global/transactions/tx?safe=base:0x0bC26FF515411396DD588Abd6Ef6846E04470227&id=multisig_0x0bC26FF515411396DD588Abd6Ef6846E04470227_0x710ad4142115590996a2e9bc30af493252ad2a0a4a9e00b947d666277c447057",
+    },
+    multiSendCallOnlyCodehash: "0xa9865ac2d9c7a1591619b188c4d88167b50df6cc0c5327fcbd1c8c75f7c066ad",
   });
   assert.equal(pins.safe, MULTI_SIG.base);
   assert.deepEqual(paymentRoutes, EXPECTED_ROUTES);
@@ -86,7 +92,7 @@ test("pins the exact Base block, addresses, catalog order, currencies and endpoi
   assert.equal(Object.keys(require.cache).some((file) => file.includes("/hardhat/")), false);
 });
 
-test("cutover matches the imported Safe transaction at nonce 86 without loading Hardhat", () => {
+test("cutover locks both Safe hashes at nonce 86 with only the MultiSend target changed", () => {
   const { buildSafeTransaction, safeTransactionHash } = require("./proposeSafeBatchChunks.ts");
   const calls = buildUpv4SafeCalls(Kind.Cutover, baseCutoverConfig(), UPV4).map(encodeUpv4SafeCall);
   const transaction = buildSafeTransaction(calls.map((call) => ({ ...call, operation: 0 })), 86);
@@ -95,6 +101,15 @@ test("cutover matches the imported Safe transaction at nonce 86 without loading 
   assert.equal(utils.hexDataLength(transaction.data), 6916);
   assert.equal(utils.keccak256(transaction.data), "0x6d61bafbe0947c6db17eec69fedd7b485062d712ee66c7cbb3dacd3575d9ae58");
   assert.equal(safeTransactionHash(transaction), "0xe22ba698b10018c270a658525412b5e9cd81db2a4f42f9dd58983b639a2f8c70");
+  assert.equal(transaction.nonce, UPV4_BASE_RELEASE.cutoverSafeNonce);
+  for (const field of ["value", "safeTxGas", "baseGas", "gasPrice"]) assert.equal(transaction[field], "0");
+  for (const field of ["gasToken", "refundReceiver"]) assert.equal(transaction[field], constants.AddressZero);
+  assert.ok(UPV4_BASE_RELEASE.signedCutover, "signed cutover pins missing");
+  const signedTransaction = { ...transaction, to: UPV4_BASE_RELEASE.signedCutover.multiSendCallOnly };
+  assert.equal(signedTransaction.to, "0xA1dabEF33b3B82c7814B6D82A79e50F4AC44102B");
+  assert.deepEqual(Object.keys(transaction).filter((key) => transaction[key] !== signedTransaction[key]), ["to"]);
+  assert.equal(safeTransactionHash(signedTransaction), "0x710ad4142115590996a2e9bc30af493252ad2a0a4a9e00b947d666277c447057");
+  assert.equal(safeTransactionHash(signedTransaction), UPV4_BASE_RELEASE.signedCutover.safeTxHash);
   assert.equal(Object.keys(require.cache).some((file) => file.includes("/hardhat/")), false);
 });
 
@@ -405,7 +420,9 @@ function cliFixture(context) {
     mkdirSync(resolve(root, directory), { recursive: true });
   }
   symlinkSync(resolve(ROOT, "node_modules"), resolve(root, "node_modules"));
-  for (const file of ["deployments/upv4BaseCutover.ts", "deployments/parameters.ts", "deployments/safeArtifacts.ts",
+  symlinkSync(resolve(ROOT, "utils"), resolve(root, "utils"));
+  copyFileSync(resolve(ROOT, "deployments/parameters.ts"), resolve(root, "deployments/parameters.ts"));
+  for (const file of ["deployments/upv4BaseCutover.ts", "deployments/safeArtifacts.ts",
     "scripts/proposeSafeBatchChunks.ts"]) {
     symlinkSync(resolve(ROOT, file), resolve(root, file));
   }
@@ -471,6 +488,11 @@ test("CLI write requires the pinned record, renders six files, archives changes 
   assert.match(checked.stdout, /operation[=: ]+1/);
   assert.match(checked.stdout, /0x6d61bafbe0947c6db17eec69fedd7b485062d712ee66c7cbb3dacd3575d9ae58/);
   assert.match(checked.stdout, /0xe22ba698b10018c270a658525412b5e9cd81db2a4f42f9dd58983b639a2f8c70/);
+  assert.deepEqual(checked.stdout.split("\n").filter((line) => line.startsWith("MultiSend target=")), [
+    "MultiSend target=0x40A2aCCbd92BCA938b02010E17A5b8929b49130D operation=1 data keccak=0x6d61bafbe0947c6db17eec69fedd7b485062d712ee66c7cbb3dacd3575d9ae58 safeTxHash=0xe22ba698b10018c270a658525412b5e9cd81db2a4f42f9dd58983b639a2f8c70",
+    "MultiSend target=0xA1dabEF33b3B82c7814B6D82A79e50F4AC44102B operation=1 data keccak=0x6d61bafbe0947c6db17eec69fedd7b485062d712ee66c7cbb3dacd3575d9ae58 safeTxHash=0x710ad4142115590996a2e9bc30af493252ad2a0a4a9e00b947d666277c447057",
+  ]);
+  assert.ok(checked.stdout.includes(UPV4_BASE_RELEASE.signedCutover.url));
   assert.equal(fixture.run(["write"]).status, 0);
   assert.equal(existsSync(resolve(batchDirectory, "superseded")), false);
   const file = fixture.batchFile(Kind.Cutover);
@@ -488,6 +510,26 @@ test("CLI write requires the pinned record, renders six files, archives changes 
   }
   assert.equal(fixture.run(["verify"]).status, 0);
 });
+
+for (const [field, incorrect] of [
+  ["safeTxHash", constants.HashZero],
+  ["multiSendCallOnly", "0x40A2aCCbd92BCA938b02010E17A5b8929b49130D"],
+]) {
+  test(`verify CLI rejects an incorrect signed cutover ${field}`, (context) => {
+    const fixture = cliFixture(context);
+    writeFileSync(resolve(fixture.root, "deployments/base/UnifiedPaymentVerifierV4.json"), JSON.stringify({ address: UPV4 }));
+    fixture.writeBatches();
+    assert.ok(UPV4_BASE_RELEASE.signedCutover, "signed cutover pins missing");
+    const parametersFile = resolve(fixture.root, "deployments/parameters.ts");
+    const parameters = readFileSync(parametersFile, "utf8");
+    const changed = parameters.replace(UPV4_BASE_RELEASE.signedCutover[field], incorrect);
+    assert.notEqual(changed, parameters);
+    writeFileSync(parametersFile, changed);
+    const rejected = fixture.run(["verify"]);
+    assert.equal(rejected.status, 1);
+    assert.match(rejected.stderr, /UPV4 signed cutover safeTxHash mismatch/);
+  });
+}
 
 test("verify CLI checks the pinned provenance and all six exact files", (context) => {
   const fixture = cliFixture(context);
