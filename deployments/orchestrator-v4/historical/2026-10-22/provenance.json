@@ -1,0 +1,106 @@
+{
+  "sourceCommit": "cd849c5383a274a4c970d7bb6231e032285fd9a2",
+  "recordCommit": "1ce7384a93a8f7f86f323a53cdcb257eafe1b8eb",
+  "files": [
+    {
+      "originalPath": "deployments/base_staging/StakeVaultV2.json",
+      "path": "deployments/base_staging/StakeVaultV2Historical20261022.json",
+      "sha256": "ad9cfd83bf8d892ae91e5aaedfa2492af0acdcad25cbfb31917943bfb419b2a4"
+    },
+    {
+      "originalPath": "deployments/base_staging/AddressGroupRegistryV4.json",
+      "path": "deployments/base_staging/AddressGroupRegistryV4Historical20261022.json",
+      "sha256": "b1dc6e2aa8668e0c32d097e31c5bb157c8213ba0c9a3fd3b0ff4c51665eda439"
+    },
+    {
+      "originalPath": "deployments/base_staging/WhitelistPolicyV2.json",
+      "path": "deployments/base_staging/WhitelistPolicyV2Historical20261022.json",
+      "sha256": "a4aa92424d39fec571de0131a3cb09da49fe41affdae9f57f198f8212a7bc800"
+    },
+    {
+      "originalPath": "deployments/base_staging/DisputeProtectionPolicyV2.json",
+      "path": "deployments/base_staging/DisputeProtectionPolicyV2Historical20261022.json",
+      "sha256": "d595e4c62c8eaec65b99ed9057a740ac19d39919429e8e265f2209d73411dbff"
+    },
+    {
+      "originalPath": "deployments/base_staging/UnifiedPaymentVerifierV4.json",
+      "path": "deployments/base_staging/UnifiedPaymentVerifierV4Historical20261022.json",
+      "sha256": "7356c74be1ad9410930b084737a6646b035b0dcb7a7234d12eb27ff1b1e4f89b"
+    },
+    {
+      "originalPath": "deployments/base_staging/OrchestratorV4.json",
+      "path": "deployments/base_staging/OrchestratorV4Historical20261022.json",
+      "sha256": "6c38d38081df7908d585880fd3182442734ebb1233b7c384ee51ea1de63b73f8"
+    },
+    {
+      "originalPath": "deployments/base_staging/ProtocolViewerV4.json",
+      "path": "deployments/base_staging/ProtocolViewerV4Historical20261022.json",
+      "sha256": "d2de0d99e33c6cb82aa6bace07326b65b8e96f2d71ed769bbc80118468238807"
+    },
+    {
+      "originalPath": "deployments/outputs/orchestrator-v4-base_staging.json",
+      "path": "deployments/orchestrator-v4/historical/2026-10-22/orchestrator-v4-base_staging.json",
+      "sha256": "b3e6613f8742c1580f959ba62fef39367f78a42cd6ef5fd96f1197d27b43eba5"
+    },
+    {
+      "originalPath": "deployments/orchestrator-v4/baseline-base-staging-2026-10-22.json",
+      "path": "deployments/orchestrator-v4/historical/2026-10-22/baseline-base-staging-2026-10-22.json",
+      "sha256": "6818197633939da994383618b023e608ee11bac6711a1403e71a891b148a197d"
+    },
+    {
+      "originalPath": "deployments/orchestrator-v4/legacy-drain-signals.json",
+      "path": "deployments/orchestrator-v4/historical/2026-10-22/legacy-drain-signals.json",
+      "sha256": "1d54c29d1727f7126dd1efc1d10ebb1c6ec4ad21546d8a8aa5ffbb58a402604c"
+    },
+    {
+      "originalPath": "deployments/orchestrator-v4/owned-privacy-migration.json",
+      "path": "deployments/orchestrator-v4/historical/2026-10-22/owned-privacy-migration.json",
+      "sha256": "90aca291e877c978b0ff36322635ce3bb0d669cdf39f93516c3ae4fb14ce3536"
+    },
+    {
+      "originalPath": "deployments/orchestrator-v4/passive-contract-smoke.json",
+      "path": "deployments/orchestrator-v4/historical/2026-10-22/passive-contract-smoke.json",
+      "sha256": "acf0cda1ddfedf7b990bf4278decbf675b814fb131adc85d8c0495436bd5cde2"
+    },
+    {
+      "originalPath": "deployments/orchestrator-v4/passive-deployment-plan.json",
+      "path": "deployments/orchestrator-v4/historical/2026-10-22/passive-deployment-plan.json",
+      "sha256": "cbcd621f896a581ea51b6ce2a81d9ab6f3fd826f4b174131b6b0c03f514f3482"
+    },
+    {
+      "originalPath": "deployments/orchestrator-v4/passive-deployment-receipts.json",
+      "path": "deployments/orchestrator-v4/historical/2026-10-22/passive-deployment-receipts.json",
+      "sha256": "1d3b56dcf6ba726efe6a3cae4d0d9924a74355eb8f472553388110266fb28cc7"
+    },
+    {
+      "originalPath": "deployments/orchestrator-v4/pay-curator-funding.json",
+      "path": "deployments/orchestrator-v4/historical/2026-10-22/pay-curator-funding.json",
+      "sha256": "a0df6d31041239fd160a7610d40a9eadd4f460a628b88a08d9fca32b79e7b0c7"
+    },
+    {
+      "originalPath": "deployments/orchestrator-v4/pay-group-bootstrap.json",
+      "path": "deployments/orchestrator-v4/historical/2026-10-22/pay-group-bootstrap.json",
+      "sha256": "bc10d45064e689b30c24796ba90531ce15cb13ae91e5ebe4f5a7f400e764fba3"
+    },
+    {
+      "originalPath": "deployments/orchestrator-v4/privacy-receipt-verification.json",
+      "path": "deployments/orchestrator-v4/historical/2026-10-22/privacy-receipt-verification.json",
+      "sha256": "1bb05b3fdabc5a4cfd2e67eca52a3f0e184311f94af2b6966b5c00dc6b16dfe8"
+    },
+    {
+      "originalPath": "deployments/orchestrator-v4/private-policy-checkpoint.json",
+      "path": "deployments/orchestrator-v4/historical/2026-10-22/private-policy-checkpoint.json",
+      "sha256": "67c3fbdb94e0040ad1f85f716314be21152834675b860498c8590eff7658e37c"
+    },
+    {
+      "originalPath": "deployments/orchestrator-v4/remaining-private-deposit-calls.json",
+      "path": "deployments/orchestrator-v4/historical/2026-10-22/remaining-private-deposit-calls.json",
+      "sha256": "25c08d4b2ab6427ce8d30d2bca030a75b4bdc65e4d3953fb7b970d6ba130e0d6"
+    },
+    {
+      "originalPath": "deployments/orchestrator-v4/retired-orchestrators-drain-checkpoint.json",
+      "path": "deployments/orchestrator-v4/historical/2026-10-22/retired-orchestrators-drain-checkpoint.json",
+      "sha256": "97073289c43c7d9a12390fa2959b3726487ab68145589415fafa6342bc975cc6"
+    }
+  ]
+}

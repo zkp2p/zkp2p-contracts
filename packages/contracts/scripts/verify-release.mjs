@@ -95,6 +95,13 @@ const sourceAbiArtifacts = {
   StakeVaultV2Historical20261016: "deployments/base_staging/StakeVaultV2Historical20261016.json",
   OrchestratorV4Historical20261016: "deployments/base_staging/OrchestratorV4Historical20261016.json",
   UnifiedPaymentVerifierV4Historical20261016: "deployments/base_staging/UnifiedPaymentVerifierV4Historical20261016.json",
+  StakeVaultV2Historical20261022: "deployments/base_staging/StakeVaultV2Historical20261022.json",
+  AddressGroupRegistryV4Historical20261022: "deployments/base_staging/AddressGroupRegistryV4Historical20261022.json",
+  WhitelistPolicyV2Historical20261022: "deployments/base_staging/WhitelistPolicyV2Historical20261022.json",
+  DisputeProtectionPolicyV2Historical20261022: "deployments/base_staging/DisputeProtectionPolicyV2Historical20261022.json",
+  UnifiedPaymentVerifierV4Historical20261022: "deployments/base_staging/UnifiedPaymentVerifierV4Historical20261022.json",
+  OrchestratorV4Historical20261022: "deployments/base_staging/OrchestratorV4Historical20261022.json",
+  ProtocolViewerV4Historical20261022: "deployments/base_staging/ProtocolViewerV4Historical20261022.json",
 };
 const requiredDisputeContracts = [
   "DisputeNullifierRegistry",

@@ -91,7 +91,7 @@ After the pause, supply `legacySignals` alongside the existing drain evidence:
 `unlock` is required only for a remaining V1 mapping. This example is schematic;
 the complete inventory, query response and post-pause block must be supplied.
 The complete pre-pause signal references are preserved in
-`deployments/orchestrator-v4/legacy-drain-signals.json`; references remain useful,
+`deployments/orchestrator-v4/historical/2026-10-22/legacy-drain-signals.json`; references remain useful,
 but their existence does not replace fresh post-pause chain reads and indexer
 evidence. Full historical log enumeration independently matched all 290/38 refs.
 The migrated deployer's separate activation runner still enforces the complete

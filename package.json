@@ -67,7 +67,7 @@
     "test:retire-dispute-risk-windows": "node --test scripts/retire-dispute-risk-windows.spec.cjs",
     "test:propose-safe-batch-chunks": "node --test scripts/test-propose-safe-batch-chunks.cjs",
     "test:v3-groups-deployment": "node scripts/test-v3-groups-base-deployment.cjs prepare-resume && node scripts/test-v3-groups-base-deployment.cjs reject-mismatch && node scripts/test-v3-groups-base-deployment.cjs managed-hook-guard && node scripts/test-v3-groups-base-deployment.cjs managed-hook-no-rollback && node scripts/test-v3-groups-base-deployment.cjs managed-hook-successor-policy && node scripts/test-v3-groups-base-deployment.cjs managed-hook-bytecode-mismatch && node scripts/test-v3-groups-base-deployment.cjs managed-hook-historical-successor && node scripts/test-v3-groups-base-deployment.cjs managed-hook-unrecognized-live",
-    "test:release-policy": "node --test scripts/verify-github-environment.spec.mjs scripts/npm-release.spec.mjs",
+    "test:release-policy": "node --test scripts/verify-github-environment.spec.mjs scripts/npm-release.spec.mjs scripts/orchestrator-v4-history.spec.cjs",
     "test:staging-signer-config": "node --test scripts/staging-signer-config.spec.cjs",
     "typechain": "hardhat typechain",
     "transpile": "tsc",

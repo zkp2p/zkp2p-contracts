@@ -1,12 +1,19 @@
-# Orchestrator V4 staging release
+# Orchestrator V4 staging release — October 22 history
 
-Status: all seven fresh contracts are deployed and pass bytecode, constructor,
-wiring, ownership, payment-catalog and escrow-compatibility verification. The
-suite remains unregistered and inactive. Activation is blocked until the four
-mutable staging registries belong to the migrated staging deployer, both
-incompatible predecessors are paused and drained, and existing private deposits
-enable the fresh whitelist. Seven of eighteen privacy migrations are complete;
-eleven still require their owners. Production is unchanged.
+Status, 2026-10-28: the seven October 22 contracts are historical and remain
+inactive. Their exact Hardhat records use `Historical20261022`; their manifest
+and all committed evidence are under
+`deployments/orchestrator-v4/historical/2026-10-22/`. The archive's
+`provenance.json` pins the original paths, record commit and SHA-256 of every
+unchanged file. Historical paths inside those files retain their original meaning.
+The canonical manifest path is free for a fresh eight-contract deployment from
+the final PR #362 preparation commit. See the
+[successor preparation](orchestrator-v4-staging-2026-10-28.md).
+
+The operational observations and completed checklist below describe October 22,
+not readiness or authorization for the successor. All seven privacy migrations
+and both groups below belong only to the archived policy/registry; none carry
+forward to the fresh suite. Do not execute the archived remaining-deposit calls.
 
 Source update, 2026-10-23: main now includes #361 (the attested UPV4 snapshot
 ends with the intent owner) and #363 (O4 delegates signal admission to
@@ -54,7 +61,7 @@ The old O3 hook uses method-scoped `WhitelistPolicy` at
 `0xF79aAD1BAaB617fF3Eb299225c80893F22F743Fe`. Its complete indexed checkpoint across every escrow at
 block `52938535` contains 27 enabled method tuples across 25 deposit IDs; every
 tuple was independently checked on-chain at that block. The evidence is in
-`deployments/orchestrator-v4/private-policy-checkpoint.json`.
+`deployments/orchestrator-v4/historical/2026-10-22/private-policy-checkpoint.json`.
 
 Eighteen deposits still exist: `0, 1, 4, 6, 13, 18, 19, 24, 25, 29, 48, 60, 65,
 66, 84, 97, 138, 139`. Deposits `98, 129, 130, 131, 132, 133, 134` have been
@@ -200,7 +207,7 @@ before concurrent Pay intents are exercised. `allowMultipleIntents` stays false;
 serial staging tests do not require this permission. Fulfillment is permissionless
 and the isolated fulfillment signer needs no relayer registration.
 
-The [passive deployment plan](../../deployments/orchestrator-v4/passive-deployment-plan.json)
+The [passive deployment plan](../../deployments/orchestrator-v4/historical/2026-10-22/passive-deployment-plan.json)
 records a Base fork rehearsal: 23 fresh-suite transactions, nonces 26–48 and
 13,279,823 execution gas. At block 52938969 the RPC quoted a 0.001 gwei tip
 and 0.005 gwei base fee, yielding approximately 0.000079678938 ETH execution
@@ -293,8 +300,10 @@ Deployment source: `cd849c5383a274a4c970d7bb6231e032285fd9a2`. All 23 transactio
 confirmed canonical block hashes, signer and nonce, 13,279,823 execution gas,
 0.000079678938 ETH execution fees and 0.000000656081824076 ETH L1 data fees.
 The total 0.000080335019824076 ETH exactly equals the signer balance decrease.
-The confirmed manifest is `deployments/outputs/orchestrator-v4-base_staging.json`.
-The seven ordinary Hardhat records are under `deployments/base_staging/`.
+The confirmed historical manifest is
+`deployments/orchestrator-v4/historical/2026-10-22/orchestrator-v4-base_staging.json`.
+The seven Hardhat records are under `deployments/base_staging/` with the
+`Historical20261022` suffix, retaining their exact deployed ABIs and bytecode.
 
 | Contract | Address / Basescan | Deployment transaction | Block |
 |---|---|---|---|
@@ -378,7 +387,7 @@ is canonical at block 52939787, block hash
 `0x7369bae26124ff72e3ae4660c93e679c47b907042a427afa438dbd294fe33d75`.
 Initial preconfirmation metadata was reconciled from this same transaction with
 read-only receipt/block/transaction queries; no second transfer was signed.
-The journal is `deployments/orchestrator-v4/pay-curator-funding.json`.
+The journal is `deployments/orchestrator-v4/historical/2026-10-22/pay-curator-funding.json`.
 
 ### Confirmed staging policy configuration
 
@@ -396,13 +405,13 @@ before/after at blocks 52940535/52940551. This sequence did not write old escrow
 old whitelist, or new allowlists. Its total fee was 0.000003005382105212 ETH,
 including L1 data. Full calls/pre/post state are in `owned-privacy-migration.json`;
 independent receipt/event/cost checks are in `privacy-receipt-verification.json`,
-both under `deployments/orchestrator-v4/`.
+both under `deployments/orchestrator-v4/historical/2026-10-22/`.
 
 At block 52940573, eleven of eighteen existing private deposits still needed
 owner action. Each call targets fresh `WhitelistPolicyV2`
 `0xe034B9C59063DBad5F632c38515e75C24F625503`, chain 8453, value zero,
 `setEnabled(0x77e8f808FE201075e0bD651CD46fdF239fc83265, depositId, true)`.
-`deployments/orchestrator-v4/remaining-private-deposit-calls.json` contains every
+`deployments/orchestrator-v4/historical/2026-10-22/remaining-private-deposit-calls.json` contains every
 exact sender and calldata. Existing privacy must remain protected before activation.
 
 | Required sender | Deposit IDs |

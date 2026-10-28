@@ -77,6 +77,13 @@ export const HISTORICAL_ABI_DEPLOYMENTS = [
   "StakeVaultV2Historical20261016",
   "OrchestratorV4Historical20261016",
   "UnifiedPaymentVerifierV4Historical20261016",
+  "StakeVaultV2Historical20261022",
+  "AddressGroupRegistryV4Historical20261022",
+  "WhitelistPolicyV2Historical20261022",
+  "DisputeProtectionPolicyV2Historical20261022",
+  "UnifiedPaymentVerifierV4Historical20261022",
+  "OrchestratorV4Historical20261022",
+  "ProtocolViewerV4Historical20261022",
 ] as const;
 
 function ensureDir(dir: string) {

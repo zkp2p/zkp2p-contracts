@@ -6,11 +6,12 @@ Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, an
 
 - Exports the `IntentSignalPolicy` source ABI and the Orchestrator V4 ABI that
   delegates signal admission to it (gating signature, deposit whitelist, group
-  arbitrator and multiple-intent limit).
+  arbitrator). O4 allows multiple concurrent intents for every account.
 - Exports the payment verifier V4 ABI whose attested snapshot ends with the
   intent owner.
-- Keeps the October 22 staging addresses. Those contracts run the rc.8 source and
-  do not implement these ABIs until the next staging deployment. This candidate
+- Preserves the October 22 staging addresses and deployed ABIs only under
+  `Historical20261022` aliases. Current names are absent until the fresh
+  eight-contract deployment is recorded. This candidate
   is consumed as a branch tarball; no npm registry tag changes.
 
 ## Candidate 0.4.4-rc.8
