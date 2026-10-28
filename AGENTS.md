@@ -384,5 +384,8 @@ afterward; reject impossible states instead of handling them.
 
 ## Security & Configuration Tips
 
-- Never commit secrets. Configure `.env` (`ALCHEMY_API_KEY`, `BASE_DEPLOY_PRIVATE_KEY`, `BASESCAN_API_KEY`, etc.).
+- Never commit secrets. Configure `.env` (`ALCHEMY_API_KEY`, `BASE_DEPLOYER_KEY`, `STAGING_DEPLOYER_KEY`, `BASESCAN_API_KEY`, etc.).
+- Production uses `BASE_DEPLOYER_KEY` for `0x41123d6419C7b8e44157f6F3b0088442116641eC`. Delete the retired
+  `BASE_DEPLOY_PRIVATE_KEY`; its signer `0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929` was compromised on
+  2026-10-28 and must never sign again.
 - For local dev: import Hardhat Account #0 into your wallet, then `yarn deploy:localhost`.
