@@ -166,6 +166,13 @@ export function assertBaseline(c: ReleaseConfig, snapshot: Awaited<ReturnType<ty
   check(c.retainedDisputeWriters.every((w) => snapshot.disputeWriters.some((x) => same(w, x))) && snapshot.disputeWriters.every((w) => c.retainedDisputeWriters.some((x) => same(w, x)) || (freshPolicy && same(w, freshPolicy))), "Dispute writer set changed");
 }
 
+/** The read-only fresh-release check is identical to the first deployment gate. */
+export function assertFreshDeploymentPreflight(c: ReleaseConfig, snapshot: Awaited<ReturnType<typeof inspect>>): void {
+  if (c.environment === "base") assertRegistryOwnership(snapshot);
+  assertBaseline(c, snapshot);
+  check(snapshot.signer.nonce === snapshot.signer.pendingNonce, "Signer has pending transactions");
+}
+
 /** Write the signed transaction before sending. An interrupted run only rebroadcasts these exact bytes. */
 export class TransactionJournal<M extends Pick<Manifest, "transactions"> & { configuration: Pick<ReleaseConfig, "chainId"> } = Manifest> {
   constructor(readonly path: string, readonly manifest: M, readonly wallet: Wallet | VoidSigner) {}
@@ -513,7 +520,17 @@ async function main(): Promise<void> {
   const c: unknown = JSON.parse(readFileSync(configPath, "utf8")); validateConfig(c);
   check(c.environment === environment && c.chainId === 8453, "Live deployment requires the selected environment on Base 8453");
   const manifestPath = resolve(`deployments/outputs/orchestrator-v4-${environment}.json`);
-  if (action === "inspect") { const snapshot = await inspect(hre, c); atomicJson(`${manifestPath}.preflight`, snapshot); console.log(JSON.stringify(snapshot, null, 2)); return; }
+  if (action === "inspect") {
+    const snapshot = await inspect(hre, c);
+    atomicJson(`${manifestPath}.preflight`, snapshot);
+    if (!existsSync(manifestPath)) {
+      assertFreshDeploymentPreflight(c, snapshot);
+      const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+      assertReleaseProvenance(sourceCommit, undefined, environment);
+    }
+    console.log(JSON.stringify(snapshot, null, 2));
+    return;
+  }
   let wallet: Wallet | VoidSigner;
   if (action === "deploy" || action === "activate") {
     const keyName = environment === "base_staging" ? "STAGING_DEPLOYER_KEY" : "O4_PRODUCTION_DEPLOYER_KEY";
@@ -539,9 +556,7 @@ async function main(): Promise<void> {
     } else {
       check(action === "deploy", "No deployment manifest exists; run deploy first");
       const baseline = await inspect(hre, c);
-      if (c.environment === "base") assertRegistryOwnership(baseline);
-      assertBaseline(c, baseline);
-      check(baseline.signer.nonce === baseline.signer.pendingNonce, "Signer has pending transactions");
+      assertFreshDeploymentPreflight(c, baseline);
       manifest = { version: 1, sourceCommit, configurationHash: hash(c), configuration: c, baseline, transactions: [], activationDrainEvidence: null, contracts: {}, verification: {}, governanceTransactions: [] };
     }
     const journal = new TransactionJournal(action === "verify" ? `${manifestPath}.verification` : manifestPath, manifest, wallet);

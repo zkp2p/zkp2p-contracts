@@ -6,7 +6,7 @@ const { join } = require("node:path");
 const { test } = require("node:test");
 const hre = require("hardhat");
 const { ContractFactory, VoidSigner, Wallet, utils, constants } = require("ethers");
-const { inspect, assertBaseline, validateConfig, TransactionJournal, deploySuite, activate, verifySuite, activationTransactions, DRAIN_QUERY, recordDrainEvidence, assertPrivateDepositsPreserved } = require("./deploy-orchestrator-v4.ts");
+const { inspect, assertFreshDeploymentPreflight, assertBaseline, validateConfig, TransactionJournal, deploySuite, activate, verifySuite, activationTransactions, DRAIN_QUERY, recordDrainEvidence, assertPrivateDepositsPreserved } = require("./deploy-orchestrator-v4.ts");
 
 // Public Hardhat fixture account. Never load a service or production signer in these tests.
 const wallet = Wallet.fromMnemonic("test test test test test test test test test test test junk").connect(hre.ethers.provider);
@@ -79,6 +79,20 @@ async function fixture() {
   await recordDrainEvidence(hre, journal, await drainEvidence());
   return { config, deployed, directory, path, manifest, journal };
 }
+
+test("fresh inspect and deployment share baseline and pending-nonce rejection", async () => {
+  const f = await fixture();
+  try {
+    const snapshot = await inspect(hre, f.config);
+    assert.doesNotThrow(() => assertFreshDeploymentPreflight(f.config, snapshot));
+    assert.throws(() => assertFreshDeploymentPreflight(f.config, { ...snapshot, signer: { ...snapshot.signer, pendingNonce: snapshot.signer.nonce + 1 } }), /Signer has pending transactions/);
+    assert.throws(() => assertFreshDeploymentPreflight(f.config, { ...snapshot, predecessor: { ...snapshot.predecessor, lifecycleHook: constants.AddressZero } }), /O3 registration, pause or lifecycle hook changed/);
+    assert.throws(() => assertFreshDeploymentPreflight(f.config, { ...snapshot, nullifierWriters: [other] }), /Unexpected payment nullifier writer/);
+    assert.throws(() => assertFreshDeploymentPreflight({ ...f.config, environment: "base" }, { ...snapshot, requiredOwnershipChanges: [{ name: "OrchestratorRegistry", owner: other, requiredOwner: wallet.address }] }), /Activation ownership missing/);
+    assert.equal(await wallet.getTransactionCount(), snapshot.signer.nonce);
+    assert.equal(f.manifest.transactions.length, 0);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
 
 test("RPC and signer pins fail before the first deployment", async () => {
   const f = await fixture();
