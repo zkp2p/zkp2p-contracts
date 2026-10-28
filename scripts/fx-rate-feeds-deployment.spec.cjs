@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 process.env.DEPLOY_TX_DELAY_MS = "0";
 process.env.ALCHEMY_API_KEY ||= "offline";
-process.env.BASE_DEPLOY_PRIVATE_KEY ||= "1".repeat(64);
+process.env.BASE_DEPLOYER_KEY ||= "1".repeat(64);
 process.env.TESTNET_DEPLOY_PRIVATE_KEY ||= "2".repeat(64);
 require(require.resolve("ts-node/register/transpile-only"));
 require(require.resolve("module-alias/register"));

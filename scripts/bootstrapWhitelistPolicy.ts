@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 
 import { BigNumber, Contract, Wallet, ethers } from "ethers";
+import { getDeployerAccounts, RETIRED_DEPLOYERS } from "../utils/deployerKeys";
 
 type ActiveDeposit = {
   escrowAddress: string;
@@ -352,10 +353,19 @@ function normalizeSelectionDigest(value: string, label: string): string {
   return value.toLowerCase();
 }
 
-function normalizePrivateKey(value: string): string {
+function normalizePrivateKey(value: string, retiredDeployers: readonly string[]): string {
   const prefixed = value.startsWith("0x") ? value : `0x${value}`;
   if (!/^0x[0-9a-fA-F]{64}$/.test(prefixed)) {
     throw new Error("BOOTSTRAP_OWNER_PRIVATE_KEY must be a 32-byte hex private key");
+  }
+  let address: string;
+  try {
+    address = new Wallet(prefixed).address;
+  } catch {
+    throw new Error("BOOTSTRAP_OWNER_PRIVATE_KEY private key is invalid");
+  }
+  if (retiredDeployers.some((retired) => retired.toLowerCase() === address.toLowerCase())) {
+    throw new Error("BOOTSTRAP_OWNER_PRIVATE_KEY signer is retired");
   }
   return prefixed;
 }
@@ -393,7 +403,13 @@ function assertMethodScopedPolicyTarget(
   }
 }
 
-function loadConfig(): BootstrapConfig {
+function loadConfig(retiredDeployers: readonly string[] = RETIRED_DEPLOYERS): BootstrapConfig {
+  // This standalone script does not load the Hardhat config.
+  getDeployerAccounts(process.env);
+  const configuredPrivateKey = process.env.BOOTSTRAP_OWNER_PRIVATE_KEY?.trim();
+  const privateKey = configuredPrivateKey
+    ? normalizePrivateKey(configuredPrivateKey, retiredDeployers)
+    : undefined;
   const networkValue = process.env.BOOTSTRAP_NETWORK?.trim() || "base_staging";
   if (networkValue !== "base" && networkValue !== "base_staging") {
     throw new Error("BOOTSTRAP_NETWORK must be base_staging or base");
@@ -457,7 +473,7 @@ function loadConfig(): BootstrapConfig {
     expectedSelectionDigest,
     mode,
     privateKey: execute
-      ? normalizePrivateKey(requireEnvironment("BOOTSTRAP_OWNER_PRIVATE_KEY"))
+      ? privateKey ?? requireEnvironment("BOOTSTRAP_OWNER_PRIVATE_KEY")
       : undefined,
     safeOutputFile: safeOutputFile ? path.resolve(process.cwd(), safeOutputFile) : undefined,
   };
@@ -832,6 +848,103 @@ async function runSelfTest(): Promise<void> {
     `0x${"33".repeat(32)}`,
     `0x${"44".repeat(32)}`,
   ];
+  const selfTestSignerEnvironment = {
+    BASE_DEPLOY_PRIVATE_KEY: process.env.BASE_DEPLOY_PRIVATE_KEY,
+    BOOTSTRAP_NETWORK: process.env.BOOTSTRAP_NETWORK,
+    BOOTSTRAP_WHITELIST_POLICY_ADDRESS: process.env.BOOTSTRAP_WHITELIST_POLICY_ADDRESS,
+    BOOTSTRAP_ESCROW_ADDRESSES: process.env.BOOTSTRAP_ESCROW_ADDRESSES,
+    WHITELIST_GROUP_IDS: process.env.WHITELIST_GROUP_IDS,
+    BOOTSTRAP_EXECUTE: process.env.BOOTSTRAP_EXECUTE,
+    BOOTSTRAP_SAFE_OUTPUT_FILE: process.env.BOOTSTRAP_SAFE_OUTPUT_FILE,
+    BOOTSTRAP_EXPECTED_DEPOSIT_COUNT: process.env.BOOTSTRAP_EXPECTED_DEPOSIT_COUNT,
+    BOOTSTRAP_EXPECTED_SELECTION_DIGEST: process.env.BOOTSTRAP_EXPECTED_SELECTION_DIGEST,
+    BOOTSTRAP_RPC_URL: process.env.BOOTSTRAP_RPC_URL,
+    BOOTSTRAP_INDEXER_GRAPHQL_URL: process.env.BOOTSTRAP_INDEXER_GRAPHQL_URL,
+    BOOTSTRAP_OWNER_PRIVATE_KEY: process.env.BOOTSTRAP_OWNER_PRIVATE_KEY,
+  };
+  try {
+    for (const legacyKey of ["11".repeat(32), ""]) {
+      process.env.BASE_DEPLOY_PRIVATE_KEY = legacyKey;
+      try {
+        loadConfig();
+        throw new Error("Self-test accepted the legacy deployer variable");
+      } catch (error) {
+        if (
+          !(error instanceof Error)
+          || error.message !== "BASE_DEPLOY_PRIVATE_KEY is retired; delete it and use BASE_DEPLOYER_KEY"
+        ) {
+          throw error;
+        }
+      }
+    }
+    delete process.env.BASE_DEPLOY_PRIVATE_KEY;
+    process.env.BOOTSTRAP_NETWORK = "base_staging";
+    process.env.BOOTSTRAP_WHITELIST_POLICY_ADDRESS = policyAddress;
+    process.env.BOOTSTRAP_ESCROW_ADDRESSES = escrowAddress;
+    process.env.WHITELIST_GROUP_IDS = groupIds[0];
+    process.env.BOOTSTRAP_EXPECTED_DEPOSIT_COUNT = "0";
+    process.env.BOOTSTRAP_EXPECTED_SELECTION_DIGEST = groupIds[0];
+    process.env.BOOTSTRAP_RPC_URL = "https://rpc.invalid";
+    process.env.BOOTSTRAP_INDEXER_GRAPHQL_URL = "https://indexer.invalid";
+    const privateKey = "11".repeat(32);
+    const address = new Wallet(`0x${privateKey}`).address;
+    for (const mode of ["dry-run", "safe", "execute"]) {
+      if (mode === "execute") process.env.BOOTSTRAP_EXECUTE = "true";
+      else delete process.env.BOOTSTRAP_EXECUTE;
+      if (mode === "safe") process.env.BOOTSTRAP_SAFE_OUTPUT_FILE = "self-test-safe.json";
+      else delete process.env.BOOTSTRAP_SAFE_OUTPUT_FILE;
+      for (const key of [privateKey, `0x${privateKey}`, ` 0x${privateKey} `]) {
+        process.env.BOOTSTRAP_OWNER_PRIVATE_KEY = key;
+        for (const retired of [address.toLowerCase(), address.toUpperCase()]) {
+          try {
+            loadConfig([retired]);
+            throw new Error(`Self-test accepted a retired bootstrap signer in ${mode} mode`);
+          } catch (error) {
+            if (!(error instanceof Error) || error.message !== "BOOTSTRAP_OWNER_PRIVATE_KEY signer is retired") {
+              throw error;
+            }
+          }
+        }
+        const config = loadConfig();
+        const expectedPrivateKey = mode === "execute" ? `0x${privateKey}` : undefined;
+        if (config.mode !== mode || config.privateKey !== expectedPrivateKey) {
+          throw new Error(`Self-test failed to load a non-retired bootstrap signer in ${mode} mode`);
+        }
+      }
+      for (const key of ["00".repeat(32), `0x${"00".repeat(32)}`]) {
+        process.env.BOOTSTRAP_OWNER_PRIVATE_KEY = key;
+        try {
+          loadConfig();
+          throw new Error(`Self-test accepted an invalid bootstrap private key in ${mode} mode`);
+        } catch (error) {
+          if (!(error instanceof Error) || error.message !== "BOOTSTRAP_OWNER_PRIVATE_KEY private key is invalid") {
+            throw error;
+          }
+        }
+      }
+      for (const key of [undefined, "", " "]) {
+        if (key === undefined) delete process.env.BOOTSTRAP_OWNER_PRIVATE_KEY;
+        else process.env.BOOTSTRAP_OWNER_PRIVATE_KEY = key;
+        if (mode === "execute") {
+          try {
+            loadConfig();
+            throw new Error("Self-test accepted a missing bootstrap private key in execute mode");
+          } catch (error) {
+            if (!(error instanceof Error) || error.message !== "BOOTSTRAP_OWNER_PRIVATE_KEY is required") {
+              throw error;
+            }
+          }
+        } else if (loadConfig().privateKey !== undefined) {
+          throw new Error(`Self-test populated a bootstrap private key in ${mode} mode`);
+        }
+      }
+    }
+  } finally {
+    for (const [name, value] of Object.entries(selfTestSignerEnvironment)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
   const selfTestGroupIds = process.env.WHITELIST_GROUP_IDS;
   try {
     process.env.WHITELIST_GROUP_IDS = groupIds[0];

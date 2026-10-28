@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import { ethers } from "ethers";
+import { getDeployerAccounts, RETIRED_DEPLOYERS } from "../utils/deployerKeys";
 
 import {
   NormalizedSafeBatchTransaction,
@@ -772,6 +773,26 @@ function safeUiLink(safeTxHash: string): string {
   return `${SAFE_UI_BASE_URL}?safe=base:${BASE_SAFE}&id=multisig_${BASE_SAFE}_${safeTxHash}`;
 }
 
+export function getSafeProposerWallet(
+  env: Record<string, string | undefined>,
+  retiredDeployers: readonly string[] = RETIRED_DEPLOYERS
+): ethers.Wallet {
+  // This standalone script does not load the Hardhat config.
+  getDeployerAccounts(env);
+  const privateKey = env.SAFE_PROPOSER_PRIVATE_KEY?.trim();
+  if (!privateKey) throw new Error("SAFE_PROPOSER_PRIVATE_KEY is required");
+  let wallet: ethers.Wallet;
+  try {
+    wallet = new ethers.Wallet(privateKey);
+  } catch {
+    throw new Error("SAFE_PROPOSER_PRIVATE_KEY private key is invalid");
+  }
+  if (retiredDeployers.some((retired) => retired.toLowerCase() === wallet.address.toLowerCase())) {
+    throw new Error("SAFE_PROPOSER_PRIVATE_KEY signer is retired");
+  }
+  return wallet;
+}
+
 export async function runProposeSafeBatchChunks(
   options: CliOptions,
   dependencies: RunDependencies = {}
@@ -781,6 +802,7 @@ export async function runProposeSafeBatchChunks(
   proposedLinks: string[];
 }> {
   const env = dependencies.env || process.env;
+  const wallet = getSafeProposerWallet(env);
   const log = dependencies.log || console.log;
   const maxGas = parsePositiveBigNumber(
     options.maxGas || DEFAULT_MAX_GAS,
@@ -799,20 +821,6 @@ export async function runProposeSafeBatchChunks(
       ? undefined
       : requirePositiveInteger(options.chunkCalls, "chunk-calls");
   const batch = loadTransactionBuilderFile(options.file);
-  const privateKey =
-    env.SAFE_PROPOSER_PRIVATE_KEY?.trim() ||
-    env.BASE_DEPLOY_PRIVATE_KEY?.trim();
-  if (!privateKey) {
-    throw new Error(
-      "SAFE_PROPOSER_PRIVATE_KEY or BASE_DEPLOY_PRIVATE_KEY is required"
-    );
-  }
-  let wallet: ethers.Wallet;
-  try {
-    wallet = new ethers.Wallet(privateKey);
-  } catch {
-    throw new Error("Safe proposer private key is invalid");
-  }
   const rpcUrl =
     env.SAFE_RPC_URL?.trim() ||
     (env.ALCHEMY_API_KEY?.trim()
@@ -990,13 +998,17 @@ async function main(): Promise<void> {
   await runProposeSafeBatchChunks(parseCliArguments(process.argv.slice(2)));
 }
 
-function sanitizeCliError(error: unknown): string {
+export function sanitizeCliError(
+  error: unknown,
+  env: Record<string, string | undefined> = process.env
+): string {
   let message = error instanceof Error ? error.message : String(error);
   for (const secret of [
-    process.env.SAFE_PROPOSER_PRIVATE_KEY,
-    process.env.BASE_DEPLOY_PRIVATE_KEY,
-    process.env.ALCHEMY_API_KEY,
-    process.env.SAFE_RPC_URL,
+    env.SAFE_PROPOSER_PRIVATE_KEY,
+    env.BASE_DEPLOYER_KEY,
+    env.STAGING_DEPLOYER_KEY,
+    env.ALCHEMY_API_KEY,
+    env.SAFE_RPC_URL,
   ]) {
     if (secret && secret.length >= 4)
       message = message.split(secret).join("[redacted]");
