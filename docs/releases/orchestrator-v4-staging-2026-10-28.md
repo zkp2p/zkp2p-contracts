@@ -194,3 +194,35 @@ of those deployment inputs.
 
 These are local tool checks, not live activation evidence. Test transactions use
 only the public Hardhat fixture on its in-memory network.
+
+### Recorded tool pin and keyless drain check
+
+The current manifest now explicitly pins execution tools to
+`a723af5159bf2cb68905a1ce195ecd594e6fcbe5`. Its deployed source remains
+`0749b75f235c6d90079c1e261f46d67778f7c389`, and its configuration hash remains
+`554cb2fd04450bce12a12791388abab10d1643e07a784b4cb856c30b54afa729`.
+The unchanged provenance assertion rejected the old implicit tool pin and
+accepted the new explicit pin with all deployed protected paths unchanged.
+
+The requested keyless `record-drain` command using
+`HARDHAT_CONFIG=hardhat.readonly.config.ts` passed. The manifest contains the
+supplied evidence unchanged: `pausedAtBlock=52945292`, the exact `DRAIN_QUERY`
+response at processed block `53201138`, one O2 `SIGNALED` intent, and the
+authenticated inventories of 290 V1 and 38 October 16 O4 signals. The O2 row is
+not a retired-orchestrator row and remains in the evidence; it was not filtered
+out to make the check pass.
+
+The full 32-call list from `activationTransactions`, decoded to step, target,
+function signature and exact arguments, is committed at
+[`orchestrator-v4-base_staging.activation-transactions.json`](../../deployments/outputs/orchestrator-v4-base_staging.activation-transactions.json).
+Every decoded call was re-encoded and matched the runner's calldata. Every call
+has value zero. There are two writer grants, 14 reverse-order route removals,
+14 original-order route additions, the UPV3 payment-writer revoke, and O4
+registration last. No ownership-acceptance call is needed because staging's
+signer and governance are the same address.
+
+This recording performed no live transaction, signing-key access or push. The
+manifest still has exactly the original 25 deployment transactions and
+`verification.active=false`. No staging public-deposit acceptance has been
+recorded on the live manifest: that evidence must come from the operator's
+explicit input and fresh discovery during the future activation invocation.
