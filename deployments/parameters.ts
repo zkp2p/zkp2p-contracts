@@ -167,6 +167,43 @@ export const BASE_ACTIVE_PAYMENT_METHODS: string[] = [
   "monobank",
 ];
 
+// Lane 47: pinned from Base block 53209611; the lane fails closed on drift.
+export const UPV4_BASE_RELEASE = {
+  pinnedBlock: 53209611,
+  chainId: 8453,
+  deployer: "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+  safe: "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+  orchestratorRegistry: "0xBe9fED15ED7A4B915C03EFcEcb9662739C3382A9",
+  nullifierRegistryV2: "0x5455e761b866dfa6A2f5Dc6d6525825bf9C09aeB",
+  multiAttestationVerifier: "0x9Fe920b24e50e6a6362BA71a1BeB502A99c402d5",
+  paymentVerifierRegistry: "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+  unifiedPaymentVerifierV3: "0xC6F4a193576C60892a47e111Bb5706c30162502B",
+  orchestratorV3: "0x014025fDE093f8701d86e9f38e2C3a9b779cb5c7",
+  stagingUnifiedPaymentVerifierV4: "0x7Da43ba0F85cfb64733216C4A2288f80dFfe1EAb",
+  paymentRoutes: [
+    { method: "alipay", currencies: ["CNY"] },
+    { method: "chime", currencies: ["USD"] },
+    { method: "venmo", currencies: ["USD"] },
+    { method: "revolut", currencies: [
+      "USD", "EUR", "GBP", "SGD", "NZD", "AUD", "CAD", "JPY", "HKD", "MXN", "SAR", "AED",
+      "THB", "TRY", "PLN", "CHF", "ZAR", "CNY", "CZK", "DKK", "HUF", "NOK", "RON", "SEK",
+    ] },
+    { method: "cashapp", currencies: ["USD"] },
+    { method: "wise", currencies: [
+      "USD", "CNY", "EUR", "GBP", "AUD", "NZD", "CAD", "AED", "CHF", "ZAR", "SGD", "ILS",
+      "HKD", "JPY", "PLN", "TRY", "IDR", "KES", "MYR", "MXN", "THB", "VND", "UGX", "CZK",
+      "DKK", "HUF", "INR", "NOK", "PHP", "RON", "SEK",
+    ] },
+    { method: "mercadopago", currencies: ["ARS"] },
+    { method: "zelle", currencies: ["USD"] },
+    { method: "monzo", currencies: ["GBP"] },
+    { method: "paypal", currencies: ["USD", "EUR", "GBP", "SGD", "NZD", "AUD", "CAD"] },
+    { method: "upi", currencies: ["INR"] },
+    { method: "xmoney", currencies: ["USD"] },
+    { method: "monobank", currencies: ["UAH"] },
+  ],
+} as const;
+
 // Base staging can carry a reviewed payment-method candidate before the
 // separately approved production activation. Keep the production list above
 // unchanged until that boundary is explicitly authorized.

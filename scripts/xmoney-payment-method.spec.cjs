@@ -141,6 +141,7 @@ function harness({ mode = "execute", selectedTag = tag, network = "base_staging"
     "node:assert/strict": assert,
     hardhat: dependencies.hardhat,
     "../../deploy/31_deploy_v3_payment_binding_stack": binding,
+    "../../deploy/47_deploy_unified_payment_verifier_v4": { upv4RoutesActive: async () => false },
     "../parameters": parameters,
   }, env).default;
   return {
@@ -197,6 +198,7 @@ test("the mounted lane preserves local deployment and skip behavior", async () =
     "node:assert/strict": assert,
     hardhat: { ethers },
     "../../deploy/31_deploy_v3_payment_binding_stack": { default: historical },
+    "../../deploy/47_deploy_unified_payment_verifier_v4": { upv4RoutesActive: async () => false },
     "../parameters": parameters,
   }, {}).default;
   const hre = { deployments: { getNetworkName: () => "localhost" } };
@@ -204,6 +206,39 @@ test("the mounted lane preserves local deployment and skip behavior", async () =
   await lane(hre);
   assert.deepEqual(calls, [["skip", hre], ["deploy", hre]]);
   assert.deepEqual(lane.tags, historical.tags);
+});
+
+test("the lane 31 wrapper defers to active UPV4 and propagates drift before historical checks", async () => {
+  for (const network of ["localhost", "base"]) {
+    const hre = { deployments: { getNetworkName: () => network } };
+    let drift = false;
+    let checks = 0;
+    const historical = async () => assert.fail("historical deployment must not run");
+    historical.skip = async () => assert.fail("historical skip must not run");
+    const lane = loadLane("../deployments/activeDeploymentLanes/31_deploy_v3_payment_binding_stack.ts", {
+      "node:assert/strict": assert,
+      hardhat: { ethers },
+      "../../deploy/31_deploy_v3_payment_binding_stack": {
+        default: historical,
+        assertPaymentBindingReady: async () => assert.fail("UPV3 readiness must not run"),
+      },
+      "../../deploy/47_deploy_unified_payment_verifier_v4": {
+        upv4RoutesActive: async (actual) => {
+          assert.equal(actual, hre);
+          checks++;
+          if (drift) throw new Error("UPV4 writer drift");
+          return true;
+        },
+      },
+      "../parameters": parameters,
+    }, {}).default;
+    assert.equal(await lane.skip(hre), true);
+    await lane(hre);
+    drift = true;
+    await assert.rejects(lane.skip(hre), /UPV4 writer drift/);
+    await assert.rejects(lane(hre), /UPV4 writer drift/);
+    assert.equal(checks, 4);
+  }
 });
 
 test("lane 31 source is pinned and the runner selects the live wrapper", () => {

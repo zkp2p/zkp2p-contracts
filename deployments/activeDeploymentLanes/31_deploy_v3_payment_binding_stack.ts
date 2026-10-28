@@ -9,6 +9,7 @@ import {
   RATIFIED_PAYMENT_METHOD_ORDER,
 } from "../../deploy/31_deploy_v3_payment_binding_stack";
 import { getActivePaymentMethods } from "../parameters";
+import { upv4RoutesActive } from "../../deploy/47_deploy_unified_payment_verifier_v4";
 
 const historicalLane = require("../../deploy/31_deploy_v3_payment_binding_stack").default as
   DeployFunction & { skip: (hre: HardhatRuntimeEnvironment) => Promise<boolean> };
@@ -53,11 +54,13 @@ async function verifyLivePaymentBinding(hre: HardhatRuntimeEnvironment): Promise
 }
 
 const func: DeployFunction = async (hre) => {
+  if (await upv4RoutesActive(hre)) return;
   if (await verifyLivePaymentBinding(hre)) return;
   await historicalLane(hre);
 };
 
 func.skip = async (hre) => {
+  if (await upv4RoutesActive(hre)) return true;
   if (await verifyLivePaymentBinding(hre)) return true;
   return historicalLane.skip(hre);
 };
