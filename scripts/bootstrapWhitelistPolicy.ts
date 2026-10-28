@@ -138,10 +138,6 @@ const KNOWN_PRODUCTION_GROUPS = {
     name: "Top Chargeback Merchants",
     id: "0xdf1c64c54745aa1ce00642a5874f97e3183bf5e993c1f559d0a37a4df0b803c7",
   },
-  peerPay: {
-    name: "Peer Pay",
-    id: "0x174b8a29536721a3eae290bfd55651b85a53fc334b971d993fa93ed8dde15e48",
-  },
 } as const;
 const KNOWN_PRODUCTION_GROUP_NAMES = new Map<string, string>(
   Object.values(KNOWN_PRODUCTION_GROUPS).map(({ id, name }) => [id, name]),
@@ -257,6 +253,7 @@ Validation-only:
 
 Base safety:
   Every WHITELIST_GROUP_IDS entry must be a known production AddressGroupRegistry group.
+  The retired Peer Pay group is not a bootstrap target and is rejected on Base.
 `);
 }
 
@@ -848,18 +845,24 @@ async function runSelfTest(): Promise<void> {
     if (selfTestGroupIds === undefined) delete process.env.WHITELIST_GROUP_IDS;
     else process.env.WHITELIST_GROUP_IDS = selfTestGroupIds;
   }
-  assertKnownBaseGroupIds([KNOWN_PRODUCTION_GROUPS.peerPay.id]);
-  const unknownGroupId = `0x${"55".repeat(32)}`;
-  try {
-    assertKnownBaseGroupIds([unknownGroupId]);
-    throw new Error("Self-test accepted an unknown Base whitelist group id");
-  } catch (error) {
-    if (
-      !(error instanceof Error)
-      || !error.message.includes(unknownGroupId)
-      || ![...KNOWN_PRODUCTION_GROUP_NAMES.values()].every((name) => error.message.includes(name))
-    ) {
-      throw error;
+  assertKnownBaseGroupIds(Object.values(KNOWN_PRODUCTION_GROUPS).map(({ id }) => id));
+  const rejectedGroupIds = [
+    `0x${"55".repeat(32)}`,
+    // Retired Peer Pay group must never become a known Base bootstrap target again.
+    "0x174b8a29536721a3eae290bfd55651b85a53fc334b971d993fa93ed8dde15e48",
+  ];
+  for (const groupId of rejectedGroupIds) {
+    try {
+      assertKnownBaseGroupIds([groupId]);
+      throw new Error("Self-test accepted an unknown or retired Base whitelist group id");
+    } catch (error) {
+      if (
+        !(error instanceof Error)
+        || !error.message.includes(groupId)
+        || ![...KNOWN_PRODUCTION_GROUP_NAMES.values()].every((name) => error.message.includes(name))
+      ) {
+        throw error;
+      }
     }
   }
   const paymentMethodHash = TARGET_PAYMENT_METHODS[0].hash;
