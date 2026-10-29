@@ -14,10 +14,12 @@ const {
 } = require("./simulate-dispute-opt-in-safe-batch.ts");
 const {
   SAFE_TX_TYPES,
+  getSafeProposerWallet,
   loadTransactionBuilderFile,
   parseCliArguments,
   planSafeBatchChunks,
   runProposeSafeBatchChunks,
+  sanitizeCliError,
   selectStartNonce,
 } = require("./proposeSafeBatchChunks.ts");
 
@@ -38,6 +40,69 @@ const whitelistPolicyInterface = new ethers.utils.Interface([
 const multiSendInterface = new ethers.utils.Interface([
   "function multiSend(bytes transactions)",
 ]);
+
+test("Safe proposals require an explicit proposer key without deployer fallback", async () => {
+  for (const env of [
+    {},
+    { SAFE_PROPOSER_PRIVATE_KEY: " " },
+    { BASE_DEPLOYER_KEY: "11".repeat(32) },
+    { STAGING_DEPLOYER_KEY: "22".repeat(32) },
+  ]) {
+    await assert.rejects(
+      runProposeSafeBatchChunks({ file: "unused.json", propose: true }, { env }),
+      { message: "SAFE_PROPOSER_PRIVATE_KEY is required" }
+    );
+  }
+  assert.equal(
+    getSafeProposerWallet({
+      SAFE_PROPOSER_PRIVATE_KEY: PROPOSER_PRIVATE_KEY,
+      BASE_DEPLOYER_KEY: "11".repeat(32),
+      STAGING_DEPLOYER_KEY: "22".repeat(32),
+    }).address,
+    proposer.address
+  );
+});
+
+test("standalone Safe proposals reject the legacy deployer variable before any I/O", async () => {
+  for (const proposerKey of [undefined, PROPOSER_PRIVATE_KEY]) {
+    for (const legacyKey of ["11".repeat(32), ""]) {
+      await assert.rejects(
+        runProposeSafeBatchChunks(
+          { file: "unused.json", propose: true },
+          { env: { BASE_DEPLOY_PRIVATE_KEY: legacyKey, SAFE_PROPOSER_PRIVATE_KEY: proposerKey } }
+        ),
+        { message: "BASE_DEPLOY_PRIVATE_KEY is retired; delete it and use BASE_DEPLOYER_KEY" }
+      );
+    }
+  }
+});
+
+test("Safe proposals reject retired signers case-insensitively without exposing keys", () => {
+  for (const retired of [proposer.address.toLowerCase(), proposer.address.toUpperCase()]) {
+    assert.throws(
+      () => getSafeProposerWallet({ SAFE_PROPOSER_PRIVATE_KEY: PROPOSER_PRIVATE_KEY }, [retired]),
+      { message: "SAFE_PROPOSER_PRIVATE_KEY signer is retired" }
+    );
+  }
+  assert.throws(
+    () => getSafeProposerWallet({ SAFE_PROPOSER_PRIVATE_KEY: "not-a-private-key" }),
+    { message: "SAFE_PROPOSER_PRIVATE_KEY private key is invalid" }
+  );
+});
+
+test("CLI errors redact proposer, deployer and RPC secrets", () => {
+  const env = {
+    SAFE_PROPOSER_PRIVATE_KEY: PROPOSER_PRIVATE_KEY,
+    BASE_DEPLOYER_KEY: "11".repeat(32),
+    STAGING_DEPLOYER_KEY: "22".repeat(32),
+    ALCHEMY_API_KEY: "dummy-alchemy-secret",
+    SAFE_RPC_URL: "https://rpc.invalid/dummy-token",
+  };
+  const secrets = Object.values(env).join(" ");
+  const expected = Object.values(env).map(() => "[redacted]").join(" ");
+  assert.equal(sanitizeCliError(new Error(secrets), env), expected);
+  assert.equal(sanitizeCliError(secrets, env), expected);
+});
 
 function builder(transactions) {
   return {

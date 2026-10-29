@@ -1,5 +1,4 @@
-import { ethers } from "hardhat";
-import { BigNumber } from "ethers";
+import { BigNumber, ethers } from "ethers";
 
 export const ether = (amount: number | string): BigNumber => {
   const weiString = ethers.utils.parseEther(amount.toString());
