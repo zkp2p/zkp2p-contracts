@@ -5,13 +5,15 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Contract, VoidSigner, constants, utils } from "ethers";
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
+import { UPV4_BASE_RELEASE } from "../deployments/parameters";
 import { installSafeArtifactPair } from "../deployments/safeArtifacts";
 import {
   buildO4SafeCalls, decodeO4SafeBatch, O4_MULTI_SEND_CANDIDATES, O4_SAFE_BATCH_FILES,
   O4SafeBatchKind, O4SafeTransactionCandidate, o4SafeTransactions, renderO4SafeBatch,
   serializeO4SafeBatch, serializeO4SafeBatchSidecar,
 } from "../deployments/orchestratorV4SafeBatches";
-import { Manifest, TransactionJournal, inspect, verifySuite } from "./deploy-orchestrator-v4";
+import { Manifest, TransactionJournal, hash, inspect, verifySuite } from "./deploy-orchestrator-v4";
+import { assertReleaseProvenance } from "./orchestrator-v4-provenance";
 import { BASE_SAFE, SafeTransaction } from "./proposeSafeBatchChunks";
 import { BASE_SAFE_RUNTIME_HASH, MULTI_SEND_CALL_ONLY_RUNTIME_HASH, requireRuntimeHash, restoreHardhatModuleResolution } from "./simulate-dispute-opt-in-safe-batch";
 
@@ -33,6 +35,27 @@ const SAFE_ABI = [
 ];
 const normalized = (values: readonly string[]): string[] => values.map((v) => v.toLowerCase()).sort();
 const sameAddress = (actual: string, expected: string, label: string): void => assert.equal(actual.toLowerCase(), expected.toLowerCase(), label);
+
+/** CLI approval boundary; pure builders and fork rehearsals may use synthetic manifests. */
+export function assertApprovedBaseManifest(manifest: Manifest, root = ROOT): void {
+  const c = manifest.configuration;
+  assert.equal(manifest.configurationHash, hash(c), "Configuration hash mismatch");
+  sameAddress(c.governance, UPV4_BASE_RELEASE.safe, "Safe pin mismatch");
+  for (const [name, expected] of [
+    ["PaymentVerifierRegistry", UPV4_BASE_RELEASE.paymentVerifierRegistry],
+    ["OrchestratorRegistry", UPV4_BASE_RELEASE.orchestratorRegistry],
+    ["NullifierRegistryV2", UPV4_BASE_RELEASE.nullifierRegistryV2],
+    ["UnifiedPaymentVerifierV4", UPV4_BASE_RELEASE.unifiedPaymentVerifierV4],
+  ]) sameAddress(c.existing[name].address, expected, `${name} pin mismatch`);
+  assert.deepEqual(c, JSON.parse(readFileSync(resolve(root, "deployments/orchestrator-v4/base.json"), "utf8")),
+    "Configuration differs from committed Base configuration");
+  // The immutable provenance helper runs synchronous Git commands relative to cwd.
+  const cwd = process.cwd();
+  try {
+    process.chdir(root);
+    assertReleaseProvenance(manifest.sourceCommit, manifest.executionToolCommit, "base");
+  } finally { process.chdir(cwd); }
+}
 
 export function renderO4Artifacts(manifest: Manifest) {
   return Object.values(O4SafeBatchKind).map((kind) => {
@@ -225,6 +248,7 @@ export async function main(args: string[]): Promise<void> {
   const { command, safeNonce } = parseO4SafeBatchArgs(args);
   if (command === Command.Simulate) assertO4ForkEnvironment();
   const manifest: Manifest = JSON.parse(readFileSync(MANIFEST_FILE, "utf8"));
+  assertApprovedBaseManifest(manifest, ROOT);
   if (command === Command.Render) writeO4Artifacts(manifest);
   else verifyO4Artifacts(manifest);
   printO4Batches(manifest, safeNonce);

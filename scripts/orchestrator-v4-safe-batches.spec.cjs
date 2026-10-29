@@ -8,14 +8,106 @@ const { spawnSync } = require("node:child_process");
 const { test } = require("node:test");
 const { constants, utils } = require("ethers");
 const hre = require("hardhat");
-const { NEW_CONTRACTS } = require("./deploy-orchestrator-v4.ts");
+const { NEW_CONTRACTS, hash } = require("./deploy-orchestrator-v4.ts");
+const { UPV4_BASE_RELEASE } = require("../deployments/parameters.ts");
 const {
   buildO4SafeCalls, decodeO4SafeBatch, encodeO4SafeCall, O4SafeBatchKind: Kind,
   O4SafeContract: Contract, O4SafeFunction: Fn, O4_SAFE_BATCH_FILES, O4_MULTI_SEND_CANDIDATES,
   o4SafeTransactions, renderO4SafeBatch, serializeO4SafeBatch, serializeO4SafeBatchSidecar,
 } = require("../deployments/orchestratorV4SafeBatches.ts");
 const { BASE_SAFE, buildSafeTransaction, safeTransactionHash, encodeMultiSendCalldata } = require("./proposeSafeBatchChunks.ts");
-const { writeO4Artifacts, verifyO4Artifacts, parseO4SafeBatchArgs, assertO4ForkEnvironment, assertO4PaymentWriters, resetO4BaseFork, simulateO4SafeBatches } = require("./orchestrator-v4-safe-batches.ts");
+const { assertApprovedBaseManifest, main, renderO4Artifacts, writeO4Artifacts, verifyO4Artifacts, parseO4SafeBatchArgs, assertO4ForkEnvironment, assertO4PaymentWriters, resetO4BaseFork, simulateO4SafeBatches } = require("./orchestrator-v4-safe-batches.ts");
+
+const ROOT = resolve(__dirname, ".."), MANIFEST_FILE = join(ROOT, "deployments/outputs/orchestrator-v4-base.json");
+const committedManifest = () => JSON.parse(readFileSync(MANIFEST_FILE, "utf8"));
+
+test("approved Base manifest matches the committed configuration and release provenance at HEAD", () => {
+  assert.doesNotThrow(() => assertApprovedBaseManifest(committedManifest(), ROOT));
+});
+
+test("approved Base manifest rejects a tampered configuration hash", () => {
+  const m = committedManifest(); m.configurationHash = "0".repeat(64);
+  assert.throws(() => assertApprovedBaseManifest(m, ROOT), /Configuration hash mismatch/);
+});
+
+test("approved Base manifest rejects unapproved configuration even with a recomputed hash", () => {
+  const m = committedManifest(); m.configuration.gatingService = m.configuration.signer;
+  m.configurationHash = hash(m.configuration);
+  assert.throws(() => assertApprovedBaseManifest(m, ROOT), /Configuration differs from committed Base configuration/);
+});
+
+for (const field of ["sourceCommit", "executionToolCommit"]) for (const [name, commit] of [
+  ["short", "526f81d"], ["zero", "0".repeat(40)], ["unknown", "f".repeat(40)],
+]) test(`approved Base manifest rejects ${name} ${field}`, () => {
+  const m = committedManifest(); m[field] = commit;
+  assert.throws(() => assertApprovedBaseManifest(m, ROOT), /full commit SHAs|git merge-base --is-ancestor/);
+});
+
+for (const [name, pin] of [
+  ["PaymentVerifierRegistry", "paymentVerifierRegistry"],
+  ["OrchestratorRegistry", "orchestratorRegistry"],
+  ["NullifierRegistryV2", "nullifierRegistryV2"],
+  ["UnifiedPaymentVerifierV4", "unifiedPaymentVerifierV4"],
+  ["Safe", "safe"],
+]) test(`approved Base manifest rejects a ${name} target differing from UPV4_BASE_RELEASE`, () => {
+  const m = committedManifest(), target = name === "Safe" ? m.configuration : m.configuration.existing[name];
+  const field = name === "Safe" ? "governance" : "address";
+  assert.equal(target[field].toLowerCase(), UPV4_BASE_RELEASE[pin].toLowerCase());
+  target[field] = m.configuration.signer;
+  m.configurationHash = hash(m.configuration);
+  assert.throws(() => assertApprovedBaseManifest(m, ROOT), new RegExp(`${name} pin mismatch`));
+});
+
+test("approval resolves configuration and provenance from the repository root and restores cwd", () => {
+  const m = committedManifest(), cwd = process.cwd(), directory = mkdtempSync(join(tmpdir(), "o4-approval-cwd-"));
+  try {
+    process.chdir(directory);
+    const outsideCwd = process.cwd();
+    assert.doesNotThrow(() => assertApprovedBaseManifest(m, ROOT));
+    assert.equal(process.cwd(), outsideCwd);
+    m.sourceCommit = "0".repeat(40);
+    assert.throws(() => assertApprovedBaseManifest(m, ROOT), /git merge-base --is-ancestor/);
+    assert.equal(process.cwd(), outsideCwd);
+  } finally { process.chdir(cwd); rmSync(directory, { recursive: true, force: true }); }
+});
+
+for (const command of ["render", "verify", "simulate"]) test(`CLI ${command} rejects an unapproved manifest before artifact writes, output or simulation`, async (t) => {
+  const m = committedManifest(); m.configurationHash = "0".repeat(64);
+  t.mock.method(require("node:fs"), "readFileSync", (file, ...args) =>
+    file === MANIFEST_FILE ? JSON.stringify(m) : readFileSync(file, ...args));
+  t.mock.method(require("../deployments/safeArtifacts.ts"), "installSafeArtifactPair", () => assert.fail("Unapproved artifact write"));
+  t.mock.method(console, "log", () => assert.fail("Unapproved batch output"));
+  const env = { HARDHAT_CONFIG: process.env.HARDHAT_CONFIG, HARDHAT_NETWORK: process.env.HARDHAT_NETWORK, BASE_FORK_RPC_URL: process.env.BASE_FORK_RPC_URL };
+  try {
+    Object.assign(process.env, { HARDHAT_CONFIG: join(ROOT, "hardhat.base-fork.config.ts"), HARDHAT_NETWORK: "hardhat", BASE_FORK_RPC_URL: "http://fixture.invalid" });
+    await assert.rejects(main([command, "--safe-nonce", "87"]), /Configuration hash mismatch/);
+  } finally {
+    for (const [key, value] of Object.entries(env)) if (value === undefined) delete process.env[key]; else process.env[key] = value;
+  }
+});
+
+test("CLI verify reproduces committed O4 artifact bytes, sidecars and nonce 87/88 Safe hashes", async (t) => {
+  const m = committedManifest(), directory = join(ROOT, "deployments/outputs/safe-batches");
+  const artifacts = renderO4Artifacts(m);
+  for (const { fileName, contents, sidecar } of artifacts) {
+    assert.equal(contents, readFileSync(join(directory, fileName), "utf8"));
+    assert.equal(sidecar, readFileSync(join(directory, fileName.replace(/\.json$/, ".sha256.json")), "utf8"));
+  }
+  assert.equal(createHash("sha256").update(artifacts.find(({ kind }) => kind === Kind.Activation).contents).digest("hex"),
+    "3cf74dd9c26201e56aeec2b63fa3c1d678fa8feae44f5c7029dead8667b4a190");
+  const activation = o4SafeTransactions(Kind.Activation, buildO4SafeCalls(Kind.Activation, m), 87);
+  assert.deepEqual(activation.map(({ safeTx, safeTxHash }) => ({ to: safeTx.to, nonce: safeTx.nonce, safeTxHash })), [
+    { to: "0x40A2aCCbd92BCA938b02010E17A5b8929b49130D", nonce: 87, safeTxHash: "0xd5d697dcacb8d4718d39b54a4e0d1fa094b340939af9c7307a7a9e0b375be8bc" },
+    { to: "0xA1dabEF33b3B82c7814B6D82A79e50F4AC44102B", nonce: 87, safeTxHash: "0xa09c600337986d8095fd800f6ebd9c36ea684721b56c4b1a8d423b9af58a59b0" },
+  ]);
+  const rollback = o4SafeTransactions(Kind.Rollback, buildO4SafeCalls(Kind.Rollback, m), 88).find(({ safeTx }) => safeTx.operation === 0);
+  assert.equal(rollback.safeTxHash, "0xa18405c2bed0afd7d3193167ebad72296b4497a6566de0a2cb9a0d76687c70e1");
+  const output = t.mock.method(console, "log", () => {});
+  await main(["verify", "--safe-nonce", "87"]);
+  for (const { kind, safeTx, safeTxHash } of [...activation, rollback]) {
+    assert.ok(output.mock.calls.some(({ arguments: [line] }) => line === `${kind}: nonce=${safeTx.nonce} to=${safeTx.to} operation=${safeTx.operation} safeTxHash=${safeTxHash}`));
+  }
+});
 
 const UPV3 = "0x" + "ab".repeat(20), UPV4 = "0x" + "cd".repeat(20), EXTRA_WRITER = "0x" + "ef".repeat(20);
 for (const before of [[UPV4], [UPV3, UPV4]]) test(`payment writers preserve ${before.length === 1 ? "UPV4 alone" : "UPV3 and UPV4"} regardless of order or address case`, () => {
