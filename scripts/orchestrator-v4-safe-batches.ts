@@ -8,7 +8,7 @@ import type { HardhatRuntimeEnvironment } from "hardhat/types";
 import { UPV4_BASE_RELEASE } from "../deployments/parameters";
 import { installSafeArtifactPair } from "../deployments/safeArtifacts";
 import {
-  buildO4SafeCalls, decodeO4SafeBatch, O4_MULTI_SEND_CANDIDATES, O4_SAFE_BATCH_FILES,
+  buildO4SafeCalls, decodeO4SafeBatch, O4_BASE_DEPLOYMENT, O4_MULTI_SEND_CANDIDATES, O4_SAFE_BATCH_FILES,
   O4SafeBatchKind, O4SafeTransactionCandidate, o4SafeTransactions, renderO4SafeBatch,
   serializeO4SafeBatch, serializeO4SafeBatchSidecar,
 } from "../deployments/orchestratorV4SafeBatches";
@@ -49,11 +49,41 @@ export function assertApprovedBaseManifest(manifest: Manifest, root = ROOT, prov
   ]) sameAddress(c.existing[name].address, expected, `${name} pin mismatch`);
   assert.deepEqual(c, JSON.parse(readFileSync(resolve(root, "deployments/orchestrator-v4/base.json"), "utf8")),
     "Configuration differs from committed Base configuration");
+  assert.equal(manifest.sourceCommit, O4_BASE_DEPLOYMENT.sourceCommit, "sourceCommit pin mismatch");
+  assert.equal(manifest.executionToolCommit, undefined, "executionToolCommit pin mismatch");
+  assert.equal(manifest.configurationHash, O4_BASE_DEPLOYMENT.configurationHash, "Configuration hash pin mismatch");
+  sameAddress(c.signer, O4_BASE_DEPLOYMENT.signer, "Signer pin mismatch");
+  const names = Object.keys(O4_BASE_DEPLOYMENT.contracts) as Array<keyof typeof O4_BASE_DEPLOYMENT.contracts>;
+  assert.ok(manifest.contracts, "Missing deployed contracts");
+  assert.deepEqual(Object.keys(manifest.contracts).sort(), [...names].sort(), "Deployed contract names mismatch");
+  assert.ok(Array.isArray(manifest.transactions), "Missing transaction journal");
+  const deployments = manifest.transactions.filter(({ step }) => step.startsWith("deploy:"));
+  for (const { step } of deployments) assert.ok(names.some((name) => step === `deploy:${name}`), "Unexpected deployment journal step");
+  for (const name of names) {
+    const pin = O4_BASE_DEPLOYMENT.contracts[name], record = manifest.contracts[name];
+    assert.ok(record, `Missing deployed ${name}`);
+    sameAddress(record.address, pin.address, `${name} address pin mismatch`);
+    assert.equal(record.transactionHash, pin.transactionHash, `${name} transaction hash pin mismatch`);
+    const transactions = deployments.filter(({ step }) => step === `deploy:${name}`);
+    assert.equal(transactions.length, 1, `${name} deployment journal count mismatch`);
+    const tx = transactions[0];
+    assert.equal(tx.hash, pin.transactionHash, `${name} journal hash pin mismatch`);
+    assert.equal(tx.nonce, pin.nonce, `${name} nonce pin mismatch`);
+    assert.ok(tx.receipt, `${name} deployment receipt missing`);
+    assert.equal(tx.receipt.transactionHash, pin.transactionHash, `${name} receipt hash pin mismatch`);
+    sameAddress(utils.getContractAddress({ from: O4_BASE_DEPLOYMENT.signer, nonce: tx.nonce }), pin.address, `${name} CREATE address mismatch`);
+  }
   // The immutable provenance helper runs synchronous Git commands relative to cwd.
   const cwd = process.cwd();
   try {
     process.chdir(root);
-    provenance(manifest.sourceCommit, manifest.executionToolCommit, "base");
+    try {
+      provenance(manifest.sourceCommit, manifest.executionToolCommit, "base");
+    } catch {
+      assert.fail(`Release provenance failed: run from a checkout with full history where ${O4_BASE_DEPLOYMENT.sourceCommit} ` +
+        "is an ancestor and the protected release paths are unchanged (the #362 merge commit); " +
+        "see docs/releases/orchestrator-v4-base-production.md");
+    }
   } finally { process.chdir(cwd); }
 }
 

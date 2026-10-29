@@ -20,6 +20,9 @@ const { assertApprovedBaseManifest, main, renderO4Artifacts, writeO4Artifacts, v
 
 const ROOT = resolve(__dirname, ".."), MANIFEST_FILE = join(ROOT, "deployments/outputs/orchestrator-v4-base.json");
 const committedManifest = () => JSON.parse(readFileSync(MANIFEST_FILE, "utf8"));
+const PROVENANCE_FAILURE_MESSAGE = "Release provenance failed: run from a checkout with full history where " +
+  "526f81d2ea53f2045b821931b21f7b7e8f15a2c4 is an ancestor and the protected release paths are unchanged " +
+  "(the #362 merge commit); see docs/releases/orchestrator-v4-base-production.md";
 
 test("approved Base manifest matches the committed configuration and delegates release provenance", (t) => {
   const m = committedManifest(), cwd = process.cwd();
@@ -43,14 +46,67 @@ test("approved Base manifest rejects unapproved configuration even with a recomp
 
 for (const field of ["sourceCommit", "executionToolCommit"]) for (const [name, commit] of [
   ["short", "526f81d"], ["zero", "0".repeat(40)], ["unknown", "f".repeat(40)],
-]) test(`approved Base manifest rejects ${name} ${field}`, () => {
+  ["reachable HEAD", execFileSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim()],
+]) test(`approved Base manifest rejects ${name} ${field}`, (t) => {
   const m = committedManifest();
-  // Only the malformed or unknown SHA should fail, even in a depth-one checkout.
-  m.sourceCommit = m.executionToolCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim();
   m[field] = commit;
-  const expected = name === "short" ? /Release provenance requires full commit SHAs/ : new RegExp(`Not a valid commit name ${commit}`);
-  assert.throws(() => assertApprovedBaseManifest(m, ROOT), expected);
+  const provenance = t.mock.fn();
+  assert.throws(() => assertApprovedBaseManifest(m, ROOT, provenance), new RegExp(`${field} pin mismatch`));
+  assert.equal(provenance.mock.callCount(), 0);
 });
+
+test("approved Base manifest rejects executionToolCommit even when it equals the approved source", (t) => {
+  const m = committedManifest(); m.executionToolCommit = m.sourceCommit;
+  const provenance = t.mock.fn();
+  assert.throws(() => assertApprovedBaseManifest(m, ROOT, provenance), /executionToolCommit pin mismatch/);
+  assert.equal(provenance.mock.callCount(), 0);
+});
+
+for (const name of Object.keys(committedManifest().contracts)) {
+  test(`approved Base manifest rejects substituted ${name} with matching governance calldata`, (t) => {
+    const m = committedManifest(), previous = m.contracts[name].address;
+    m.contracts[name].address = BASE_SAFE;
+    const abi = new utils.Interface(Object.values(Fn).map((signature) => `function ${signature}`));
+    for (const tx of m.governanceTransactions) {
+      if (tx.to === previous) tx.to = BASE_SAFE;
+      const decoded = abi.parseTransaction(tx);
+      tx.data = abi.encodeFunctionData(decoded.signature, decoded.args.map((arg) => arg === previous ? BASE_SAFE : arg));
+    }
+    // Internally consistent calldata must not authorize a different deployment.
+    assert.doesNotThrow(() => buildO4SafeCalls(Kind.Activation, m));
+    const provenance = t.mock.fn();
+    assert.throws(() => assertApprovedBaseManifest(m, ROOT, provenance), new RegExp(`${name} address pin mismatch`));
+    assert.equal(provenance.mock.callCount(), 0);
+  });
+
+  for (const [label, mutate, expected] of [
+    ["deploy transaction hash", (m, tx) => { m.contracts[name].transactionHash = tx.hash = tx.receipt.transactionHash = constants.HashZero; }, /transaction hash pin mismatch/],
+    ["journal transaction hash", (_m, tx) => { tx.hash = constants.HashZero; }, /journal hash pin mismatch/],
+    ["journal nonce", (_m, tx) => { tx.nonce++; }, /nonce pin mismatch/],
+    ["missing receipt", (_m, tx) => { tx.receipt = null; }, /deployment receipt missing/],
+    ["receipt transaction hash", (_m, tx) => { tx.receipt.transactionHash = constants.HashZero; }, /receipt hash pin mismatch/],
+    ["duplicate deployment", (m, tx) => { m.transactions.push({ ...tx }); }, /deployment journal count mismatch/],
+    ["missing deployment", (m, tx) => { m.transactions = m.transactions.filter((entry) => entry !== tx); }, /deployment journal count mismatch/],
+    ["missing contract", (m) => { delete m.contracts[name]; }, /Deployed contract names mismatch/],
+  ]) test(`approved Base manifest rejects ${name} ${label}`, (t) => {
+    const m = committedManifest(), tx = m.transactions.find(({ step }) => step === `deploy:${name}`);
+    mutate(m, tx);
+    const provenance = t.mock.fn();
+    assert.throws(() => assertApprovedBaseManifest(m, ROOT, provenance), expected);
+    assert.equal(provenance.mock.callCount(), 0);
+  });
+}
+
+for (const name of ["UnexpectedContract", "UnifiedPaymentVerifierV4"]) {
+  test(`approved Base manifest rejects extra deployed contract ${name}`, (t) => {
+    const m = committedManifest(); m.contracts[name] = { ...m.contracts.StakeVaultV2 };
+    assert.throws(() => assertApprovedBaseManifest(m, ROOT, t.mock.fn()), /Deployed contract names mismatch/);
+  });
+  test(`approved Base manifest rejects extra deployment journal step ${name}`, (t) => {
+    const m = committedManifest(); m.transactions.push({ ...m.transactions[0], step: `deploy:${name}` });
+    assert.throws(() => assertApprovedBaseManifest(m, ROOT, t.mock.fn()), /Unexpected deployment journal step/);
+  });
+}
 
 for (const [name, pin] of [
   ["PaymentVerifierRegistry", "paymentVerifierRegistry"],
@@ -72,13 +128,13 @@ test("approval resolves configuration and provenance from the repository root an
   try {
     process.chdir(directory);
     const outsideCwd = process.cwd();
-    for (const error of [undefined, new Error("Provenance rejected")]) {
+    for (const error of [undefined, new Error("fatal: raw git output must not reach the CLI")]) {
       const provenance = t.mock.fn(() => {
         assert.equal(process.cwd(), ROOT);
         if (error) throw error;
       });
       const approve = () => assertApprovedBaseManifest(m, ROOT, provenance);
-      if (error) assert.throws(approve, (actual) => actual === error);
+      if (error) assert.throws(approve, { name: "AssertionError", message: PROVENANCE_FAILURE_MESSAGE });
       else assert.doesNotThrow(approve);
       assert.equal(provenance.mock.callCount(), 1);
       assert.deepEqual(provenance.mock.calls[0].arguments, [m.sourceCommit, m.executionToolCommit, "base"]);

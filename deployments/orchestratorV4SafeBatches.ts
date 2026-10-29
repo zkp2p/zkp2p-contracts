@@ -41,6 +41,49 @@ export const O4_SAFE_BATCH_FILES: Record<O4SafeBatchKind, string> = {
   [O4SafeBatchKind.Rollback]: "base_o4_rollback.json",
 };
 export const O4_MULTI_SEND_CANDIDATES = [MULTI_SEND_CALL_ONLY, UPV4_BASE_RELEASE.signedCutover.multiSendCallOnly] as const;
+/** Executed Base deployment, cross-checked against the manifest and deployments/base records. */
+export const O4_BASE_DEPLOYMENT = {
+  sourceCommit: "526f81d2ea53f2045b821931b21f7b7e8f15a2c4",
+  configurationHash: "9b3e56c1cd04a2cc6bf4c74119589d2237e96da51264c0b66340f1ef69194512",
+  signer: "0x41123d6419C7b8e44157f6F3b0088442116641eC",
+  contracts: {
+    StakeVaultV2: {
+      address: "0x4aDE08EC1098D0d8856dd7bbBBc7789794089A97",
+      transactionHash: "0x3ef9b7c533a910a1907dd9176a0d802dff36faff2a008e87e5e5ce9aa0e2ea22",
+      nonce: 133,
+    },
+    AddressGroupRegistryV4: {
+      address: "0xDcafc54E4fb47B1d41ADD08dd82142a30ec4706E",
+      transactionHash: "0xc7a433db5f92b1f8c7c568d41037c67fe043a49f94839973556ea030e63910a2",
+      nonce: 134,
+    },
+    WhitelistPolicyV2: {
+      address: "0xF7069D157D1AFb2CbE117e24f4262aE51eeD390c",
+      transactionHash: "0xdfa2da0d92ce5aea2fbeb0e2017917182b7921a2a12d8bc54263e4ee9954839f",
+      nonce: 135,
+    },
+    IntentSignalPolicy: {
+      address: "0x572f1Eb9043a7217C998221D6d3BCfb3D69338cC",
+      transactionHash: "0x93ca8f6fef74e1714dbfffabade4fa51c1f4444ada9fcc93e5da89b3883ef994",
+      nonce: 136,
+    },
+    DisputeProtectionPolicyV2: {
+      address: "0xB49Fa38C6Bb3C8C51ddb13711BB213cDD9DB1799",
+      transactionHash: "0xac51f76ee8d52e151228213cdabd91c7d5a40586ca6e2c610fb662dab0ef6283",
+      nonce: 137,
+    },
+    OrchestratorV4: {
+      address: "0x74c55679268FAfB493864915aD16A320AB8c40Ba",
+      transactionHash: "0x8069432548917838a2ec33d55a001c4f16a38f6a457beb3183cb4a7694410393",
+      nonce: 139,
+    },
+    ProtocolViewerV4: {
+      address: "0x685123dB5fE2b88D00ED3764c088d600D9B2b6Fc",
+      transactionHash: "0xb26b8f4ed08c3046518a957ed36dd7c3edd61666fd9aa4ce89f6b6488da8d0f5",
+      nonce: 142,
+    },
+  },
+} as const;
 const NAMES: Record<O4SafeBatchKind, string> = {
   [O4SafeBatchKind.Activation]: "Base O4 activation",
   [O4SafeBatchKind.Rollback]: "Base O4 pause rollback",
