@@ -80,6 +80,28 @@ const sourceAbiArtifacts = {
   IntentLifecycleHookV1:
     "artifacts/contracts/hooks/IntentLifecycleHookV1.sol/IntentLifecycleHookV1.json",
   StakeVault: "artifacts/contracts/StakeVault.sol/StakeVault.json",
+  StakeVaultV2: "artifacts/contracts/StakeVaultV2.sol/StakeVaultV2.json",
+  WhitelistPolicyV2: "artifacts/contracts/hooks/WhitelistPolicyV2.sol/WhitelistPolicyV2.json",
+  IntentSignalPolicy: "artifacts/contracts/hooks/IntentSignalPolicy.sol/IntentSignalPolicy.json",
+  DisputeProtectionPolicyV2: "artifacts/contracts/hooks/DisputeProtectionPolicyV2.sol/DisputeProtectionPolicyV2.json",
+  UnifiedPaymentVerifierV4: "artifacts/contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol/UnifiedPaymentVerifierV4.json",
+  OrchestratorV4: "artifacts/contracts/OrchestratorV4.sol/OrchestratorV4.json",
+  ProtocolViewerV4: "artifacts/contracts/ProtocolViewerV4.sol/ProtocolViewerV4.json",
+  DisputeProtectionPolicyBypass: "deployments/base_staging/DisputeProtectionPolicyBypass.json",
+  StakeVaultBypass: "deployments/base_staging/StakeVaultBypass.json",
+  IntentLifecycleHookV1Bypass: "deployments/base_staging/IntentLifecycleHookV1Bypass.json",
+  WhitelistPolicyV4: "deployments/base_staging/WhitelistPolicyV4.json",
+  DisputeProtectionPolicyV2Historical20261016: "deployments/base_staging/DisputeProtectionPolicyV2Historical20261016.json",
+  StakeVaultV2Historical20261016: "deployments/base_staging/StakeVaultV2Historical20261016.json",
+  OrchestratorV4Historical20261016: "deployments/base_staging/OrchestratorV4Historical20261016.json",
+  UnifiedPaymentVerifierV4Historical20261016: "deployments/base_staging/UnifiedPaymentVerifierV4Historical20261016.json",
+  StakeVaultV2Historical20261022: "deployments/base_staging/StakeVaultV2Historical20261022.json",
+  AddressGroupRegistryV4Historical20261022: "deployments/base_staging/AddressGroupRegistryV4Historical20261022.json",
+  WhitelistPolicyV2Historical20261022: "deployments/base_staging/WhitelistPolicyV2Historical20261022.json",
+  DisputeProtectionPolicyV2Historical20261022: "deployments/base_staging/DisputeProtectionPolicyV2Historical20261022.json",
+  UnifiedPaymentVerifierV4Historical20261022: "deployments/base_staging/UnifiedPaymentVerifierV4Historical20261022.json",
+  OrchestratorV4Historical20261022: "deployments/base_staging/OrchestratorV4Historical20261022.json",
+  ProtocolViewerV4Historical20261022: "deployments/base_staging/ProtocolViewerV4Historical20261022.json",
 };
 const requiredDisputeContracts = [
   "DisputeNullifierRegistry",
@@ -532,7 +554,7 @@ for (const [contractName, artifactPath] of Object.entries(sourceAbiArtifacts)) {
     fs.readFileSync(requireFile(`abis/contracts/${contractName}.json`), "utf8")
   );
   if (!sameJson(packageAbi, artifact.abi)) {
-    fail(`source ABI ${contractName} does not match its compiled artifact`);
+    fail(`source ABI ${contractName} does not match its canonical artifact`);
   }
   if (
     !sourceEsmWrapper.includes(`as ${contractName}`) ||

@@ -356,9 +356,9 @@ test('derives a future RC release line from the package version', () => {
   );
 });
 
-test('commits the Monobank production catalog RC candidate', () => {
+test('commits the Orchestrator V4 RC candidate', () => {
   const packageManifest = JSON.parse(fs.readFileSync(packageManifestPath, 'utf8'));
-  assert.equal(packageManifest.version, '0.4.4-rc.2');
+  assert.equal(packageManifest.version, '0.4.4-rc.11');
   assert.deepEqual(
     resolveReleasePolicy({
       release: packageManifest.version,

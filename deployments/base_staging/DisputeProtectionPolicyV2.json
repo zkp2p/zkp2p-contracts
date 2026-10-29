@@ -1,0 +1,834 @@
+{
+  "address": "0x0d5a9162161d195577A3a3458524574bb462ccDc",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_owner",
+          "type": "address"
+        },
+        {
+          "internalType": "contract IStakeVaultV2",
+          "name": "_stakeVault",
+          "type": "address"
+        },
+        {
+          "internalType": "contract IDisputeVerifier",
+          "name": "_disputeVerifier",
+          "type": "address"
+        },
+        {
+          "internalType": "contract INullifierRegistry",
+          "name": "_disputeNullifierRegistry",
+          "type": "address"
+        },
+        {
+          "internalType": "contract IOrchestratorRegistry",
+          "name": "_orchestratorRegistry",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "window",
+          "type": "uint256"
+        }
+      ],
+      "name": "InvalidDisputeWindow",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint64",
+          "name": "maturesAt",
+          "type": "uint64"
+        },
+        {
+          "internalType": "uint64",
+          "name": "currentTime",
+          "type": "uint64"
+        }
+      ],
+      "name": "NotMatured",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "OwnershipRenunciationDisabled",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        }
+      ],
+      "name": "ProtectionNotFound",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "caller",
+          "type": "address"
+        }
+      ],
+      "name": "UnauthorizedOrchestrator",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ZeroAddress",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "stakeOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "depositor",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "compensatedAmount",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes32",
+          "name": "disputeId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "DisputeResolved",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousVerifier",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newVerifier",
+          "type": "address"
+        }
+      ],
+      "name": "DisputeVerifierUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnershipTransferStarted",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnershipTransferred",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "depositor",
+          "type": "address"
+        }
+      ],
+      "name": "ProtectionOpened",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        }
+      ],
+      "name": "ProtectionReleased",
+      "type": "event"
+    },
+    {
+      "inputs": [],
+      "name": "MAX_DISPUTE_WINDOW",
+      "outputs": [
+        {
+          "internalType": "uint64",
+          "name": "",
+          "type": "uint64"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "acceptOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "disputeNullifierRegistry",
+      "outputs": [
+        {
+          "internalType": "contract INullifierRegistry",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "disputeVerifier",
+      "outputs": [
+        {
+          "internalType": "contract IDisputeVerifier",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_intentHash",
+          "type": "bytes32"
+        }
+      ],
+      "name": "getProtection",
+      "outputs": [
+        {
+          "components": [
+            {
+              "internalType": "address",
+              "name": "depositor",
+              "type": "address"
+            },
+            {
+              "internalType": "bool",
+              "name": "deferredPayout",
+              "type": "bool"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            }
+          ],
+          "internalType": "struct IDisputeProtectionPolicyV2.Protection",
+          "name": "",
+          "type": "tuple"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "components": [
+            {
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "address",
+              "name": "token",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "taker",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "recipient",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "depositor",
+              "type": "address"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "releaseAmount",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "netAmount",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes",
+              "name": "settlementData",
+              "type": "bytes"
+            }
+          ],
+          "internalType": "struct IIntentSettlementPolicy.SettlementContext",
+          "name": "_context",
+          "type": "tuple"
+        }
+      ],
+      "name": "onDeferredPayoutFunded",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "orchestratorRegistry",
+      "outputs": [
+        {
+          "internalType": "contract IOrchestratorRegistry",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "owner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "pendingOwner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32[]",
+          "name": "_intentHashes",
+          "type": "bytes32[]"
+        }
+      ],
+      "name": "release",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "renounceOwnership",
+      "outputs": [],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_verifier",
+          "type": "address"
+        }
+      ],
+      "name": "setDisputeVerifier",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "components": [
+            {
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "address",
+              "name": "token",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "taker",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "recipient",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "depositor",
+              "type": "address"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "releaseAmount",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "netAmount",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes",
+              "name": "settlementData",
+              "type": "bytes"
+            }
+          ],
+          "internalType": "struct IIntentSettlementPolicy.SettlementContext",
+          "name": "_context",
+          "type": "tuple"
+        }
+      ],
+      "name": "settleIntent",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "deferralVault",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "stakeVault",
+      "outputs": [
+        {
+          "internalType": "contract IStakeVaultV2",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "components": [
+            {
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "dataHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes[]",
+              "name": "signatures",
+              "type": "bytes[]"
+            },
+            {
+              "internalType": "bytes",
+              "name": "data",
+              "type": "bytes"
+            }
+          ],
+          "internalType": "struct IDisputeVerifier.DisputeAttestation",
+          "name": "_attestation",
+          "type": "tuple"
+        }
+      ],
+      "name": "submitDispute",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "transferOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "transactionHash": "0x5320dc7fdcee8b48af48e7b56575d271180c217dfdf2154228b23f4171249697",
+  "receipt": {
+    "to": null,
+    "from": "0x41123d6419C7b8e44157f6F3b0088442116641eC",
+    "contractAddress": "0x0d5a9162161d195577A3a3458524574bb462ccDc",
+    "transactionIndex": 249,
+    "gasUsed": "1264111",
+    "logsBloom": "0x00000004000000000000000000004000000000000000000000800000000000000000000000080000000000000000000000000000000000000000000000000000010000000000000000000000000000000001000000000000000000000000000000000000020000000000000000000800000000000000000000000000000000400000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000000",
+    "blockHash": "0xeb534381b04adc7cedf8c3a677df3f360ae388ca55e6dbcb6fb4d5495d56725f",
+    "transactionHash": "0x5320dc7fdcee8b48af48e7b56575d271180c217dfdf2154228b23f4171249697",
+    "logs": [
+      {
+        "transactionIndex": 249,
+        "blockNumber": 53196150,
+        "transactionHash": "0x5320dc7fdcee8b48af48e7b56575d271180c217dfdf2154228b23f4171249697",
+        "address": "0x0d5a9162161d195577A3a3458524574bb462ccDc",
+        "topics": [
+          "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0",
+          "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "0x00000000000000000000000041123d6419c7b8e44157f6f3b0088442116641ec"
+        ],
+        "data": "0x",
+        "logIndex": 806,
+        "blockHash": "0xeb534381b04adc7cedf8c3a677df3f360ae388ca55e6dbcb6fb4d5495d56725f"
+      },
+      {
+        "transactionIndex": 249,
+        "blockNumber": 53196150,
+        "transactionHash": "0x5320dc7fdcee8b48af48e7b56575d271180c217dfdf2154228b23f4171249697",
+        "address": "0x0d5a9162161d195577A3a3458524574bb462ccDc",
+        "topics": [
+          "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0",
+          "0x00000000000000000000000041123d6419c7b8e44157f6f3b0088442116641ec",
+          "0x00000000000000000000000041123d6419c7b8e44157f6f3b0088442116641ec"
+        ],
+        "data": "0x",
+        "logIndex": 807,
+        "blockHash": "0xeb534381b04adc7cedf8c3a677df3f360ae388ca55e6dbcb6fb4d5495d56725f"
+      }
+    ],
+    "blockNumber": 53196150,
+    "cumulativeGasUsed": "27705463",
+    "status": 1,
+    "byzantium": true
+  },
+  "args": [
+    "0x41123d6419C7b8e44157f6F3b0088442116641eC",
+    "0xe6314251979b6185c6a1A265de82460EB180821c",
+    "0x973578148c5Fd49b9f68B50B26066555325AC708",
+    "0xE0B05a9655AF0f31E32904267baa50FbC7f217ea",
+    "0xfA6384EB6176cfEC049540526A3d2126C3666d8A"
+  ],
+  "numDeployments": 1,
+  "solcInputHash": "8e0bb5a7f8854fa2d018b75154a7be58",
+  "metadata": "{\"compiler\":{\"version\":\"0.8.18+commit.87f61d96\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_owner\",\"type\":\"address\"},{\"internalType\":\"contract IStakeVaultV2\",\"name\":\"_stakeVault\",\"type\":\"address\"},{\"internalType\":\"contract IDisputeVerifier\",\"name\":\"_disputeVerifier\",\"type\":\"address\"},{\"internalType\":\"contract INullifierRegistry\",\"name\":\"_disputeNullifierRegistry\",\"type\":\"address\"},{\"internalType\":\"contract IOrchestratorRegistry\",\"name\":\"_orchestratorRegistry\",\"type\":\"address\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"window\",\"type\":\"uint256\"}],\"name\":\"InvalidDisputeWindow\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"maturesAt\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"currentTime\",\"type\":\"uint64\"}],\"name\":\"NotMatured\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"OwnershipRenunciationDisabled\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"}],\"name\":\"ProtectionNotFound\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"caller\",\"type\":\"address\"}],\"name\":\"UnauthorizedOrchestrator\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroAddress\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"stakeOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"depositor\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"compensatedAmount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"disputeId\",\"type\":\"bytes32\"}],\"name\":\"DisputeResolved\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousVerifier\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newVerifier\",\"type\":\"address\"}],\"name\":\"DisputeVerifierUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferStarted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"depositor\",\"type\":\"address\"}],\"name\":\"ProtectionOpened\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"}],\"name\":\"ProtectionReleased\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"MAX_DISPUTE_WINDOW\",\"outputs\":[{\"internalType\":\"uint64\",\"name\":\"\",\"type\":\"uint64\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"acceptOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"disputeNullifierRegistry\",\"outputs\":[{\"internalType\":\"contract INullifierRegistry\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"disputeVerifier\",\"outputs\":[{\"internalType\":\"contract IDisputeVerifier\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_intentHash\",\"type\":\"bytes32\"}],\"name\":\"getProtection\",\"outputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"depositor\",\"type\":\"address\"},{\"internalType\":\"bool\",\"name\":\"deferredPayout\",\"type\":\"bool\"},{\"internalType\":\"bytes32\",\"name\":\"paymentMethod\",\"type\":\"bytes32\"}],\"internalType\":\"struct IDisputeProtectionPolicyV2.Protection\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"components\":[{\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"token\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"taker\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"recipient\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"depositor\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"paymentMethod\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"releaseAmount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"netAmount\",\"type\":\"uint256\"},{\"internalType\":\"bytes\",\"name\":\"settlementData\",\"type\":\"bytes\"}],\"internalType\":\"struct IIntentSettlementPolicy.SettlementContext\",\"name\":\"_context\",\"type\":\"tuple\"}],\"name\":\"onDeferredPayoutFunded\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"orchestratorRegistry\",\"outputs\":[{\"internalType\":\"contract IOrchestratorRegistry\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"pendingOwner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"_intentHashes\",\"type\":\"bytes32[]\"}],\"name\":\"release\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_verifier\",\"type\":\"address\"}],\"name\":\"setDisputeVerifier\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"components\":[{\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"token\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"taker\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"recipient\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"depositor\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"paymentMethod\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"releaseAmount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"netAmount\",\"type\":\"uint256\"},{\"internalType\":\"bytes\",\"name\":\"settlementData\",\"type\":\"bytes\"}],\"internalType\":\"struct IIntentSettlementPolicy.SettlementContext\",\"name\":\"_context\",\"type\":\"tuple\"}],\"name\":\"settleIntent\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"deferralVault\",\"type\":\"address\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"stakeVault\",\"outputs\":[{\"internalType\":\"contract IStakeVaultV2\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"components\":[{\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"dataHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes[]\",\"name\":\"signatures\",\"type\":\"bytes[]\"},{\"internalType\":\"bytes\",\"name\":\"data\",\"type\":\"bytes\"}],\"internalType\":\"struct IDisputeVerifier.DisputeAttestation\",\"name\":\"_attestation\",\"type\":\"tuple\"}],\"name\":\"submitDispute\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"details\":\"The StakeVaultV2 lock under the intent hash holds owner, amount and maturity; this policy stores only the depositor and payment method a dispute needs, and whether the lock is a deferred payout. Canonical USDC only.\",\"kind\":\"dev\",\"methods\":{\"acceptOwnership()\":{\"details\":\"The new owner accepts the ownership transfer.\"},\"constructor\":{\"params\":{\"_disputeNullifierRegistry\":\"Dedicated registry that rejects reused dispute nullifiers.\",\"_disputeVerifier\":\"Verifier for signed dispute evidence.\",\"_orchestratorRegistry\":\"Registry of orchestrators allowed to call the settlement callbacks.\",\"_owner\":\"Governance owner for policy and dependency configuration.\",\"_stakeVault\":\"Vault holding and locking taker collateral.\"}},\"getProtection(bytes32)\":{\"params\":{\"_intentHash\":\"Protected intent.\"}},\"onDeferredPayoutFunded((bytes32,address,address,address,address,bytes32,uint256,uint256,bytes))\":{\"details\":\"O4 passes the same context it passed to settleIntent, in the same transaction.\"},\"owner()\":{\"details\":\"Returns the address of the current owner.\"},\"pendingOwner()\":{\"details\":\"Returns the address of the pending owner.\"},\"release(bytes32[])\":{\"params\":{\"_intentHashes\":\"Protected intents to release.\"}},\"setDisputeVerifier(address)\":{\"params\":{\"_verifier\":\"New dispute verifier.\"}},\"settleIntent((bytes32,address,address,address,address,bytes32,uint256,uint256,bytes))\":{\"details\":\"settlementData is abi.encode(uint256 disputeWindow). Zero windows and non-stake tokens pay now.\",\"returns\":{\"deferralVault\":\"Zero to pay intent.to now; otherwise the vault that receives netAmount.\"}},\"submitDispute((bytes32,bytes32,bytes[],bytes))\":{\"params\":{\"_attestation\":\"Signed dispute evidence for a settled intent.\"}},\"transferOwnership(address)\":{\"details\":\"Starts the ownership transfer of the contract to a new account. Replaces the pending transfer if there is one. Can only be called by the current owner.\"}},\"stateVariables\":{\"protections\":{\"details\":\"Open protections keyed by globally unique intent hash; deleted on release or dispute.\"}},\"title\":\"DisputeProtectionPolicyV2\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{\"constructor\":{\"notice\":\"Creates the policy; authorize it as a vault controller and a dispute-nullifier writer before use.\"},\"disputeNullifierRegistry()\":{\"notice\":\"Dedicated replay registry for payment-method-scoped dispute nullifiers.\"},\"disputeVerifier()\":{\"notice\":\"Verifier used to validate signed dispute evidence.\"},\"getProtection(bytes32)\":{\"notice\":\"Returns the open protection for an intent; zero after release or dispute.\"},\"onDeferredPayoutFunded((bytes32,address,address,address,address,bytes32,uint256,uint256,bytes))\":{\"notice\":\"Locks the net payout O4 just transferred to the deferral vault.\"},\"orchestratorRegistry()\":{\"notice\":\"Orchestrators allowed to call the settlement callbacks.\"},\"release(bytes32[])\":{\"notice\":\"Releases every listed protection whose lock has matured. A taker's stake returns to its owner's free stake; a deferred payout is transferred to its recipient, so recipients that cannot call the vault still get paid.\"},\"renounceOwnership()\":{\"notice\":\"Disables ownership renunciation so governed safety controls cannot become unreachable.\"},\"setDisputeVerifier(address)\":{\"notice\":\"GOVERNANCE ONLY: Replaces the verifier used for future dispute submissions.\"},\"settleIntent((bytes32,address,address,address,address,bytes32,uint256,uint256,bytes))\":{\"notice\":\"Selects immediate or deferred settlement for a verified fulfilment by a non-whitelisted taker.\"},\"stakeVault()\":{\"notice\":\"Stake custody and lock accounting controlled by this policy.\"},\"submitDispute((bytes32,bytes32,bytes[],bytes))\":{\"notice\":\"Resolves valid dispute evidence into an immediately claimable depositor award.\"}},\"notice\":\"Settles OrchestratorV4 payouts against the taker's stake, or defers them, for the signed dispute window.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"contracts/hooks/DisputeProtectionPolicyV2.sol\":\"DisputeProtectionPolicyV2\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[],\"viaIR\":true},\"sources\":{\"@openzeppelin/contracts/access/Ownable.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (access/Ownable.sol)\\n\\npragma solidity ^0.8.0;\\n\\nimport \\\"../utils/Context.sol\\\";\\n\\n/**\\n * @dev Contract module which provides a basic access control mechanism, where\\n * there is an account (an owner) that can be granted exclusive access to\\n * specific functions.\\n *\\n * By default, the owner account will be the one that deploys the contract. This\\n * can later be changed with {transferOwnership}.\\n *\\n * This module is used through inheritance. It will make available the modifier\\n * `onlyOwner`, which can be applied to your functions to restrict their use to\\n * the owner.\\n */\\nabstract contract Ownable is Context {\\n    address private _owner;\\n\\n    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);\\n\\n    /**\\n     * @dev Initializes the contract setting the deployer as the initial owner.\\n     */\\n    constructor() {\\n        _transferOwnership(_msgSender());\\n    }\\n\\n    /**\\n     * @dev Throws if called by any account other than the owner.\\n     */\\n    modifier onlyOwner() {\\n        _checkOwner();\\n        _;\\n    }\\n\\n    /**\\n     * @dev Returns the address of the current owner.\\n     */\\n    function owner() public view virtual returns (address) {\\n        return _owner;\\n    }\\n\\n    /**\\n     * @dev Throws if the sender is not the owner.\\n     */\\n    function _checkOwner() internal view virtual {\\n        require(owner() == _msgSender(), \\\"Ownable: caller is not the owner\\\");\\n    }\\n\\n    /**\\n     * @dev Leaves the contract without owner. It will not be possible to call\\n     * `onlyOwner` functions. Can only be called by the current owner.\\n     *\\n     * NOTE: Renouncing ownership will leave the contract without an owner,\\n     * thereby disabling any functionality that is only available to the owner.\\n     */\\n    function renounceOwnership() public virtual onlyOwner {\\n        _transferOwnership(address(0));\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`).\\n     * Can only be called by the current owner.\\n     */\\n    function transferOwnership(address newOwner) public virtual onlyOwner {\\n        require(newOwner != address(0), \\\"Ownable: new owner is the zero address\\\");\\n        _transferOwnership(newOwner);\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`).\\n     * Internal function without access restriction.\\n     */\\n    function _transferOwnership(address newOwner) internal virtual {\\n        address oldOwner = _owner;\\n        _owner = newOwner;\\n        emit OwnershipTransferred(oldOwner, newOwner);\\n    }\\n}\\n\",\"keccak256\":\"0xba43b97fba0d32eb4254f6a5a297b39a19a247082a02d6e69349e071e2946218\",\"license\":\"MIT\"},\"@openzeppelin/contracts/access/Ownable2Step.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (access/Ownable2Step.sol)\\n\\npragma solidity ^0.8.0;\\n\\nimport \\\"./Ownable.sol\\\";\\n\\n/**\\n * @dev Contract module which provides access control mechanism, where\\n * there is an account (an owner) that can be granted exclusive access to\\n * specific functions.\\n *\\n * By default, the owner account will be the one that deploys the contract. This\\n * can later be changed with {transferOwnership} and {acceptOwnership}.\\n *\\n * This module is used through inheritance. It will make available all functions\\n * from parent (Ownable).\\n */\\nabstract contract Ownable2Step is Ownable {\\n    address private _pendingOwner;\\n\\n    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);\\n\\n    /**\\n     * @dev Returns the address of the pending owner.\\n     */\\n    function pendingOwner() public view virtual returns (address) {\\n        return _pendingOwner;\\n    }\\n\\n    /**\\n     * @dev Starts the ownership transfer of the contract to a new account. Replaces the pending transfer if there is one.\\n     * Can only be called by the current owner.\\n     */\\n    function transferOwnership(address newOwner) public virtual override onlyOwner {\\n        _pendingOwner = newOwner;\\n        emit OwnershipTransferStarted(owner(), newOwner);\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`) and deletes any pending owner.\\n     * Internal function without access restriction.\\n     */\\n    function _transferOwnership(address newOwner) internal virtual override {\\n        delete _pendingOwner;\\n        super._transferOwnership(newOwner);\\n    }\\n\\n    /**\\n     * @dev The new owner accepts the ownership transfer.\\n     */\\n    function acceptOwnership() public virtual {\\n        address sender = _msgSender();\\n        require(pendingOwner() == sender, \\\"Ownable2Step: caller is not the new owner\\\");\\n        _transferOwnership(sender);\\n    }\\n}\\n\",\"keccak256\":\"0xde231558366826d7cb61725af8147965a61c53b77a352cc8c9af38fc5a92ac3c\",\"license\":\"MIT\"},\"@openzeppelin/contracts/security/ReentrancyGuard.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (security/ReentrancyGuard.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Contract module that helps prevent reentrant calls to a function.\\n *\\n * Inheriting from `ReentrancyGuard` will make the {nonReentrant} modifier\\n * available, which can be applied to functions to make sure there are no nested\\n * (reentrant) calls to them.\\n *\\n * Note that because there is a single `nonReentrant` guard, functions marked as\\n * `nonReentrant` may not call one another. This can be worked around by making\\n * those functions `private`, and then adding `external` `nonReentrant` entry\\n * points to them.\\n *\\n * TIP: If you would like to learn more about reentrancy and alternative ways\\n * to protect against it, check out our blog post\\n * https://blog.openzeppelin.com/reentrancy-after-istanbul/[Reentrancy After Istanbul].\\n */\\nabstract contract ReentrancyGuard {\\n    // Booleans are more expensive than uint256 or any type that takes up a full\\n    // word because each write operation emits an extra SLOAD to first read the\\n    // slot's contents, replace the bits taken up by the boolean, and then write\\n    // back. This is the compiler's defense against contract upgrades and\\n    // pointer aliasing, and it cannot be disabled.\\n\\n    // The values being non-zero value makes deployment a bit more expensive,\\n    // but in exchange the refund on every call to nonReentrant will be lower in\\n    // amount. Since refunds are capped to a percentage of the total\\n    // transaction's gas, it is best to keep them low in cases like this one, to\\n    // increase the likelihood of the full refund coming into effect.\\n    uint256 private constant _NOT_ENTERED = 1;\\n    uint256 private constant _ENTERED = 2;\\n\\n    uint256 private _status;\\n\\n    constructor() {\\n        _status = _NOT_ENTERED;\\n    }\\n\\n    /**\\n     * @dev Prevents a contract from calling itself, directly or indirectly.\\n     * Calling a `nonReentrant` function from another `nonReentrant`\\n     * function is not supported. It is possible to prevent this from happening\\n     * by making the `nonReentrant` function external, and making it call a\\n     * `private` function that does the actual work.\\n     */\\n    modifier nonReentrant() {\\n        _nonReentrantBefore();\\n        _;\\n        _nonReentrantAfter();\\n    }\\n\\n    function _nonReentrantBefore() private {\\n        // On the first call to nonReentrant, _status will be _NOT_ENTERED\\n        require(_status != _ENTERED, \\\"ReentrancyGuard: reentrant call\\\");\\n\\n        // Any calls to nonReentrant after this point will fail\\n        _status = _ENTERED;\\n    }\\n\\n    function _nonReentrantAfter() private {\\n        // By storing the original value once again, a refund is triggered (see\\n        // https://eips.ethereum.org/EIPS/eip-2200)\\n        _status = _NOT_ENTERED;\\n    }\\n\\n    /**\\n     * @dev Returns true if the reentrancy guard is currently set to \\\"entered\\\", which indicates there is a\\n     * `nonReentrant` function in the call stack.\\n     */\\n    function _reentrancyGuardEntered() internal view returns (bool) {\\n        return _status == _ENTERED;\\n    }\\n}\\n\",\"keccak256\":\"0xa535a5df777d44e945dd24aa43a11e44b024140fc340ad0dfe42acf4002aade1\",\"license\":\"MIT\"},\"@openzeppelin/contracts/token/ERC20/IERC20.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (token/ERC20/IERC20.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Interface of the ERC20 standard as defined in the EIP.\\n */\\ninterface IERC20 {\\n    /**\\n     * @dev Emitted when `value` tokens are moved from one account (`from`) to\\n     * another (`to`).\\n     *\\n     * Note that `value` may be zero.\\n     */\\n    event Transfer(address indexed from, address indexed to, uint256 value);\\n\\n    /**\\n     * @dev Emitted when the allowance of a `spender` for an `owner` is set by\\n     * a call to {approve}. `value` is the new allowance.\\n     */\\n    event Approval(address indexed owner, address indexed spender, uint256 value);\\n\\n    /**\\n     * @dev Returns the amount of tokens in existence.\\n     */\\n    function totalSupply() external view returns (uint256);\\n\\n    /**\\n     * @dev Returns the amount of tokens owned by `account`.\\n     */\\n    function balanceOf(address account) external view returns (uint256);\\n\\n    /**\\n     * @dev Moves `amount` tokens from the caller's account to `to`.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * Emits a {Transfer} event.\\n     */\\n    function transfer(address to, uint256 amount) external returns (bool);\\n\\n    /**\\n     * @dev Returns the remaining number of tokens that `spender` will be\\n     * allowed to spend on behalf of `owner` through {transferFrom}. This is\\n     * zero by default.\\n     *\\n     * This value changes when {approve} or {transferFrom} are called.\\n     */\\n    function allowance(address owner, address spender) external view returns (uint256);\\n\\n    /**\\n     * @dev Sets `amount` as the allowance of `spender` over the caller's tokens.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * IMPORTANT: Beware that changing an allowance with this method brings the risk\\n     * that someone may use both the old and the new allowance by unfortunate\\n     * transaction ordering. One possible solution to mitigate this race\\n     * condition is to first reduce the spender's allowance to 0 and set the\\n     * desired value afterwards:\\n     * https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729\\n     *\\n     * Emits an {Approval} event.\\n     */\\n    function approve(address spender, uint256 amount) external returns (bool);\\n\\n    /**\\n     * @dev Moves `amount` tokens from `from` to `to` using the\\n     * allowance mechanism. `amount` is then deducted from the caller's\\n     * allowance.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * Emits a {Transfer} event.\\n     */\\n    function transferFrom(address from, address to, uint256 amount) external returns (bool);\\n}\\n\",\"keccak256\":\"0x287b55befed2961a7eabd7d7b1b2839cbca8a5b80ef8dcbb25ed3d4c2002c305\",\"license\":\"MIT\"},\"@openzeppelin/contracts/utils/Context.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts v4.4.1 (utils/Context.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Provides information about the current execution context, including the\\n * sender of the transaction and its data. While these are generally available\\n * via msg.sender and msg.data, they should not be accessed in such a direct\\n * manner, since when dealing with meta-transactions the account sending and\\n * paying for execution may not be the actual sender (as far as an application\\n * is concerned).\\n *\\n * This contract is only required for intermediate, library-like contracts.\\n */\\nabstract contract Context {\\n    function _msgSender() internal view virtual returns (address) {\\n        return msg.sender;\\n    }\\n\\n    function _msgData() internal view virtual returns (bytes calldata) {\\n        return msg.data;\\n    }\\n}\\n\",\"keccak256\":\"0xe2e337e6dde9ef6b680e07338c493ebea1b5fd09b43424112868e9cc1706bca7\",\"license\":\"MIT\"},\"contracts/hooks/DisputeProtectionPolicyV2.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport {IIntentSettlementPolicy} from \\\"../interfaces/IIntentSettlementPolicy.sol\\\";\\nimport {Ownable2Step} from \\\"@openzeppelin/contracts/access/Ownable2Step.sol\\\";\\nimport {ReentrancyGuard} from \\\"@openzeppelin/contracts/security/ReentrancyGuard.sol\\\";\\n\\nimport {IDisputeProtectionPolicyV2} from \\\"../interfaces/IDisputeProtectionPolicyV2.sol\\\";\\nimport {IDisputeVerifier} from \\\"../interfaces/IDisputeVerifier.sol\\\";\\nimport {INullifierRegistry} from \\\"../interfaces/INullifierRegistry.sol\\\";\\nimport {IOrchestratorRegistry} from \\\"../interfaces/IOrchestratorRegistry.sol\\\";\\nimport {IStakeVaultV2} from \\\"../interfaces/IStakeVaultV2.sol\\\";\\n\\n/**\\n * @title DisputeProtectionPolicyV2\\n * @notice Settles OrchestratorV4 payouts against the taker's stake, or defers them, for the signed dispute window.\\n * @dev The StakeVaultV2 lock under the intent hash holds owner, amount and maturity; this policy stores only the\\n * depositor and payment method a dispute needs, and whether the lock is a deferred payout. Canonical USDC only.\\n */\\ncontract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, ReentrancyGuard {\\n    /* ============ Constants ============ */\\n\\n    uint64 public constant MAX_DISPUTE_WINDOW = 180 days;\\n\\n    /* ============ State Variables ============ */\\n\\n    /// @notice Stake custody and lock accounting controlled by this policy.\\n    IStakeVaultV2 public immutable override stakeVault;\\n\\n    /// @notice Dedicated replay registry for payment-method-scoped dispute nullifiers.\\n    INullifierRegistry public immutable disputeNullifierRegistry;\\n\\n    /// @notice Orchestrators allowed to call the settlement callbacks.\\n    IOrchestratorRegistry public immutable orchestratorRegistry;\\n\\n    /// @notice Verifier used to validate signed dispute evidence.\\n    IDisputeVerifier public disputeVerifier;\\n\\n    /// @dev Open protections keyed by globally unique intent hash; deleted on release or dispute.\\n    mapping(bytes32 => Protection) internal protections;\\n\\n    /* ============ Constructor ============ */\\n\\n    /**\\n     * @notice Creates the policy; authorize it as a vault controller and a dispute-nullifier writer before use.\\n     * @param _owner Governance owner for policy and dependency configuration.\\n     * @param _stakeVault Vault holding and locking taker collateral.\\n     * @param _disputeVerifier Verifier for signed dispute evidence.\\n     * @param _disputeNullifierRegistry Dedicated registry that rejects reused dispute nullifiers.\\n     * @param _orchestratorRegistry Registry of orchestrators allowed to call the settlement callbacks.\\n     */\\n    constructor(\\n        address _owner,\\n        IStakeVaultV2 _stakeVault,\\n        IDisputeVerifier _disputeVerifier,\\n        INullifierRegistry _disputeNullifierRegistry,\\n        IOrchestratorRegistry _orchestratorRegistry\\n    ) {\\n        if (_owner == address(0)) revert ZeroAddress();\\n        stakeVault = _stakeVault;\\n        disputeVerifier = _disputeVerifier;\\n        disputeNullifierRegistry = _disputeNullifierRegistry;\\n        orchestratorRegistry = _orchestratorRegistry;\\n        _transferOwnership(_owner);\\n    }\\n\\n    /* ============ Modifiers ============ */\\n\\n    modifier onlyOrchestrator() {\\n        if (!orchestratorRegistry.isOrchestrator(msg.sender)) revert UnauthorizedOrchestrator(msg.sender);\\n        _;\\n    }\\n\\n    /* ============ Lifecycle Functions ============ */\\n\\n    /// @inheritdoc IIntentSettlementPolicy\\n    /// @dev settlementData is abi.encode(uint256 disputeWindow). Zero windows and non-stake tokens pay now.\\n    function settleIntent(SettlementContext calldata _context)\\n        external override onlyOrchestrator returns (address deferralVault)\\n    {\\n        uint256 window = abi.decode(_context.settlementData, (uint256));\\n        if (window > MAX_DISPUTE_WINDOW) revert InvalidDisputeWindow(window);\\n        if (window == 0) return address(0);\\n        if (_context.token != address(stakeVault.stakeToken())) return address(0);\\n\\n        address stakeOwner = stakeVault.stakeOwnerOf(_context.taker);\\n        bool staked = stakeVault.freeStake(stakeOwner) >= _context.releaseAmount;\\n        protections[_context.intentHash] = Protection({\\n            depositor: _context.depositor, deferredPayout: !staked, paymentMethod: _context.paymentMethod\\n        });\\n        if (staked) {\\n            stakeVault.lockStake(stakeOwner, _context.intentHash, _context.releaseAmount, _maturity(uint64(window)));\\n        } else {\\n            deferralVault = address(stakeVault);\\n        }\\n        emit ProtectionOpened(_context.intentHash, _context.depositor);\\n    }\\n\\n    /// @inheritdoc IIntentSettlementPolicy\\n    function onDeferredPayoutFunded(SettlementContext calldata _context) external override onlyOrchestrator nonReentrant {\\n        uint64 window = uint64(abi.decode(_context.settlementData, (uint256)));\\n        stakeVault.fundLock(_context.recipient, _context.intentHash, _context.netAmount, _maturity(window));\\n    }\\n\\n    /* ============ Permissionless Functions ============ */\\n\\n    /**\\n     * @notice Releases every listed protection whose lock has matured. A taker's stake returns to its owner's free\\n     * stake; a deferred payout is transferred to its recipient, so recipients that cannot call the vault still get paid.\\n     * @param _intentHashes Protected intents to release.\\n     */\\n    function release(bytes32[] calldata _intentHashes) external nonReentrant {\\n        for (uint256 i = 0; i < _intentHashes.length; i++) {\\n            _release(_intentHashes[i]);\\n        }\\n    }\\n\\n    /**\\n     * @notice Resolves valid dispute evidence into an immediately claimable depositor award.\\n     * @param _attestation Signed dispute evidence for a settled intent.\\n     */\\n    function submitDispute(IDisputeVerifier.DisputeAttestation calldata _attestation) external nonReentrant {\\n        bytes32 intentHash = _attestation.intentHash;\\n        Protection memory protection = protections[intentHash];\\n        if (protection.depositor == address(0)) revert ProtectionNotFound(intentHash);\\n\\n        (bytes32 disputeId, bytes32 disputeNullifier) =\\n            disputeVerifier.verifyDispute(_attestation, protection.paymentMethod);\\n        disputeNullifierRegistry.addNullifier(disputeNullifier);\\n        delete protections[intentHash];\\n\\n        (address stakeOwner, uint256 compensatedAmount,) = stakeVault.locks(intentHash);\\n        IStakeVaultV2.Claim[] memory claims = new IStakeVaultV2.Claim[](1);\\n        claims[0] = IStakeVaultV2.Claim({beneficiary: protection.depositor, amount: compensatedAmount});\\n        stakeVault.resolveLock(intentHash, claims);\\n\\n        emit DisputeResolved(intentHash, stakeOwner, protection.depositor, compensatedAmount, disputeId);\\n    }\\n\\n    /* ============ Governance Functions ============ */\\n\\n    /**\\n     * @notice GOVERNANCE ONLY: Replaces the verifier used for future dispute submissions.\\n     * @param _verifier New dispute verifier.\\n     */\\n    function setDisputeVerifier(address _verifier) external onlyOwner {\\n        address previousVerifier = address(disputeVerifier);\\n        disputeVerifier = IDisputeVerifier(_verifier);\\n        emit DisputeVerifierUpdated(previousVerifier, _verifier);\\n    }\\n\\n    /**\\n     * @notice Disables ownership renunciation so governed safety controls cannot become unreachable.\\n     */\\n    function renounceOwnership() public view override onlyOwner {\\n        revert OwnershipRenunciationDisabled();\\n    }\\n\\n    /* ============ View Functions ============ */\\n\\n    /**\\n     * @notice Returns the open protection for an intent; zero after release or dispute.\\n     * @param _intentHash Protected intent.\\n     */\\n    function getProtection(bytes32 _intentHash) external view returns (Protection memory) {\\n        return protections[_intentHash];\\n    }\\n\\n    /* ============ Internal Functions ============ */\\n\\n    function _release(bytes32 _intentHash) internal {\\n        Protection memory protection = protections[_intentHash];\\n        if (protection.depositor == address(0)) revert ProtectionNotFound(_intentHash);\\n\\n        (,, uint64 maturesAt) = stakeVault.locks(_intentHash);\\n        if (block.timestamp < maturesAt) revert NotMatured(maturesAt, uint64(block.timestamp));\\n\\n        delete protections[_intentHash];\\n        if (protection.deferredPayout) {\\n            stakeVault.payOutLock(_intentHash);\\n        } else {\\n            stakeVault.unlockStake(_intentHash);\\n        }\\n        emit ProtectionReleased(_intentHash);\\n    }\\n\\n    function _maturity(uint64 _window) internal view returns (uint64) {\\n        return uint64(block.timestamp) + _window;\\n    }\\n}\\n\",\"keccak256\":\"0xa4bd49e1f392422b2503843eca0a044d5f6f81f5fadbf790cfd0032117619be1\",\"license\":\"MIT\"},\"contracts/interfaces/IDisputeProtectionPolicyV2.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\npragma solidity ^0.8.18;\\n\\nimport {IIntentSettlementPolicy} from \\\"./IIntentSettlementPolicy.sol\\\";\\nimport {IStakeVaultV2} from \\\"./IStakeVaultV2.sol\\\";\\n\\n/// @notice Selects dispute collateral. Zero windows and non-stake tokens pay now without a record or event.\\ninterface IDisputeProtectionPolicyV2 is IIntentSettlementPolicy {\\n    /// @dev The StakeVaultV2 lock with id intentHash holds the owner, amount and maturity.\\n    struct Protection {\\n        address depositor;        // paid on a proven dispute\\n        bool deferredPayout;      // the lock holds the recipient's net payout rather than the taker's stake\\n        bytes32 paymentMethod;    // selects the dispute verification rules\\n    }\\n\\n    event ProtectionOpened(bytes32 indexed intentHash, address indexed depositor);\\n    event ProtectionReleased(bytes32 indexed intentHash);\\n    event DisputeResolved(bytes32 indexed intentHash, address indexed stakeOwner, address indexed depositor, uint256 compensatedAmount, bytes32 disputeId);\\n    event DisputeVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);\\n\\n    error ZeroAddress();\\n    error UnauthorizedOrchestrator(address caller);\\n    error ProtectionNotFound(bytes32 intentHash);\\n    error NotMatured(uint64 maturesAt, uint64 currentTime);\\n    error InvalidDisputeWindow(uint256 window);\\n    error OwnershipRenunciationDisabled();\\n\\n    /// @notice Returns the collateral vault.\\n    function stakeVault() external view returns (IStakeVaultV2);\\n}\\n\",\"keccak256\":\"0xa48b3614bee81533f919aa4a0375640875111fb7ec0800e480633448f1bc5892\",\"license\":\"MIT\"},\"contracts/interfaces/IDisputeVerifier.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IDisputeVerifier\\n * @notice Minimal verification surface consumed by DisputeProtectionPolicy.\\n * @dev The concrete verifier exposes its governance and digest helper functions directly.\\n */\\ninterface IDisputeVerifier {\\n    /**\\n     * @notice Signed evidence tying a dispute payload to one intent.\\n     * @param intentHash Intent whose off-chain payment was disputed.\\n     * @param dataHash Hash of the ABI-encoded `DisputeDetails`.\\n     * @param signatures Witness signatures over the verifier's EIP-712 digest.\\n     * @param data ABI-encoded `DisputeDetails`.\\n     */\\n    struct DisputeAttestation {\\n        bytes32 intentHash;\\n        bytes32 dataHash;\\n        bytes[] signatures;\\n        bytes data;\\n    }\\n\\n    /**\\n     * @notice Payment and dispute identifiers attested by the dispute witnesses.\\n     * @param paymentMethod Payment rail used by the original payment.\\n     * @param originalPaymentId Provider identifier for the original payment.\\n     * @param disputeId Provider identifier for the dispute or reversal.\\n     * @param paymentAmount Attested off-chain payment amount.\\n     * @param paymentCurrency Attested off-chain payment currency.\\n     */\\n    struct DisputeDetails {\\n        bytes32 paymentMethod;\\n        bytes32 originalPaymentId;\\n        bytes32 disputeId;\\n        uint256 paymentAmount;\\n        bytes32 paymentCurrency;\\n    }\\n\\n    event AttestationVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);\\n\\n    error ZeroAddress();\\n    error InvalidContract(address dependency);\\n    error InvalidAttestation();\\n    error InvalidPaymentBinding(bytes32 intentHash, bytes32 nullifier);\\n    error AttestationVerificationFailed();\\n    error OwnershipRenunciationDisabled();\\n\\n    /**\\n     * @notice Validates dispute evidence against the intent context supplied by the policy.\\n     * @dev View-only and stateless. Reverts when the payload is malformed, mismatched, unsigned, or not bound to the\\n     * intent's original payment nullifier.\\n     * @param _attestation Signed dispute evidence for an intent.\\n     * @param _paymentMethod Payment method snapshotted by the policy when the intent was admitted.\\n     * @return disputeId Payment-platform dispute identifier decoded from the evidence.\\n     * @return disputeNullifier Payment-method-scoped replay key for the dispute.\\n     */\\n    function verifyDispute(DisputeAttestation calldata _attestation, bytes32 _paymentMethod)\\n        external\\n        view\\n        returns (bytes32 disputeId, bytes32 disputeNullifier);\\n}\\n\",\"keccak256\":\"0x55f8c56657ca89ed605d3054155677811a3d7417c74fe36129debe5fba6a7b37\",\"license\":\"MIT\"},\"contracts/interfaces/IIntentSettlementPolicy.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\npragma solidity ^0.8.18;\\n\\n/// @notice Minimal settlement boundary used by OrchestratorV4.\\n/// @dev O4 depends only on these two functions, so settlement rules can change without deploying another\\n/// orchestrator. O4 applies its current policy at settlement.\\ninterface IIntentSettlementPolicy {\\n    struct SettlementContext {\\n        bytes32 intentHash;\\n        address token;\\n        address taker;\\n        address recipient;\\n        address depositor; // Captured before escrow unlock can delete the deposit.\\n        bytes32 paymentMethod;\\n        uint256 releaseAmount;\\n        uint256 netAmount;\\n        bytes settlementData; // Signed by the attestor; opaque to O4\\n    }\\n\\n    /// @notice Selects immediate or deferred settlement for a verified fulfilment by a non-whitelisted taker.\\n    /// @return deferralVault Zero to pay intent.to now; otherwise the vault that receives netAmount.\\n    function settleIntent(SettlementContext calldata context) external returns (address deferralVault);\\n\\n    /// @notice Locks the net payout O4 just transferred to the deferral vault.\\n    /// @dev O4 passes the same context it passed to settleIntent, in the same transaction.\\n    function onDeferredPayoutFunded(SettlementContext calldata context) external;\\n}\\n\",\"keccak256\":\"0xb87ce9e37cd3f3e14800446b860366dbb9aa81bc671520777376ee70f3deb672\",\"license\":\"MIT\"},\"contracts/interfaces/INullifierRegistry.sol\":{\"content\":\"//SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\ninterface INullifierRegistry {\\n    function addNullifier(bytes32 _nullifier) external;\\n    function isNullified(bytes32 _nullifier) external view returns(bool);\\n}\\n\",\"keccak256\":\"0x107164bc9a320938b513305878163b7fa884da4cdae58d0c8e81bfbb00c97c5e\",\"license\":\"MIT\"},\"contracts/interfaces/IOrchestratorRegistry.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IOrchestratorRegistry\\n * @notice Interface for EscrowV2 orchestrator authorization registry.\\n */\\ninterface IOrchestratorRegistry {\\n    /**\\n     * @notice Adds an orchestrator to the allowlist.\\n     * @param _orchestrator Orchestrator address to add.\\n     */\\n    function addOrchestrator(address _orchestrator) external;\\n\\n    /**\\n     * @notice Removes an orchestrator from the allowlist.\\n     * @param _orchestrator Orchestrator address to remove.\\n     */\\n    function removeOrchestrator(address _orchestrator) external;\\n\\n    /**\\n     * @notice Returns whether an address is currently allowlisted as orchestrator.\\n     * @param _orchestrator Address to check.\\n     * @return allowed True when `_orchestrator` is authorized.\\n     */\\n    function isOrchestrator(address _orchestrator) external view returns (bool allowed);\\n}\\n\",\"keccak256\":\"0xbb2d52f475b9ebd4aadd233040b62a438cf296463fd7b269d12f28c273d0a040\",\"license\":\"MIT\"},\"contracts/interfaces/IStakeVaultV2.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport {IERC20} from \\\"@openzeppelin/contracts/token/ERC20/IERC20.sol\\\";\\n\\n/**\\n * @title IStakeVaultV2\\n * @notice Stake custody, delegation, controller locks and dispute claims. Canonical USDC only.\\n */\\ninterface IStakeVaultV2 {\\n    struct StakeLock {\\n        address stakeOwner;\\n        uint256 amount;\\n        uint64 maturesAt;\\n    }\\n\\n    struct Claim {\\n        address beneficiary;\\n        uint256 amount;\\n    }\\n\\n    error ZeroAddress();\\n    error ZeroAmount();\\n    error ZeroLockId();\\n    error UnauthorizedController(address caller);\\n    error UnauthorizedLockController(bytes32 lockId, address caller, address controller);\\n    error InvalidTaker(address taker);\\n    error UnauthorizedStakeOwner(address taker, address stakeOwner);\\n    error InvalidMaturity(uint64 maturity, uint64 currentTime);\\n    error LockAlreadyExists(bytes32 lockId);\\n    error LockNotFound(bytes32 lockId);\\n    error InsufficientFreeStake(address stakeOwner, uint256 available, uint256 required);\\n    error InsufficientUnaccountedTokens(uint256 available, uint256 required);\\n    error InvalidClaim(address beneficiary, uint256 amount);\\n    error ClaimsExceedLock(uint256 lockAmount, uint256 claimsAmount);\\n    error OwnershipRenunciationDisabled();\\n\\n    event StakeDeposited(address indexed stakeOwner, uint256 amount, uint256 newStakeBalance);\\n    event StakeWithdrawn(address indexed stakeOwner, address indexed to, uint256 amount, uint256 newStakeBalance);\\n    event TakerAuthorizationUpdated(address indexed stakeOwner, address indexed taker, bool authorized);\\n    event StakeOwnerSelected(address indexed taker, address indexed previousStakeOwner, address indexed newStakeOwner);\\n    event StakeLocked(\\n        bytes32 indexed lockId, address indexed stakeOwner, uint256 amount, uint64 maturesAt, uint256 totalLockedStake\\n    );\\n    event LockFunded(bytes32 indexed lockId, address indexed stakeOwner, uint256 amount, uint256 newStakeBalance);\\n    event StakeUnlocked(bytes32 indexed lockId, address indexed stakeOwner, uint256 amount, uint256 totalLockedStake);\\n    event StakeLockResolved(\\n        bytes32 indexed lockId,\\n        address indexed stakeOwner,\\n        uint256 lockAmount,\\n        uint256 unlockedAmount,\\n        uint256 claimedAmount,\\n        uint256 totalLockedStake\\n    );\\n    event ClaimCreated(\\n        bytes32 indexed lockId, address indexed beneficiary, uint256 amount, uint256 newClaimableBalance\\n    );\\n    event ClaimWithdrawn(address indexed beneficiary, uint256 amount);\\n\\n    event ControllerUpdated(address indexed controller, bool authorized);\\n\\n    function depositStake(uint256 _amount) external;\\n    function withdrawStake(uint256 _amount) external;\\n    function withdrawStakeTo(address _to, uint256 _amount) external;\\n    function claim() external;\\n\\n    function setTakerAuthorization(address _taker, bool _authorized) external;\\n    function selectStakeOwner(address _stakeOwner) external;\\n    function clearStakeOwner() external;\\n\\n    function lockStake(address _stakeOwner, bytes32 _lockId, uint256 _amount, uint64 _maturesAt) external;\\n    function fundLock(address _stakeOwner, bytes32 _lockId, uint256 _amount, uint64 _maturesAt) external;\\n    function unlockStake(bytes32 _lockId) external;\\n    function payOutLock(bytes32 _lockId) external;\\n    function resolveLock(bytes32 _lockId, Claim[] calldata _claims) external;\\n\\n    /// @notice Immediately changes controller authorization; de-authorize only after its locks drain.\\n    function setController(address _controller, bool _authorized) external;\\n\\n    function stakeToken() external view returns (IERC20);\\n    function isController(address _controller) external view returns (bool);\\n    function lockController(bytes32 _lockId) external view returns (address);\\n    function stakeBalance(address _stakeOwner) external view returns (uint256);\\n    function lockedStake(address _stakeOwner) external view returns (uint256);\\n    function claimable(address _beneficiary) external view returns (uint256);\\n    function totalStaked() external view returns (uint256);\\n    function totalClaimable() external view returns (uint256);\\n    function locks(bytes32 _lockId) external view returns (address stakeOwner, uint256 amount, uint64 maturesAt);\\n    function selectedStakeOwner(address _taker) external view returns (address);\\n    function authorizedTakers(address _stakeOwner, address _taker) external view returns (bool);\\n    function stakeOwnerOf(address _taker) external view returns (address);\\n\\n    /**\\n     * @notice Returns a taker's live selected stake owner and that owner's aggregate balances.\\n     * @param _taker Taker whose effective stake owner and balances are queried.\\n     */\\n    function getTakerState(address _taker)\\n        external\\n        view\\n        returns (address stakeOwner, uint256 totalStake, uint256 lockedStakeAmount, uint256 freeStakeAmount);\\n    function freeStake(address _stakeOwner) external view returns (uint256);\\n    function totalAccounted() external view returns (uint256);\\n    function unaccountedBalance() external view returns (uint256);\\n}\\n\",\"keccak256\":\"0xdc178b8ad1955a86cff667741fe5d96eeb48aa0ce4aaba390e2a3045d8fea43c\",\"license\":\"MIT\"}},\"version\":1}",
+  "bytecode": "0x60e0346200013f57601f6200162538819003918201601f19168301916001600160401b03831184841017620001445780849260a0946040528339810103126200013f5780516001600160a01b03808216928383036200013f5760208101519382851685036200013f576040820151908382168092036200013f5760608301519284841684036200013f576080015193841684036200013f57620000a2336200015a565b6001600255156200012d57620000d19460805260018060a01b0319600354161760035560a05260c0526200015a565b60405161147c9081620001a982396080518181816102a20152818161091c01528181610bec01528181610cae0152610ff2015260a0518181816106d70152610888015260c051818181610178015281816106920152610c4e0152f35b60405163d92e233d60e01b8152600490fd5b600080fd5b634e487b7160e01b600052604160045260246000fd5b60018060a01b031990816001541660015560005460018060a01b038092168093821617600055167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0600080a356fe608080604052600436101561001357600080fd5b600090813560e01c90816307a8e84e14610d90575080631b0109a614610c1b5780632d78833314610bd657806332ba8d0714610bad5780633dffe4601461070657806341bbc083146106c15780635e7859051461067c578063715018a61461065157806379ba50971461059457806380cbc6fa146105765780638da5cb5b1461054f578063a950051c146104dd578063abed3b271461023d578063e30c397814610214578063e8f20c3e146101435763f2fde38b146100d157600080fd5b34610140576020366003190112610140576004356001600160a01b038181169182900361013c57610100610e4b565b600180546001600160a01b031916831790558254167f38d16b8cac22d99fc7c124b9cd0de2d3fa1faef420bfe791d8c362d765e227008380a380f35b8280fd5b80fd5b50346101405761015236610e14565b60405163d701dcbd60e01b815233600482015290916001600160a01b03916020816024817f000000000000000000000000000000000000000000000000000000000000000087165afa91821561020857916101da575b50156101c2576101b9602092610f95565b60405191168152f35b6040516308fffdfd60e21b8152336004820152602490fd5b6101fb915060203d8111610201575b6101f38183610f02565b810190610f23565b386101a8565b503d6101e9565b604051903d90823e3d90fd5b50346101405780600319360112610140576001546040516001600160a01b039091168152602090f35b5034610140576020806003193601126104d9576004356001600160401b03918282116104d557366023830112156104d55781600401358381116104d157602493600590368684841b870101116104cd5761029894929461131a565b6001600160a01b037f00000000000000000000000000000000000000000000000000000000000000008116939092885b8781106102d85789600160025580f35b8881831b84010135808b526004885260408b20604051906102f882610ea3565b8054918883169081815260ff8c82019460a01c16151584526040600180940154910152156104b5578c898d6040519182809263ed5e843760e01b825288600483015260609485935afa9182156104aa578a939261047a575b5050168042106104595750828d5260048a5260408d206000808255910155511561041057863b15610401578a6040516374d4b9a960e01b815282600482015281818d81838d5af18015610405576103ed575b50505b7f6231aa3a6f74e168e5edd33b4be30531b8a66b35f65ef51c09caeed73ee5e9098b80a260001981146103da576001016102c8565b634e487b7160e01b8a526011600452888afd5b6103f690610ed4565b610401578a386103a2565b8a80fd5b6040513d84823e3d90fd5b863b15610401578a60405163722081d160e11b815282600482015281818d81838d5af1801561040557610445575b50506103a5565b61044e90610ed4565b610401578a3861043e565b60405163a357e35160e01b81526004810191909152428816818e0152604490fd5b6104999250803d106104a3575b6104918183610f02565b8101906113c0565b9150503880610350565b503d610487565b6040513d85823e3d90fd5b6040516357b9bde760e11b8152600481018490528c90fd5b8680fd5b8480fd5b8380fd5b5080fd5b5034610140576020366003190112610140576004356001600160a01b038181169182900361013c5761050d610e4b565b600354826bffffffffffffffffffffffff60a01b821617600355167ff770c25506cbd44ff51f586aa1c7b778e8cec717cf608e4241912547c8db36238380a380f35b5034610140578060031936011261014057546040516001600160a01b039091168152602090f35b5034610140578060031936011261014057602060405162ed4e008152f35b50346101405780600319360112610140576001546001600160a01b0333818316036105fa576001600160a01b031991821660015582543392811683178455167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08380a380f35b60405162461bcd60e51b815260206004820152602960248201527f4f776e61626c6532537465703a2063616c6c6572206973206e6f7420746865206044820152683732bb9037bbb732b960b91b6064820152608490fd5b503461014057806003193601126101405761066a610e4b565b6040516310e83c2760e21b8152600490fd5b50346101405780600319360112610140576040517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b50346101405780600319360112610140576040517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b5034610140576003196020368201126104d9576001600160401b0390816004351161013c57608060043536039182011261013c5761074261131a565b6004356004013583526004602052604083206040519161076183610ea3565b600182549260ff828060a01b0385169485875260a01c16151560208601520154916040840192835215610b905760018060a01b036003541691519060405194633fc1957d60e21b86526040600487015260c4860191600435600401356044880152602460043501356064880152604460043501359060221901811215610b8c5760043501906004820135116104cd57600481013560051b918236036024830113610b8c579286928894608060848698959801526004870135905260e48085019185010195602481019186905b60048301358210610b4c575050505082809161086c6040969761085a60646004350160043560040161138f565b8583036043190160a48701529061136e565b90602483015203915afa8015610b3f5781938291610b04575b507f00000000000000000000000000000000000000000000000000000000000000006001600160a01b031690813b1561013c578291602483926040519485938492632dea6f9960e11b845260048401525af1801561040557610af0575b5050600480358101358085526020829052604080862060008082556001909101555163ed5e843760e01b8152918201526001600160a01b037f00000000000000000000000000000000000000000000000000000000000000001691606082602481865afa928315610ae55785928694610abe575b506040519061096482610ee7565b60018252865b60208110610a9b57508251604051906001600160a01b031661098b82610ee7565b815285602082015261099c836113f2565b526109a6826113f2565b50803b156104cd579086916040519163bcdded0b60e01b835260448301600435600401356004850152604060248501528151809152602060648501920190855b818110610a6d575050508391838381809403925af1801561040557610a59575b5050516040805193845260208401949094526001600160a01b0390811693911691600480350135917f2ef030cd746710443538050b41d3d8ece075f969198285f7cb87fe5c5d63175891a4600160025580f35b610a6290610ed4565b6104d1578438610a06565b825180516001600160a01b03168552602090810151818601528c9750604090940193909201916001016109e6565b602090604051610aaa81610ee7565b89815289838201528282860101520161096a565b909350610ada91925060603d81116104a3576104918183610f02565b509190919238610956565b6040513d87823e3d90fd5b610af990610ed4565b61013c5782386108e2565b935050506040823d604011610b37575b81610b2160409383610f02565b8101031261013c57826020835193015138610885565b3d9150610b14565b50604051903d90823e3d90fd5b9295509295509295602080610b7960019360e3198d8203018652610b738960248a0161138f565b9061136e565b96019201920192889496938a969361082d565b8780fd5b60246040516357b9bde760e11b8152600435600401356004820152fd5b50346101405780600319360112610140576003546040516001600160a01b039091168152602090f35b50346101405780600319360112610140576040517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b503461014057610c2a36610e14565b60405163d701dcbd60e01b81523360048201526001600160a01b03906020816024817f000000000000000000000000000000000000000000000000000000000000000086165afa908115610d85578491610d67575b50156101c2576020918391610c9261131a565b610ca0610100830183610f3b565b908095918101031261013c577f000000000000000000000000000000000000000000000000000000000000000016610cf2610cdd60608401610f6d565b946001600160401b0380913516904216611415565b91813b156104d5576040516335ed67a960e11b81526001600160a01b0390951660048601528035602486015260e0013560448501526001600160401b03909116606484015282908183816084810103925af1801561040557610d58575b50600160025580f35b610d6190610ed4565b38610d4f565b610d7f915060203d8111610201576101f38183610f02565b38610c7f565b6040513d86823e3d90fd5b9050346104d95760203660031901126104d95781606092604083610db48295610ea3565b82815282602082015201526004358152600460205220604051610dd681610ea3565b815460406001808060a01b0383169485855260ff602086019460a01c1615158452015492019182526040519283525115156020830152516040820152f35b60031990602081830112610e4657600435916001600160401b038311610e46578261012092030112610e465760040190565b600080fd5b6000546001600160a01b03163303610e5f57565b606460405162461bcd60e51b815260206004820152602060248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e65726044820152fd5b606081019081106001600160401b03821117610ebe57604052565b634e487b7160e01b600052604160045260246000fd5b6001600160401b038111610ebe57604052565b604081019081106001600160401b03821117610ebe57604052565b90601f801991011681019081106001600160401b03821117610ebe57604052565b90816020910312610e4657518015158103610e465790565b903590601e1981360301821215610e4657018035906001600160401b038211610e4657602001918136038313610e4657565b356001600160a01b0381168103610e465790565b51906001600160a01b0382168203610e4657565b9060009160009081610fab610100830183610f3b565b9080939160209485918101031261013c57359162ed4e0083116113015782156112f957610fd9848301610f6d565b6040805163051ed6a360e41b81526001600160a01b03957f000000000000000000000000000000000000000000000000000000000000000087169390918881600481885afa801561126a57889087906112c1575b819250169116036112b557611043828601610f6d565b8251638338bd4960e01b81529087166004820152928784602481845afa9384156112ab578594611274575b50825163fa6739c160e01b81528488166004820152918883602481855afa92831561126a57869361123b575b5060c0870135809310608088019760016110b38a610f6d565b918b8851936110c185610ea3565b1683528c830184815260048985019260a08101358452359e8f8d52528c898c2094511684549160ff60a01b9051151560a01b16916affffffffffffffffffffff60a81b161717835551910155156000146112065761112c906001600160401b03809116904216611415565b93813b156112025783516301767f3560e71b81526001600160a01b0390911660048201526024810189905260448101929092526001600160401b03909316606482015291839083908183816084810103925af19081156111f957506111bf575b5050906111b97f40455b9459477e41dbb211aa1fb045316197c807243be1dddf789abafde4bb8d92610f6d565b169280a3565b7f40455b9459477e41dbb211aa1fb045316197c807243be1dddf789abafde4bb8d93929550906111f16111b992610ed4565b94919261118c565b513d84823e3d90fd5b8580fd5b50925050507f40455b9459477e41dbb211aa1fb045316197c807243be1dddf789abafde4bb8d939297506111b9915096610f6d565b9092508881813d8311611263575b6112538183610f02565b810103126112025751913861109a565b503d611249565b84513d88823e3d90fd5b9093508781813d83116112a4575b61128c8183610f02565b810103126104d15761129d90610f81565b923861106e565b503d611282565b83513d87823e3d90fd5b50919750505050505050565b50508881813d83116112f2575b6112d88183610f02565b81010312611202575187811681036112025787809161102d565b503d6112ce565b955050505050565b604051630521274160e51b815260048101849052602490fd5b60028054146113295760028055565b60405162461bcd60e51b815260206004820152601f60248201527f5265656e7472616e637947756172643a207265656e7472616e742063616c6c006044820152606490fd5b908060209392818452848401376000828201840152601f01601f1916010190565b9035601e1982360301811215610e465701602081359101916001600160401b038211610e46578136038313610e4657565b90816060910312610e46576113d481610f81565b91604060208301519201516001600160401b0381168103610e465790565b8051156113ff5760200190565b634e487b7160e01b600052603260045260246000fd5b9190916001600160401b038080941691160191821161143057565b634e487b7160e01b600052601160045260246000fdfea264697066735822122058ec7914dfd4f72a34079a24be739a7d6fc93bf3ccb80bf91dd9a2473d38c5de64736f6c63430008120033",
+  "deployedBytecode": "0x608080604052600436101561001357600080fd5b600090813560e01c90816307a8e84e14610d90575080631b0109a614610c1b5780632d78833314610bd657806332ba8d0714610bad5780633dffe4601461070657806341bbc083146106c15780635e7859051461067c578063715018a61461065157806379ba50971461059457806380cbc6fa146105765780638da5cb5b1461054f578063a950051c146104dd578063abed3b271461023d578063e30c397814610214578063e8f20c3e146101435763f2fde38b146100d157600080fd5b34610140576020366003190112610140576004356001600160a01b038181169182900361013c57610100610e4b565b600180546001600160a01b031916831790558254167f38d16b8cac22d99fc7c124b9cd0de2d3fa1faef420bfe791d8c362d765e227008380a380f35b8280fd5b80fd5b50346101405761015236610e14565b60405163d701dcbd60e01b815233600482015290916001600160a01b03916020816024817f000000000000000000000000000000000000000000000000000000000000000087165afa91821561020857916101da575b50156101c2576101b9602092610f95565b60405191168152f35b6040516308fffdfd60e21b8152336004820152602490fd5b6101fb915060203d8111610201575b6101f38183610f02565b810190610f23565b386101a8565b503d6101e9565b604051903d90823e3d90fd5b50346101405780600319360112610140576001546040516001600160a01b039091168152602090f35b5034610140576020806003193601126104d9576004356001600160401b03918282116104d557366023830112156104d55781600401358381116104d157602493600590368684841b870101116104cd5761029894929461131a565b6001600160a01b037f00000000000000000000000000000000000000000000000000000000000000008116939092885b8781106102d85789600160025580f35b8881831b84010135808b526004885260408b20604051906102f882610ea3565b8054918883169081815260ff8c82019460a01c16151584526040600180940154910152156104b5578c898d6040519182809263ed5e843760e01b825288600483015260609485935afa9182156104aa578a939261047a575b5050168042106104595750828d5260048a5260408d206000808255910155511561041057863b15610401578a6040516374d4b9a960e01b815282600482015281818d81838d5af18015610405576103ed575b50505b7f6231aa3a6f74e168e5edd33b4be30531b8a66b35f65ef51c09caeed73ee5e9098b80a260001981146103da576001016102c8565b634e487b7160e01b8a526011600452888afd5b6103f690610ed4565b610401578a386103a2565b8a80fd5b6040513d84823e3d90fd5b863b15610401578a60405163722081d160e11b815282600482015281818d81838d5af1801561040557610445575b50506103a5565b61044e90610ed4565b610401578a3861043e565b60405163a357e35160e01b81526004810191909152428816818e0152604490fd5b6104999250803d106104a3575b6104918183610f02565b8101906113c0565b9150503880610350565b503d610487565b6040513d85823e3d90fd5b6040516357b9bde760e11b8152600481018490528c90fd5b8680fd5b8480fd5b8380fd5b5080fd5b5034610140576020366003190112610140576004356001600160a01b038181169182900361013c5761050d610e4b565b600354826bffffffffffffffffffffffff60a01b821617600355167ff770c25506cbd44ff51f586aa1c7b778e8cec717cf608e4241912547c8db36238380a380f35b5034610140578060031936011261014057546040516001600160a01b039091168152602090f35b5034610140578060031936011261014057602060405162ed4e008152f35b50346101405780600319360112610140576001546001600160a01b0333818316036105fa576001600160a01b031991821660015582543392811683178455167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08380a380f35b60405162461bcd60e51b815260206004820152602960248201527f4f776e61626c6532537465703a2063616c6c6572206973206e6f7420746865206044820152683732bb9037bbb732b960b91b6064820152608490fd5b503461014057806003193601126101405761066a610e4b565b6040516310e83c2760e21b8152600490fd5b50346101405780600319360112610140576040517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b50346101405780600319360112610140576040517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b5034610140576003196020368201126104d9576001600160401b0390816004351161013c57608060043536039182011261013c5761074261131a565b6004356004013583526004602052604083206040519161076183610ea3565b600182549260ff828060a01b0385169485875260a01c16151560208601520154916040840192835215610b905760018060a01b036003541691519060405194633fc1957d60e21b86526040600487015260c4860191600435600401356044880152602460043501356064880152604460043501359060221901811215610b8c5760043501906004820135116104cd57600481013560051b918236036024830113610b8c579286928894608060848698959801526004870135905260e48085019185010195602481019186905b60048301358210610b4c575050505082809161086c6040969761085a60646004350160043560040161138f565b8583036043190160a48701529061136e565b90602483015203915afa8015610b3f5781938291610b04575b507f00000000000000000000000000000000000000000000000000000000000000006001600160a01b031690813b1561013c578291602483926040519485938492632dea6f9960e11b845260048401525af1801561040557610af0575b5050600480358101358085526020829052604080862060008082556001909101555163ed5e843760e01b8152918201526001600160a01b037f00000000000000000000000000000000000000000000000000000000000000001691606082602481865afa928315610ae55785928694610abe575b506040519061096482610ee7565b60018252865b60208110610a9b57508251604051906001600160a01b031661098b82610ee7565b815285602082015261099c836113f2565b526109a6826113f2565b50803b156104cd579086916040519163bcdded0b60e01b835260448301600435600401356004850152604060248501528151809152602060648501920190855b818110610a6d575050508391838381809403925af1801561040557610a59575b5050516040805193845260208401949094526001600160a01b0390811693911691600480350135917f2ef030cd746710443538050b41d3d8ece075f969198285f7cb87fe5c5d63175891a4600160025580f35b610a6290610ed4565b6104d1578438610a06565b825180516001600160a01b03168552602090810151818601528c9750604090940193909201916001016109e6565b602090604051610aaa81610ee7565b89815289838201528282860101520161096a565b909350610ada91925060603d81116104a3576104918183610f02565b509190919238610956565b6040513d87823e3d90fd5b610af990610ed4565b61013c5782386108e2565b935050506040823d604011610b37575b81610b2160409383610f02565b8101031261013c57826020835193015138610885565b3d9150610b14565b50604051903d90823e3d90fd5b9295509295509295602080610b7960019360e3198d8203018652610b738960248a0161138f565b9061136e565b96019201920192889496938a969361082d565b8780fd5b60246040516357b9bde760e11b8152600435600401356004820152fd5b50346101405780600319360112610140576003546040516001600160a01b039091168152602090f35b50346101405780600319360112610140576040517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b503461014057610c2a36610e14565b60405163d701dcbd60e01b81523360048201526001600160a01b03906020816024817f000000000000000000000000000000000000000000000000000000000000000086165afa908115610d85578491610d67575b50156101c2576020918391610c9261131a565b610ca0610100830183610f3b565b908095918101031261013c577f000000000000000000000000000000000000000000000000000000000000000016610cf2610cdd60608401610f6d565b946001600160401b0380913516904216611415565b91813b156104d5576040516335ed67a960e11b81526001600160a01b0390951660048601528035602486015260e0013560448501526001600160401b03909116606484015282908183816084810103925af1801561040557610d58575b50600160025580f35b610d6190610ed4565b38610d4f565b610d7f915060203d8111610201576101f38183610f02565b38610c7f565b6040513d86823e3d90fd5b9050346104d95760203660031901126104d95781606092604083610db48295610ea3565b82815282602082015201526004358152600460205220604051610dd681610ea3565b815460406001808060a01b0383169485855260ff602086019460a01c1615158452015492019182526040519283525115156020830152516040820152f35b60031990602081830112610e4657600435916001600160401b038311610e46578261012092030112610e465760040190565b600080fd5b6000546001600160a01b03163303610e5f57565b606460405162461bcd60e51b815260206004820152602060248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e65726044820152fd5b606081019081106001600160401b03821117610ebe57604052565b634e487b7160e01b600052604160045260246000fd5b6001600160401b038111610ebe57604052565b604081019081106001600160401b03821117610ebe57604052565b90601f801991011681019081106001600160401b03821117610ebe57604052565b90816020910312610e4657518015158103610e465790565b903590601e1981360301821215610e4657018035906001600160401b038211610e4657602001918136038313610e4657565b356001600160a01b0381168103610e465790565b51906001600160a01b0382168203610e4657565b9060009160009081610fab610100830183610f3b565b9080939160209485918101031261013c57359162ed4e0083116113015782156112f957610fd9848301610f6d565b6040805163051ed6a360e41b81526001600160a01b03957f000000000000000000000000000000000000000000000000000000000000000087169390918881600481885afa801561126a57889087906112c1575b819250169116036112b557611043828601610f6d565b8251638338bd4960e01b81529087166004820152928784602481845afa9384156112ab578594611274575b50825163fa6739c160e01b81528488166004820152918883602481855afa92831561126a57869361123b575b5060c0870135809310608088019760016110b38a610f6d565b918b8851936110c185610ea3565b1683528c830184815260048985019260a08101358452359e8f8d52528c898c2094511684549160ff60a01b9051151560a01b16916affffffffffffffffffffff60a81b161717835551910155156000146112065761112c906001600160401b03809116904216611415565b93813b156112025783516301767f3560e71b81526001600160a01b0390911660048201526024810189905260448101929092526001600160401b03909316606482015291839083908183816084810103925af19081156111f957506111bf575b5050906111b97f40455b9459477e41dbb211aa1fb045316197c807243be1dddf789abafde4bb8d92610f6d565b169280a3565b7f40455b9459477e41dbb211aa1fb045316197c807243be1dddf789abafde4bb8d93929550906111f16111b992610ed4565b94919261118c565b513d84823e3d90fd5b8580fd5b50925050507f40455b9459477e41dbb211aa1fb045316197c807243be1dddf789abafde4bb8d939297506111b9915096610f6d565b9092508881813d8311611263575b6112538183610f02565b810103126112025751913861109a565b503d611249565b84513d88823e3d90fd5b9093508781813d83116112a4575b61128c8183610f02565b810103126104d15761129d90610f81565b923861106e565b503d611282565b83513d87823e3d90fd5b50919750505050505050565b50508881813d83116112f2575b6112d88183610f02565b81010312611202575187811681036112025787809161102d565b503d6112ce565b955050505050565b604051630521274160e51b815260048101849052602490fd5b60028054146113295760028055565b60405162461bcd60e51b815260206004820152601f60248201527f5265656e7472616e637947756172643a207265656e7472616e742063616c6c006044820152606490fd5b908060209392818452848401376000828201840152601f01601f1916010190565b9035601e1982360301811215610e465701602081359101916001600160401b038211610e46578136038313610e4657565b90816060910312610e46576113d481610f81565b91604060208301519201516001600160401b0381168103610e465790565b8051156113ff5760200190565b634e487b7160e01b600052603260045260246000fd5b9190916001600160401b038080941691160191821161143057565b634e487b7160e01b600052601160045260246000fdfea264697066735822122058ec7914dfd4f72a34079a24be739a7d6fc93bf3ccb80bf91dd9a2473d38c5de64736f6c63430008120033",
+  "devdoc": {
+    "details": "The StakeVaultV2 lock under the intent hash holds owner, amount and maturity; this policy stores only the depositor and payment method a dispute needs, and whether the lock is a deferred payout. Canonical USDC only.",
+    "kind": "dev",
+    "methods": {
+      "acceptOwnership()": {
+        "details": "The new owner accepts the ownership transfer."
+      },
+      "constructor": {
+        "params": {
+          "_disputeNullifierRegistry": "Dedicated registry that rejects reused dispute nullifiers.",
+          "_disputeVerifier": "Verifier for signed dispute evidence.",
+          "_orchestratorRegistry": "Registry of orchestrators allowed to call the settlement callbacks.",
+          "_owner": "Governance owner for policy and dependency configuration.",
+          "_stakeVault": "Vault holding and locking taker collateral."
+        }
+      },
+      "getProtection(bytes32)": {
+        "params": {
+          "_intentHash": "Protected intent."
+        }
+      },
+      "onDeferredPayoutFunded((bytes32,address,address,address,address,bytes32,uint256,uint256,bytes))": {
+        "details": "O4 passes the same context it passed to settleIntent, in the same transaction."
+      },
+      "owner()": {
+        "details": "Returns the address of the current owner."
+      },
+      "pendingOwner()": {
+        "details": "Returns the address of the pending owner."
+      },
+      "release(bytes32[])": {
+        "params": {
+          "_intentHashes": "Protected intents to release."
+        }
+      },
+      "setDisputeVerifier(address)": {
+        "params": {
+          "_verifier": "New dispute verifier."
+        }
+      },
+      "settleIntent((bytes32,address,address,address,address,bytes32,uint256,uint256,bytes))": {
+        "details": "settlementData is abi.encode(uint256 disputeWindow). Zero windows and non-stake tokens pay now.",
+        "returns": {
+          "deferralVault": "Zero to pay intent.to now; otherwise the vault that receives netAmount."
+        }
+      },
+      "submitDispute((bytes32,bytes32,bytes[],bytes))": {
+        "params": {
+          "_attestation": "Signed dispute evidence for a settled intent."
+        }
+      },
+      "transferOwnership(address)": {
+        "details": "Starts the ownership transfer of the contract to a new account. Replaces the pending transfer if there is one. Can only be called by the current owner."
+      }
+    },
+    "stateVariables": {
+      "protections": {
+        "details": "Open protections keyed by globally unique intent hash; deleted on release or dispute."
+      }
+    },
+    "title": "DisputeProtectionPolicyV2",
+    "version": 1
+  },
+  "userdoc": {
+    "kind": "user",
+    "methods": {
+      "constructor": {
+        "notice": "Creates the policy; authorize it as a vault controller and a dispute-nullifier writer before use."
+      },
+      "disputeNullifierRegistry()": {
+        "notice": "Dedicated replay registry for payment-method-scoped dispute nullifiers."
+      },
+      "disputeVerifier()": {
+        "notice": "Verifier used to validate signed dispute evidence."
+      },
+      "getProtection(bytes32)": {
+        "notice": "Returns the open protection for an intent; zero after release or dispute."
+      },
+      "onDeferredPayoutFunded((bytes32,address,address,address,address,bytes32,uint256,uint256,bytes))": {
+        "notice": "Locks the net payout O4 just transferred to the deferral vault."
+      },
+      "orchestratorRegistry()": {
+        "notice": "Orchestrators allowed to call the settlement callbacks."
+      },
+      "release(bytes32[])": {
+        "notice": "Releases every listed protection whose lock has matured. A taker's stake returns to its owner's free stake; a deferred payout is transferred to its recipient, so recipients that cannot call the vault still get paid."
+      },
+      "renounceOwnership()": {
+        "notice": "Disables ownership renunciation so governed safety controls cannot become unreachable."
+      },
+      "setDisputeVerifier(address)": {
+        "notice": "GOVERNANCE ONLY: Replaces the verifier used for future dispute submissions."
+      },
+      "settleIntent((bytes32,address,address,address,address,bytes32,uint256,uint256,bytes))": {
+        "notice": "Selects immediate or deferred settlement for a verified fulfilment by a non-whitelisted taker."
+      },
+      "stakeVault()": {
+        "notice": "Stake custody and lock accounting controlled by this policy."
+      },
+      "submitDispute((bytes32,bytes32,bytes[],bytes))": {
+        "notice": "Resolves valid dispute evidence into an immediately claimable depositor award."
+      }
+    },
+    "notice": "Settles OrchestratorV4 payouts against the taker's stake, or defers them, for the signed dispute window.",
+    "version": 1
+  },
+  "storageLayout": {
+    "storage": [
+      {
+        "astId": 7,
+        "contract": "contracts/hooks/DisputeProtectionPolicyV2.sol:DisputeProtectionPolicyV2",
+        "label": "_owner",
+        "offset": 0,
+        "slot": "0",
+        "type": "t_address"
+      },
+      {
+        "astId": 120,
+        "contract": "contracts/hooks/DisputeProtectionPolicyV2.sol:DisputeProtectionPolicyV2",
+        "label": "_pendingOwner",
+        "offset": 0,
+        "slot": "1",
+        "type": "t_address"
+      },
+      {
+        "astId": 353,
+        "contract": "contracts/hooks/DisputeProtectionPolicyV2.sol:DisputeProtectionPolicyV2",
+        "label": "_status",
+        "offset": 0,
+        "slot": "2",
+        "type": "t_uint256"
+      },
+      {
+        "astId": 28031,
+        "contract": "contracts/hooks/DisputeProtectionPolicyV2.sol:DisputeProtectionPolicyV2",
+        "label": "disputeVerifier",
+        "offset": 0,
+        "slot": "3",
+        "type": "t_contract(IDisputeVerifier)31932"
+      },
+      {
+        "astId": 28037,
+        "contract": "contracts/hooks/DisputeProtectionPolicyV2.sol:DisputeProtectionPolicyV2",
+        "label": "protections",
+        "offset": 0,
+        "slot": "4",
+        "type": "t_mapping(t_bytes32,t_struct(Protection)31812_storage)"
+      }
+    ],
+    "types": {
+      "t_address": {
+        "encoding": "inplace",
+        "label": "address",
+        "numberOfBytes": "20"
+      },
+      "t_bool": {
+        "encoding": "inplace",
+        "label": "bool",
+        "numberOfBytes": "1"
+      },
+      "t_bytes32": {
+        "encoding": "inplace",
+        "label": "bytes32",
+        "numberOfBytes": "32"
+      },
+      "t_contract(IDisputeVerifier)31932": {
+        "encoding": "inplace",
+        "label": "contract IDisputeVerifier",
+        "numberOfBytes": "20"
+      },
+      "t_mapping(t_bytes32,t_struct(Protection)31812_storage)": {
+        "encoding": "mapping",
+        "key": "t_bytes32",
+        "label": "mapping(bytes32 => struct IDisputeProtectionPolicyV2.Protection)",
+        "numberOfBytes": "32",
+        "value": "t_struct(Protection)31812_storage"
+      },
+      "t_struct(Protection)31812_storage": {
+        "encoding": "inplace",
+        "label": "struct IDisputeProtectionPolicyV2.Protection",
+        "members": [
+          {
+            "astId": 31807,
+            "contract": "contracts/hooks/DisputeProtectionPolicyV2.sol:DisputeProtectionPolicyV2",
+            "label": "depositor",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_address"
+          },
+          {
+            "astId": 31809,
+            "contract": "contracts/hooks/DisputeProtectionPolicyV2.sol:DisputeProtectionPolicyV2",
+            "label": "deferredPayout",
+            "offset": 20,
+            "slot": "0",
+            "type": "t_bool"
+          },
+          {
+            "astId": 31811,
+            "contract": "contracts/hooks/DisputeProtectionPolicyV2.sol:DisputeProtectionPolicyV2",
+            "label": "paymentMethod",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_bytes32"
+          }
+        ],
+        "numberOfBytes": "64"
+      },
+      "t_uint256": {
+        "encoding": "inplace",
+        "label": "uint256",
+        "numberOfBytes": "32"
+      }
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "configuration": {
+    "chainId": 8453,
+    "source": "0x41123d6419C7b8e44157f6F3b0088442116641eC",
+    "recipient": "0x469dE3A098C6530E2842a538832eC0609D6c988d",
+    "value": "12000000000000",
+    "nonce": 49,
+    "contractSource": "cd849c5383a274a4c970d7bb6231e032285fd9a2",
+    "groupRegistry": "0xE138653725e3602d596ae388D2B2FD05ed1148f3"
+  },
+  "transactions": [
+    {
+      "step": "fund-fresh-pay-curator",
+      "hash": "0x6e21e7a32d13e66dc3d18c4369db39ddd16850e026e47cbc931a485f652347b3",
+      "nonce": 49,
+      "to": "0x469dE3A098C6530E2842a538832eC0609D6c988d",
+      "data": "0x",
+      "value": "12000000000000",
+      "receipt": {
+        "blockNumber": 52939787,
+        "blockHash": "0x7369bae26124ff72e3ae4660c93e679c47b907042a427afa438dbd294fe33d75",
+        "transactionHash": "0x6e21e7a32d13e66dc3d18c4369db39ddd16850e026e47cbc931a485f652347b3",
+        "gasUsed": "21000",
+        "effectiveGasPrice": "6000000"
+      }
+    }
+  ],
+  "verification": {
+    "block": 52939787,
+    "blockHash": "0x7369bae26124ff72e3ae4660c93e679c47b907042a427afa438dbd294fe33d75",
+    "hash": "0x6e21e7a32d13e66dc3d18c4369db39ddd16850e026e47cbc931a485f652347b3",
+    "recipientBalanceAtReceiptWei": "12000000000000",
+    "sourceNonce": 50,
+    "sourcePendingNonce": 50,
+    "recovery": "Replaced zero-hash preconfirmation metadata with canonical receipt for the same exact transaction; no new signature or broadcast"
+  }
+}

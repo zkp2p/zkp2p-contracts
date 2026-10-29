@@ -1,0 +1,42 @@
+{
+  "version": "1.0",
+  "chainId": "8453",
+  "createdAt": 1793292145000,
+  "meta": {
+    "name": "Base O4 activation",
+    "description": "4 calls. O4 0x74c55679268FAfB493864915aD16A320AB8c40Ba; DPPV2 0xB49Fa38C6Bb3C8C51ddb13711BB213cDD9DB1799; StakeVaultV2 0x4aDE08EC1098D0d8856dd7bbBBc7789794089A97. Source 526f81d2ea53f2045b821931b21f7b7e8f15a2c4. Prepared block 53251399 (0xf79214333afd121247af5bb552e242c250c4d30bb85075fdf7811558608b9b80). O3 stays registered and the UPV3 writer is NOT revoked.",
+    "txBuilderVersion": "1.16.5",
+    "createdFromSafeAddress": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+    "createdFromOwnerAddress": ""
+  },
+  "transactions": [
+    {
+      "to": "0x4aDE08EC1098D0d8856dd7bbBBc7789794089A97",
+      "value": "0",
+      "data": "0x79ba5097",
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0xB49Fa38C6Bb3C8C51ddb13711BB213cDD9DB1799",
+      "value": "0",
+      "data": "0x79ba5097",
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0xA845615b5203F7a21321DdF5e3a1ca024D93a443",
+      "value": "0",
+      "data": "0xd6da0326000000000000000000000000b49fa38c6bb3c8c51ddb13711bb213cdd9db1799",
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0xBe9fED15ED7A4B915C03EFcEcb9662739C3382A9",
+      "value": "0",
+      "data": "0xea535e8000000000000000000000000074c55679268fafb493864915ad16a320ab8c40ba",
+      "contractMethod": null,
+      "contractInputsValues": null
+    }
+  ]
+}

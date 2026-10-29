@@ -58,7 +58,12 @@
     "scripts/test-method-scoped-runner.cjs",
     "scripts/test-opt-in-dispute-lifecycle-deployment.cjs",
     "scripts/test-v3-groups-base-deployment.cjs",
-    "tasks/etherscanVerifyWithDelay.ts"
+    "tasks/etherscanVerifyWithDelay.ts",
+    "scripts/deploy-orchestrator-v4.ts",
+    "scripts/handoff-staging-owner.ts",
+    "hardhat.base-fork.config.ts",
+    "deployments/orchestratorV4SafeBatches.ts",
+    "scripts/orchestrator-v4-safe-batches.ts"
   ],
   "include": []
 }

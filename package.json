@@ -67,7 +67,7 @@
     "test:retire-dispute-risk-windows": "node --test scripts/retire-dispute-risk-windows.spec.cjs",
     "test:propose-safe-batch-chunks": "node --test scripts/test-propose-safe-batch-chunks.cjs",
     "test:v3-groups-deployment": "node scripts/test-v3-groups-base-deployment.cjs prepare-resume && node scripts/test-v3-groups-base-deployment.cjs reject-mismatch && node scripts/test-v3-groups-base-deployment.cjs managed-hook-guard && node scripts/test-v3-groups-base-deployment.cjs managed-hook-no-rollback && node scripts/test-v3-groups-base-deployment.cjs managed-hook-successor-policy && node scripts/test-v3-groups-base-deployment.cjs managed-hook-bytecode-mismatch && node scripts/test-v3-groups-base-deployment.cjs managed-hook-historical-successor && node scripts/test-v3-groups-base-deployment.cjs managed-hook-unrecognized-live",
-    "test:release-policy": "node --test scripts/verify-github-environment.spec.mjs scripts/npm-release.spec.mjs",
+    "test:release-policy": "node --test scripts/verify-github-environment.spec.mjs scripts/npm-release.spec.mjs scripts/orchestrator-v4-history.spec.cjs",
     "test:staging-signer-config": "node --test scripts/staging-signer-config.spec.cjs",
     "typechain": "hardhat typechain",
     "transpile": "tsc",
@@ -80,7 +80,11 @@
     "record:upv4:base": "ts-node --transpile-only scripts/deployActive.ts base 47_deploy_unified_payment_verifier_v4 && hardhat export --network base --export ./deployments/outputs/baseContracts.ts && ts-node --transpile-only scripts/canonicalizeDeploymentOutput.ts base ./deployments/outputs/baseContracts.ts && yarn workspace @zkp2p/contracts-v2 extract",
     "verify:upv4:base": "yarn hardhat --network base etherscan-verify-with-delay --delay 600 --contracts UnifiedPaymentVerifierV4 --fail-on-error",
     "deploy:fx-rate-feeds:base": "ts-node --transpile-only scripts/deployActive.ts base 44_deploy_fx_rate_feeds && hardhat export --network base --export ./deployments/outputs/baseContracts.ts && ts-node --transpile-only scripts/canonicalizeDeploymentOutput.ts base ./deployments/outputs/baseContracts.ts && yarn workspace @zkp2p/contracts-v2 extract",
-    "verify:fx-rate-feeds:base": "yarn hardhat --network base etherscan-verify-with-delay --delay 600 --contracts FxRateStore,FxRateFeedInrUsd,FxRateFeedCnyUsd --fail-on-error"
+    "verify:fx-rate-feeds:base": "yarn hardhat --network base etherscan-verify-with-delay --delay 600 --contracts FxRateStore,FxRateFeedInrUsd,FxRateFeedCnyUsd --fail-on-error",
+    "deploy:orchestrator-v4": "ts-node --transpile-only scripts/deploy-orchestrator-v4.ts",
+    "test:orchestrator-v4-release": "node --test scripts/staging-signer-config.spec.cjs scripts/orchestrator-v4-release.spec.cjs scripts/orchestrator-v4-source.spec.cjs scripts/canonical-receipts.spec.cjs scripts/handoff-staging-owner.spec.cjs scripts/orchestrator-v4-safe-batches.spec.cjs",
+    "o4:safe-batches": "ts-node --transpile-only scripts/orchestrator-v4-safe-batches.ts",
+    "test:orchestrator-v4-base-fork": "HARDHAT_CONFIG=hardhat.base-fork.config.ts HARDHAT_NETWORK=hardhat node --test scripts/orchestrator-v4-base-fork.spec.cjs"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-verify": "2.1.3",

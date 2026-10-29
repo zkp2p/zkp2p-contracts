@@ -55,7 +55,36 @@ export const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
   IntentLifecycleHookV1:
     "contracts/hooks/IntentLifecycleHookV1.sol/IntentLifecycleHookV1.json",
   StakeVault: "contracts/StakeVault.sol/StakeVault.json",
+  StakeVaultV2: "contracts/StakeVaultV2.sol/StakeVaultV2.json",
+  WhitelistPolicyV2: "contracts/hooks/WhitelistPolicyV2.sol/WhitelistPolicyV2.json",
+  IntentSignalPolicy: "contracts/hooks/IntentSignalPolicy.sol/IntentSignalPolicy.json",
+  DisputeProtectionPolicyV2:
+    "contracts/hooks/DisputeProtectionPolicyV2.sol/DisputeProtectionPolicyV2.json",
+  UnifiedPaymentVerifierV4:
+    "contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol/UnifiedPaymentVerifierV4.json",
+  OrchestratorV4: "contracts/OrchestratorV4.sol/OrchestratorV4.json",
+  ProtocolViewerV4: "contracts/ProtocolViewerV4.sol/ProtocolViewerV4.json",
 };
+
+// Executed staging stacks still hold historical obligations. Their ABI must stay
+// bound to the deployed record, never to a newer contract reusing the source name.
+export const HISTORICAL_ABI_DEPLOYMENTS = [
+  "DisputeProtectionPolicyBypass",
+  "StakeVaultBypass",
+  "IntentLifecycleHookV1Bypass",
+  "WhitelistPolicyV4",
+  "DisputeProtectionPolicyV2Historical20261016",
+  "StakeVaultV2Historical20261016",
+  "OrchestratorV4Historical20261016",
+  "UnifiedPaymentVerifierV4Historical20261016",
+  "StakeVaultV2Historical20261022",
+  "AddressGroupRegistryV4Historical20261022",
+  "WhitelistPolicyV2Historical20261022",
+  "DisputeProtectionPolicyV2Historical20261022",
+  "UnifiedPaymentVerifierV4Historical20261022",
+  "OrchestratorV4Historical20261022",
+  "ProtocolViewerV4Historical20261022",
+] as const;
 
 function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -119,10 +148,13 @@ export async function extractABIs(): Promise<void> {
   const contractsDir = path.join(ABIS_DIR, "contracts");
   ensureDir(contractsDir);
   const sourceIndex: string[] = [];
-  for (const [name, artifactRelativePath] of Object.entries(
-    SOURCE_ABI_ARTIFACTS
-  )) {
-    const artifactPath = path.join(ROOT, "artifacts", artifactRelativePath);
+  const abiSources = [
+    ...Object.entries(SOURCE_ABI_ARTIFACTS).map(([name, relativePath]) =>
+      [name, path.join(ROOT, "artifacts", relativePath)]),
+    ...HISTORICAL_ABI_DEPLOYMENTS.map((name) =>
+      [name, path.join(ROOT, "deployments", "base_staging", `${name}.json`)]),
+  ];
+  for (const [name, artifactPath] of abiSources) {
     if (!fs.existsSync(artifactPath)) {
       throw new Error(`Missing compiled artifact for ${name}: ${artifactPath}`);
     }

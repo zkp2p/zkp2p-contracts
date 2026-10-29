@@ -2,6 +2,51 @@
 
 Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, and utilities.
 
+## Candidate 0.4.4-rc.11
+
+- Adds the Base production `UnifiedPaymentVerifierV4` address
+  `0x7bE50E6206a9b3AdF36dbEAFac0e45Cc03A72048`, recorded from the 2026-10-28
+  deployment (zkp2p-contracts #371). It is Safe-owned and serves the live Base
+  `OrchestratorV3`.
+- Base O4-stack addresses other than UPV4 stay zero or absent; Base `OrchestratorV4`
+  is not deployed. Base staging exports are unchanged from rc.10.
+- Like rc.10, this candidate is consumed as a local branch tarball; no npm
+  registry tag changes.
+
+## Candidate 0.4.4-rc.10
+
+- Exports the fresh eight-contract passive O4 staging suite recorded in `bb9ceeb`,
+  including `IntentSignalPolicy`, with its current deployed ABIs. Base production
+  O4-stack addresses remain zero or absent; this package does not activate the suite.
+- Exports the 12-field Orchestrator V4 `IntentSignaled` event ending in `groupId`
+  and `arbitrator`, and the `AddressGroupRegistry` source ABI with `groupArbitrator`.
+- Keeps the October 22 suite under `Historical20261022` aliases with its original
+  deployed ABIs. This candidate is consumed as a local branch tarball; no npm
+  registry tag changes.
+
+## Candidate 0.4.4-rc.9
+
+- Exports the `IntentSignalPolicy` source ABI and the Orchestrator V4 ABI that
+  delegates signal admission to it (gating signature, deposit whitelist, group
+  arbitrator). O4 allows multiple concurrent intents for every account.
+- Exports the payment verifier V4 ABI whose attested snapshot ends with the
+  intent owner.
+- Preserves the October 22 staging addresses and deployed ABIs only under
+  `Historical20261022` aliases. Current names are absent until the fresh
+  eight-contract deployment is recorded. This candidate
+  is consumed as a branch tarball; no npm registry tag changes.
+
+## Candidate 0.4.4-rc.8
+
+- Exports the merged Orchestrator V4, ProtocolViewer V4, payment verifier V4,
+  WhitelistPolicy V2, DisputeProtectionPolicy V2 and StakeVault V2 source ABIs.
+- Preserves executed staging bypass records and October 16 contracts under
+  explicit `Historical20261016` aliases with their original deployed ABIs.
+- Includes the seven confirmed October 22 staging addresses; the suite remains
+  inactive until the contract release gates pass. This candidate
+  is consumed as an immutable branch tarball while its PR remains open; no npm
+  registry tag is changed by the staging release.
+
 ## Release 0.4.4-rc.2
 
 - Adds the executed Monobank/UAH registration to the Base catalog, matching Base

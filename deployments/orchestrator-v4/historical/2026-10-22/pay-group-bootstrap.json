@@ -1,0 +1,144 @@
+{
+  "configuration": {
+    "chainId": 8453,
+    "registry": "0xE138653725e3602d596ae388D2B2FD05ed1148f3",
+    "registryTransaction": "0x1f3d44ba9332ffde45d70ba3dbee34a3b806a0e785baf5f8d48f4bf46503e9f3",
+    "registryCodeHash": "0x4bef669f37cb7c89cd364ff9b2b5c61f734037c84d5dd8a7649a69097bfb9d58",
+    "curator": "0x469dE3A098C6530E2842a538832eC0609D6c988d",
+    "members": [
+      "0x469dE3A098C6530E2842a538832eC0609D6c988d",
+      "0xBC6Ca58369853D77a9A2f33358334BF9E9B9094F",
+      "0xd9C1B88a17D58EaCEc5D138203Fbc64f0135385a",
+      "0xFD9f98Aff8a395a8f7aC4f6cE4b2692DAA60FA02"
+    ],
+    "groups": [
+      {
+        "name": "Peer Pay",
+        "arbitrator": "0x0000000000000000000000000000000000000000"
+      },
+      {
+        "name": "O4 staging release QA",
+        "arbitrator": "0x7f0F7c170Eb3f7C9B7a8E494397d7EF94a2bEE8D"
+      }
+    ]
+  },
+  "sourceCommit": "cd849c5383a274a4c970d7bb6231e032285fd9a2",
+  "executionToolCommit": "41812410896bc7ec86009c5a4774ec16beb364fd",
+  "transactions": [
+    {
+      "step": "create:Peer Pay",
+      "hash": "0x6d6466b346fc081a34b424a6900cabbeec96c789a01ef0dc11829c70c8197fbb",
+      "nonce": 0,
+      "to": "0xE138653725e3602d596ae388D2B2FD05ed1148f3",
+      "data": "0xdc2ddcae000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000085065657220506179000000000000000000000000000000000000000000000000",
+      "value": "0",
+      "receipt": {
+        "blockNumber": 52940542,
+        "blockHash": "0x5b9e598ba6d10efd05c7c7e925e8e93186f299fb6691715a136fea1ba2f930ca",
+        "transactionHash": "0x6d6466b346fc081a34b424a6900cabbeec96c789a01ef0dc11829c70c8197fbb",
+        "gasUsed": "71545",
+        "effectiveGasPrice": "6000000"
+      }
+    },
+    {
+      "step": "members:Peer Pay",
+      "hash": "0x1ef38236f9bef8de85ffa6557dfbec7b3ae020a50fbd482120872654642a2ac1",
+      "nonce": 1,
+      "to": "0xE138653725e3602d596ae388D2B2FD05ed1148f3",
+      "data": "0x5063f361a725a5f76683fa31ae337276fe536e24ab173010c72b82ffaac488dac63bd9bf00000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000004000000000000000000000000469de3a098c6530e2842a538832ec0609d6c988d000000000000000000000000bc6ca58369853d77a9a2f33358334bf9e9b9094f000000000000000000000000d9c1b88a17d58eacec5d138203fbc64f0135385a000000000000000000000000fd9f98aff8a395a8f7ac4f6ce4b2692daa60fa02",
+      "value": "0",
+      "receipt": {
+        "blockNumber": 52940544,
+        "blockHash": "0x9a8286ea68921824106c98f8daf1c37a7be9fb66928ba49a4bb70acc8cf4dad5",
+        "transactionHash": "0x1ef38236f9bef8de85ffa6557dfbec7b3ae020a50fbd482120872654642a2ac1",
+        "gasUsed": "123364",
+        "effectiveGasPrice": "6000000"
+      }
+    },
+    {
+      "step": "create:O4 staging release QA",
+      "hash": "0xc316849623be0cbc449db7f49b9a7a5a313d6827f5bde5ea09141e7a0e30f934",
+      "nonce": 2,
+      "to": "0xE138653725e3602d596ae388D2B2FD05ed1148f3",
+      "data": "0xdc2ddcae000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000154f342073746167696e672072656c656173652051410000000000000000000000",
+      "value": "0",
+      "receipt": {
+        "blockNumber": 52940547,
+        "blockHash": "0x1b5f73432710ad4741a1adee0695a520ae2e9dbbed08750a891e0f426b5921bc",
+        "transactionHash": "0xc316849623be0cbc449db7f49b9a7a5a313d6827f5bde5ea09141e7a0e30f934",
+        "gasUsed": "54601",
+        "effectiveGasPrice": "6000000"
+      }
+    },
+    {
+      "step": "members:O4 staging release QA",
+      "hash": "0x8755bc145d8f6730ace76f45aa5675396f5f2001c51671a9858d8d3e5fd6e39d",
+      "nonce": 3,
+      "to": "0xE138653725e3602d596ae388D2B2FD05ed1148f3",
+      "data": "0x5063f361028ae58f6d13720f199a23d3cc034a1aee6b8d7d855282003ed866216ce6b3b800000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000004000000000000000000000000469de3a098c6530e2842a538832ec0609d6c988d000000000000000000000000bc6ca58369853d77a9a2f33358334bf9e9b9094f000000000000000000000000d9c1b88a17d58eacec5d138203fbc64f0135385a000000000000000000000000fd9f98aff8a395a8f7ac4f6ce4b2692daa60fa02",
+      "value": "0",
+      "receipt": {
+        "blockNumber": 52940549,
+        "blockHash": "0x863fc940039c03c762aa0ad61cf6b7cb51893387b0bf718a1904ee8d9178b54b",
+        "transactionHash": "0x8755bc145d8f6730ace76f45aa5675396f5f2001c51671a9858d8d3e5fd6e39d",
+        "gasUsed": "123352",
+        "effectiveGasPrice": "6000000"
+      }
+    },
+    {
+      "step": "arbitrator:O4 staging release QA",
+      "hash": "0xfb7ac7491f1a4d3e55b4d9df0b3538b564d4d1534fc0b95f7ea9a04dec290e59",
+      "nonce": 4,
+      "to": "0xE138653725e3602d596ae388D2B2FD05ed1148f3",
+      "data": "0x5e3a23a8028ae58f6d13720f199a23d3cc034a1aee6b8d7d855282003ed866216ce6b3b80000000000000000000000007f0f7c170eb3f7c9b7a8e494397d7ef94a2bee8d",
+      "value": "0",
+      "receipt": {
+        "blockNumber": 52940551,
+        "blockHash": "0x28180f3f5c2dcd807c70cedc16f273c2dc59297c306fa097a4cedcb0d0f9c4ae",
+        "transactionHash": "0xfb7ac7491f1a4d3e55b4d9df0b3538b564d4d1534fc0b95f7ea9a04dec290e59",
+        "gasUsed": "48590",
+        "effectiveGasPrice": "6000000"
+      }
+    }
+  ],
+  "groups": [
+    {
+      "name": "Peer Pay",
+      "groupId": "0xa725a5f76683fa31ae337276fe536e24ab173010c72b82ffaac488dac63bd9bf",
+      "curator": "0x469dE3A098C6530E2842a538832eC0609D6c988d",
+      "arbitrator": "0x0000000000000000000000000000000000000000",
+      "resolver": "0x0000000000000000000000000000000000000000",
+      "isPublic": false,
+      "members": [
+        "0x469dE3A098C6530E2842a538832eC0609D6c988d",
+        "0xBC6Ca58369853D77a9A2f33358334BF9E9B9094F",
+        "0xd9C1B88a17D58EaCEc5D138203Fbc64f0135385a",
+        "0xFD9f98Aff8a395a8f7aC4f6cE4b2692DAA60FA02"
+      ],
+      "creationTransaction": "0x6d6466b346fc081a34b424a6900cabbeec96c789a01ef0dc11829c70c8197fbb",
+      "creationBlock": 52940542
+    },
+    {
+      "name": "O4 staging release QA",
+      "groupId": "0x028ae58f6d13720f199a23d3cc034a1aee6b8d7d855282003ed866216ce6b3b8",
+      "curator": "0x469dE3A098C6530E2842a538832eC0609D6c988d",
+      "arbitrator": "0x7f0F7c170Eb3f7C9B7a8E494397d7EF94a2bEE8D",
+      "resolver": "0x0000000000000000000000000000000000000000",
+      "isPublic": false,
+      "members": [
+        "0x469dE3A098C6530E2842a538832eC0609D6c988d",
+        "0xBC6Ca58369853D77a9A2f33358334BF9E9B9094F",
+        "0xd9C1B88a17D58EaCEc5D138203Fbc64f0135385a",
+        "0xFD9f98Aff8a395a8f7aC4f6cE4b2692DAA60FA02"
+      ],
+      "creationTransaction": "0xc316849623be0cbc449db7f49b9a7a5a313d6827f5bde5ea09141e7a0e30f934",
+      "creationBlock": 52940547
+    }
+  ],
+  "verification": {
+    "verifiedAtBlock": 52940552,
+    "governance": true,
+    "membership": true,
+    "canonicalArbitratorUnchanged": true
+  }
+}

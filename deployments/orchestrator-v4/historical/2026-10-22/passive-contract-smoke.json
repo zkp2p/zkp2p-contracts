@@ -1,0 +1,12 @@
+{
+  "block": 52940592,
+  "chainId": 8453,
+  "mode": "live-read-only-eth_call",
+  "notEndToEnd": true,
+  "whitelistNonDepositorRejected": true,
+  "passiveOrchestratorSettlementRejected": true,
+  "whitelistStateUnchanged": true,
+  "nonWhitelistedSignalRejected": true,
+  "intentCounterUnchanged": "0",
+  "transactionsSubmitted": 0
+}
