@@ -48,8 +48,8 @@ type PublicPrivateDepositAcceptance = {
 export type Manifest = {
   version: 1; sourceCommit: string; executionToolCommit?: string; configurationHash: string; configuration: ReleaseConfig;
   baseline: Awaited<ReturnType<typeof inspect>>; transactions: Transaction[]; activationDrainEvidence: DrainEvidence | null;
-  contracts: Partial<Record<NewName, NewContract>>; verification: Record<string, unknown>; governanceTransactions: Array<{ to: string; data: string; value: string }>;
-  governancePreparedAt?: { blockNumber: number; blockHash: string };
+  contracts: Partial<Record<NewName, NewContract>>; verification: Record<string, unknown>; governanceTransactions: Array<{ step: string; to: string; data: string; value: string }>;
+  governancePreparedAt?: { blockNumber: number; blockHash: string; timestamp: number };
   stagingPublicPrivateDepositAcceptances?: PublicPrivateDepositAcceptance[];
   basePublicPrivateDepositAcceptances?: PublicPrivateDepositAcceptance[];
 };
@@ -376,7 +376,8 @@ export async function prepareGovernance(hre: HardhatRuntimeEnvironment, journal:
   await assertPrivateDepositsPreserved(hre, journal, { acknowledgement });
   const snapshot = await inspect(hre, c);
   m.governanceTransactions = await activationTransactions(hre, m, snapshot);
-  m.governancePreparedAt = { blockNumber: snapshot.blockNumber, blockHash: snapshot.blockHash };
+  const block = await hre.ethers.provider.getBlock(snapshot.blockHash);
+  m.governancePreparedAt = { blockNumber: snapshot.blockNumber, blockHash: snapshot.blockHash, timestamp: block.timestamp };
   journal.save();
 }
 

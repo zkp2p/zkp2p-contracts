@@ -201,7 +201,7 @@ test("Base prepares four decoded Safe calls from a keyless live snapshot and ver
       assert.deepEqual(Array.from(iface.decodeFunctionData(method, tx.data)), args);
     }
     const block = await hre.ethers.provider.getBlock("latest");
-    assert.deepEqual(f.manifest.governancePreparedAt, { blockNumber: block.number, blockHash: block.hash });
+    assert.deepEqual(f.manifest.governancePreparedAt, { blockNumber: block.number, blockHash: block.hash, timestamp: block.timestamp });
     for (const { to, data, value } of transactions) await (await f.governance.sendTransaction({ to, data, value })).wait();
     await verifySuite(f.hre, journal, true);
     assert.deepEqual(await f.deployed.NullifierRegistryV2.getWriters(), [f.deployed.UnifiedPaymentVerifierV3.address, f.deployed.UnifiedPaymentVerifierV4.address]);
