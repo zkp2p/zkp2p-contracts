@@ -37,10 +37,11 @@ contract EscrowV2LifecycleTest is EscrowV2LegacyFixture {
         assertEq(escrow.getDepositIntent(0, extended).expiryTime, block.timestamp + 30 hours);
         assertEq(escrow.getDepositIntent(0, fresh).expiryTime, block.timestamp + 1 hours);
 
-        vm.warp(block.timestamp + 1 hours);
+        uint256 freshExpiryTime = escrow.getDepositIntent(0, fresh).expiryTime;
+        vm.warp(freshExpiryTime);
         escrow.pruneExpiredIntents(0);
         assertEq(escrow.getDepositIntent(0, fresh).intentHash, fresh);
-        vm.warp(block.timestamp + 1);
+        vm.warp(freshExpiryTime + 1);
         escrow.pruneExpiredIntents(0);
         assertEq(escrow.getDepositIntent(0, fresh).intentHash, bytes32(0));
         assertEq(escrow.getDepositIntent(0, existing).intentHash, existing);
