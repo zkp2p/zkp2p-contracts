@@ -1,13 +1,14 @@
 require("ts-node/register/transpile-only");
 const assert = require("node:assert/strict");
-const { existsSync, mkdtempSync, readFileSync, rmSync } = require("node:fs");
+const { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const { test } = require("node:test");
 const { spawnSync } = require("node:child_process");
 const hre = require("hardhat");
 const { ContractFactory, VoidSigner, Wallet, utils, constants } = require("ethers");
-const { inspect, assertFreshDeploymentPreflight, assertBaseline, validateConfig, TransactionJournal, deploySuite, activate, verifySuite, activationTransactions, DRAIN_QUERY, recordDrainEvidence, assertPrivateDepositsPreserved } = require("./deploy-orchestrator-v4.ts");
+const { inspect, assertFreshDeploymentPreflight, assertBaseline, validateConfig, TransactionJournal, deploySuite, activate, verifySuite, activationTransactions, prepareGovernance, createReleaseSigner, hash, DRAIN_QUERY, recordDrainEvidence, assertPrivateDepositsPreserved } = require("./deploy-orchestrator-v4.ts");
+const { RETIRED_DEPLOYERS } = require("../utils/deployerKeys.ts");
 
 // Public Hardhat fixture account. Never load a service or production signer in these tests.
 const wallet = Wallet.fromMnemonic("test test test test test test test test test test test junk").connect(hre.ethers.provider);
@@ -80,6 +81,141 @@ async function fixture() {
   await recordDrainEvidence(hre, journal, await drainEvidence());
   return { config, deployed, directory, path, manifest, journal };
 }
+
+async function baseFixture() {
+  const f = await fixture();
+  const governance = Wallet.fromMnemonic("test test test test test test test test test test test junk", "m/44'/60'/0'/0/1").connect(hre.ethers.provider);
+  const { OrchestratorRegistry: registry, PaymentVerifierRegistry: pvr, NullifierRegistryV2: nr } = f.deployed;
+  const upv = await (await hre.ethers.getContractFactory("UnifiedPaymentVerifierV4", wallet)).deploy(registry.address, nr.address, f.deployed.MultiAttestationVerifier.address);
+  const receipt = await upv.deployTransaction.wait();
+  for (const { method } of f.config.paymentMethods) await (await upv.addPaymentMethod(method)).wait();
+  for (const { method } of [...f.config.paymentMethods].reverse()) await (await pvr.removePaymentMethod(method)).wait();
+  for (const { method, currencies } of f.config.paymentMethods) await (await pvr.addPaymentMethod(method, upv.address, currencies)).wait();
+  await (await nr.addWritePermission(upv.address)).wait();
+  await (await upv.transferOwnership(governance.address)).wait();
+  for (const name of ["OrchestratorRegistry", "PaymentVerifierRegistry", "NullifierRegistryV2", "DisputeNullifierRegistry"]) {
+    await (await f.deployed[name].transferOwnership(governance.address)).wait();
+    f.deployed[name] = f.deployed[name].connect(governance);
+  }
+  // V1 remains registered and unpaused; neither its admission state nor its drain gates this release.
+  await (await f.deployed.Orchestrator.unpauseOrchestrator()).wait();
+  await (await registry.connect(governance).addOrchestrator(f.deployed.Orchestrator.address)).wait();
+  f.config.environment = "base"; f.config.governance = governance.address;
+  f.config.legacyDrainCheckpoints = [];
+  f.config.legacyWhitelistCheckpoint = { indexedBlock: f.config.existing.PredecessorWhitelistPolicy.deploymentBlock - 1, enabled: [] };
+  f.config.existing.UnifiedPaymentVerifierV4 = { address: upv.address, artifact: "UnifiedPaymentVerifierV4", runtimeCodeHash: utils.keccak256(await hre.ethers.provider.getCode(upv.address)), deploymentTransaction: receipt.transactionHash, deploymentBlock: receipt.blockNumber };
+  f.deployed.UnifiedPaymentVerifierV4 = upv.connect(governance);
+  // Canonical adopted input is separate from the new suite's Hardhat output directory.
+  const root = join(f.directory, "release-input");
+  const recordDirectory = join(root, "deployments/base");
+  mkdirSync(recordDirectory, { recursive: true });
+  const adoptedRecordPath = join(recordDirectory, "UnifiedPaymentVerifierV4.json");
+  writeFileSync(adoptedRecordPath, JSON.stringify({ address: upv.address, transactionHash: receipt.transactionHash }));
+  const baseHre = { ...hre, config: { ...hre.config, paths: { ...hre.config.paths, root } } };
+  f.manifest.activationDrainEvidence = null;
+  f.manifest.baseline = await inspect(baseHre, f.config);
+  return { ...f, hre: baseHre, governance, adoptedRecordPath };
+}
+
+async function rebuildRoutes(f, verifiers) {
+  for (const { method } of [...f.config.paymentMethods].reverse()) await (await f.deployed.PaymentVerifierRegistry.removePaymentMethod(method)).wait();
+  for (const [index, { method, currencies }] of f.config.paymentMethods.entries()) await (await f.deployed.PaymentVerifierRegistry.addPaymentMethod(method, verifiers[index], currencies)).wait();
+}
+
+test("Base configuration requires an adopted UPV4 and no legacy drain; staging retains its V1 gate", () => {
+  const staging = JSON.parse(readFileSync("deployments/orchestrator-v4/base_staging.json"));
+  const base = { ...staging, environment: "base", legacyDrainCheckpoints: [], existing: { ...staging.existing, UnifiedPaymentVerifierV4: { ...staging.existing.UnifiedPaymentVerifierV3, artifact: "UnifiedPaymentVerifierV4" } } };
+  assert.doesNotThrow(() => validateConfig(base));
+  const missingPin = { ...base, existing: { ...base.existing } }; delete missingPin.existing.UnifiedPaymentVerifierV4;
+  assert.throws(() => validateConfig(missingPin), /Invalid UnifiedPaymentVerifierV4 pin/);
+  assert.throws(() => validateConfig({ ...base, legacyDrainCheckpoints: staging.legacyDrainCheckpoints }), /Base legacy drain checkpoints must be empty/);
+  assert.throws(() => validateConfig({ ...base, legacyDrainCheckpoints: null }), /Base legacy drain checkpoints must be empty/);
+  assert.throws(() => validateConfig({ ...staging, existing: base.existing }), /Staging must not pin UnifiedPaymentVerifierV4/);
+  assert.throws(() => validateConfig({ ...staging, legacyDrainCheckpoints: [] }), /Missing reviewed legacy drain checkpoints/);
+  assert.throws(() => validateConfig({ ...staging, legacyDrainCheckpoints: staging.legacyDrainCheckpoints.filter((row) => row.contract !== "Orchestrator") }), /V1 drain checkpoint is required/);
+  for (const config of [base, staging]) for (const field of ["signer", "governance"]) {
+    assert.throws(() => validateConfig({ ...config, [field]: RETIRED_DEPLOYERS[0] }), new RegExp(`Configured ${field} is retired`));
+  }
+});
+
+test("release signer uses environment-specific keys and rejects retired, missing and mismatched signers", () => {
+  const second = Wallet.fromMnemonic("test test test test test test test test test test test junk", "m/44'/60'/0'/0/1");
+  const env = { BASE_DEPLOYER_KEY: wallet.privateKey.slice(2), STAGING_DEPLOYER_KEY: second.privateKey };
+  for (const [environment, expected] of [["base", wallet], ["base_staging", second]]) {
+    const config = { environment, signer: expected.address };
+    assert.equal(createReleaseSigner(config, env).address, expected.address);
+    assert.throws(() => createReleaseSigner(config, env, [expected.address.toLowerCase()]), /signer is retired/);
+    assert.throws(() => createReleaseSigner(config, {}), /is unavailable; no fallback signer is permitted/);
+    assert.throws(() => createReleaseSigner({ ...config, signer: constants.AddressZero }, env), /Derived signer differs from the verified configuration/);
+  }
+  assert.throws(() => createReleaseSigner({ environment: "base", signer: wallet.address }, { O4_PRODUCTION_DEPLOYER_KEY: wallet.privateKey }), /BASE_DEPLOYER_KEY is unavailable/);
+  assert.throws(() => createReleaseSigner({ environment: "base", signer: wallet.address }, { BASE_DEPLOYER_KEY: "credential-must-not-appear" }), (error) => error.message === "BASE_DEPLOYER_KEY private key is invalid");
+});
+
+test("Base deploys seven contracts, preserves the adopted record and resumes without transactions", async () => {
+  const f = await baseFixture();
+  try {
+    const recordBefore = readFileSync(f.adoptedRecordPath, "utf8"), saved = [];
+    const observedHre = { ...f.hre, deployments: { ...hre.deployments, save: async (name, record) => { saved.push(name); return hre.deployments.save(name, record); } } };
+    await deploySuite(observedHre, f.journal);
+    const names = ["StakeVaultV2", "AddressGroupRegistryV4", "WhitelistPolicyV2", "IntentSignalPolicy", "DisputeProtectionPolicyV2", "OrchestratorV4", "ProtocolViewerV4"];
+    assert.deepEqual(Object.keys(f.manifest.contracts), names);
+    assert.deepEqual(saved, names);
+    assert.deepEqual(f.manifest.transactions.map((tx) => tx.step), [
+      ...names.slice(0, 5).map((name) => `deploy:${name}`), "StakeVaultV2:setController",
+      "deploy:OrchestratorV4", "OrchestratorV4:setSignalPolicy", "OrchestratorV4:setSettlementPolicy", "deploy:ProtocolViewerV4",
+      "StakeVaultV2:transferOwnership", "DisputeProtectionPolicyV2:transferOwnership", "OrchestratorV4:transferOwnership",
+    ]);
+    assert.equal(readFileSync(f.adoptedRecordPath, "utf8"), recordBefore);
+    assert.equal(existsSync(join(hre.config.paths.deployments, "hardhat/UnifiedPaymentVerifierV4.json")), false);
+    assert.equal(await f.deployed.UnifiedPaymentVerifierV4.owner(), other);
+    const nonce = await wallet.getTransactionCount(), addresses = Object.values(f.manifest.contracts).map((row) => row.address);
+    const restored = new TransactionJournal(f.path, JSON.parse(readFileSync(f.path)), wallet);
+    await deploySuite(observedHre, restored);
+    assert.equal(await wallet.getTransactionCount(), nonce);
+    assert.deepEqual(Object.values(restored.manifest.contracts).map((row) => row.address), addresses);
+    assert.equal(readFileSync(f.adoptedRecordPath, "utf8"), recordBefore);
+    await assert.rejects(recordDrainEvidence(f.hre, f.journal, {}), /record-drain is staging-only/);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
+test("Base prepares four decoded Safe calls from a keyless live snapshot and verifies with either allowed writer set", async () => {
+  const f = await baseFixture();
+  try {
+    await deploySuite(f.hre, f.journal);
+    const journal = new TransactionJournal(f.path, f.manifest, new VoidSigner(wallet.address, hre.ethers.provider));
+    const nonce = await wallet.getTransactionCount(), governanceNonce = await f.governance.getTransactionCount();
+    await prepareGovernance(f.hre, journal);
+    assert.equal(await wallet.getTransactionCount(), nonce); assert.equal(await f.governance.getTransactionCount(), governanceNonce);
+    const transactions = f.manifest.governanceTransactions;
+    assert.deepEqual(transactions.map((tx) => tx.step), ["accept:StakeVaultV2", "accept:DisputeProtectionPolicyV2", "authorize-policy-writer", "register-orchestrator"]);
+    const expected = [
+      ["StakeVaultV2", f.manifest.contracts.StakeVaultV2.address, "acceptOwnership", []],
+      ["DisputeProtectionPolicyV2", f.manifest.contracts.DisputeProtectionPolicyV2.address, "acceptOwnership", []],
+      ["NullifierRegistry", f.deployed.DisputeNullifierRegistry.address, "addWritePermission", [f.manifest.contracts.DisputeProtectionPolicyV2.address]],
+      ["OrchestratorRegistry", f.deployed.OrchestratorRegistry.address, "addOrchestrator", [f.manifest.contracts.OrchestratorV4.address]],
+    ];
+    for (const [index, tx] of transactions.entries()) {
+      const [artifact, to, method, args] = expected[index], iface = new utils.Interface((await hre.artifacts.readArtifact(artifact)).abi);
+      assert.equal(tx.to, to); assert.equal(tx.value, "0"); assert.equal(iface.parseTransaction(tx).name, method);
+      assert.deepEqual(Array.from(iface.decodeFunctionData(method, tx.data)), args);
+    }
+    const block = await hre.ethers.provider.getBlock("latest");
+    assert.deepEqual(f.manifest.governancePreparedAt, { blockNumber: block.number, blockHash: block.hash });
+    for (const { to, data, value } of transactions) await (await f.governance.sendTransaction({ to, data, value })).wait();
+    await verifySuite(f.hre, journal, true);
+    assert.deepEqual(await f.deployed.NullifierRegistryV2.getWriters(), [f.deployed.UnifiedPaymentVerifierV3.address, f.deployed.UnifiedPaymentVerifierV4.address]);
+    await (await f.deployed.NullifierRegistryV2.removeWritePermission(f.deployed.UnifiedPaymentVerifierV3.address)).wait();
+    await verifySuite(f.hre, journal, true);
+    await (await f.deployed.NullifierRegistryV2.addWritePermission(other)).wait();
+    await assert.rejects(verifySuite(f.hre, journal, true), /Unexpected payment nullifier writer/);
+    await (await f.deployed.NullifierRegistryV2.removeWritePermission(other)).wait();
+    await rebuildRoutes(f, f.config.paymentMethods.map(() => f.deployed.UnifiedPaymentVerifierV3.address));
+    await assert.rejects(verifySuite(f.hre, journal, true), /Not all payment routes select UPV4/);
+    assert.equal(await f.deployed.OrchestratorRegistry.isOrchestrator(f.deployed.OrchestratorV3.address), true);
+    assert.equal(await f.deployed.OrchestratorV3.paused(), false);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
 
 test("fresh inspect and deployment share baseline and pending-nonce rejection", async () => {
   const f = await fixture();
@@ -218,13 +354,11 @@ test("an interruption before broadcast reuses the saved signed bytes and nonce",
 });
 
 test("production configuration prepares ownership and unsigned Safe calls; direct activation is rejected", async () => {
-  const f = await fixture();
+  const f = await baseFixture();
   try {
-    f.config.environment = "base"; f.config.governance = other;
-    for (const name of ["OrchestratorRegistry", "PaymentVerifierRegistry", "NullifierRegistryV2", "DisputeNullifierRegistry"]) await (await f.deployed[name].transferOwnership(other)).wait();
-    assertBaseline(f.config, await inspect(hre, f.config));
-    await deploySuite(hre, f.journal);
-    const actions = await activationTransactions(hre, f.manifest);
+    assertBaseline(f.config, await inspect(f.hre, f.config));
+    await deploySuite(f.hre, f.journal);
+    const actions = await activationTransactions(f.hre, f.manifest, await inspect(f.hre, f.config));
     assert.deepEqual(actions.slice(0, 2).map((x) => x.step), ["accept:StakeVaultV2", "accept:DisputeProtectionPolicyV2"]);
     assert.equal(actions.at(-1).step, "register-orchestrator");
     const o4 = await hre.ethers.getContractAt("OrchestratorV4", f.manifest.contracts.OrchestratorV4.address);
@@ -419,13 +553,15 @@ test("staging acknowledgement cannot bypass ownership, drain, registry prefix, o
   } finally { rmSync(f.directory, { recursive: true, force: true }); }
 });
 
-test("base refuses public private-deposit acknowledgement and recorded staging exceptions", async () => {
+test("each environment refuses the other environment's recorded private-deposit exceptions", async () => {
   const f = await fixture();
   try {
+    f.manifest.basePublicPrivateDepositAcceptances = [{ acknowledgement: "1" }];
+    await assert.rejects(assertPrivateDepositsPreserved(hre, f.journal, { verifyRecordedAcceptance: true }), /Base-only; forbidden on base_staging/);
     f.config.environment = "base";
+    delete f.manifest.basePublicPrivateDepositAcceptances;
     const nonce = await wallet.getTransactionCount();
     await assert.rejects(activate(hre, f.journal, "1"), /staging-only; forbidden on base/);
-    await assert.rejects(assertPrivateDepositsPreserved(hre, f.journal, { acknowledgement: "1" }), /staging-only; forbidden on base/);
     f.manifest.stagingPublicPrivateDepositAcceptances = [{ acknowledgement: "1" }];
     await assert.rejects(assertPrivateDepositsPreserved(hre, f.journal, { verifyRecordedAcceptance: true }), /staging-only; forbidden on base/);
     assert.equal(await wallet.getTransactionCount(), nonce);
@@ -440,6 +576,232 @@ test("CLI refuses acknowledgement on base or outside activate before loading Har
     assert.equal(result.status, 1);
     assert.match(result.stderr, error);
   }
+});
+
+test("CLI restricts both acknowledgement variables to their environment and action before loading Hardhat", () => {
+  for (const [variable, allowedEnvironment, allowedAction] of [
+    ["O4_BASE_ACCEPT_PUBLIC_PRIVATE_DEPOSITS", "base", "prepare-governance"],
+    ["O4_STAGING_ACCEPT_PUBLIC_PRIVATE_DEPOSITS", "base_staging", "activate"],
+  ]) for (const environment of ["base", "base_staging"]) for (const action of ["inspect", "deploy", "activate", "prepare-governance", "verify", "verify-source", "record-drain"]) {
+    if (environment === allowedEnvironment && action === allowedAction) continue;
+    const env = { ...process.env, HARDHAT_CONFIG: "nonexistent-config-to-prove-early-refusal.ts" };
+    delete env.O4_BASE_ACCEPT_PUBLIC_PRIVATE_DEPOSITS; delete env.O4_STAGING_ACCEPT_PUBLIC_PRIVATE_DEPOSITS;
+    env[variable] = "1";
+    const result = spawnSync(process.execPath, ["-r", "ts-node/register/transpile-only", "scripts/deploy-orchestrator-v4.ts", environment, action], { encoding: "utf8", env });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, environment === allowedEnvironment ? new RegExp(`only accepted by ${allowedAction}`) : /forbidden on/);
+    assert.doesNotMatch(result.stderr, /nonexistent-config|Cannot find module|HH\d+/);
+  }
+  for (const action of ["activate", "record-drain"]) {
+    const env = { ...process.env, HARDHAT_CONFIG: "nonexistent-config-to-prove-early-refusal.ts" };
+    delete env.O4_BASE_ACCEPT_PUBLIC_PRIVATE_DEPOSITS; delete env.O4_STAGING_ACCEPT_PUBLIC_PRIVATE_DEPOSITS;
+    const result = spawnSync(process.execPath, ["-r", "ts-node/register/transpile-only", "scripts/deploy-orchestrator-v4.ts", "base", action], { encoding: "utf8", env });
+    assert.equal(result.status, 1); assert.match(result.stderr, /staging-only/);
+  }
+});
+
+test("Base preflight permits only the adopted writer sets and UPV3 or UPV4 routes", async () => {
+  const f = await baseFixture();
+  try {
+    const upv3 = f.deployed.UnifiedPaymentVerifierV3.address, upv4 = f.deployed.UnifiedPaymentVerifierV4.address;
+    assertFreshDeploymentPreflight(f.config, await inspect(f.hre, f.config));
+    await (await f.deployed.NullifierRegistryV2.removeWritePermission(upv3)).wait();
+    assertFreshDeploymentPreflight(f.config, await inspect(f.hre, f.config));
+    await (await f.deployed.NullifierRegistryV2.addWritePermission(upv3)).wait();
+    await rebuildRoutes(f, [upv4, upv3, upv4]);
+    const mixed = await inspect(f.hre, f.config);
+    assertFreshDeploymentPreflight(f.config, mixed);
+    assert.throws(() => assertFreshDeploymentPreflight(f.config, { ...mixed, nullifierWriters: [upv4, upv4] }), /Unexpected payment nullifier writer/);
+    await (await f.deployed.NullifierRegistryV2.removeWritePermission(upv4)).wait();
+    assert.throws(() => assertFreshDeploymentPreflight(f.config, { ...mixed, nullifierWriters: [] }), /Unexpected payment nullifier writer/);
+    assert.throws(() => assertFreshDeploymentPreflight(f.config, { ...mixed, paymentMethods: [...mixed.paymentMethods].reverse() }), /Payment catalog or currency order changed/);
+    const missingWriter = await inspect(f.hre, f.config);
+    assert.throws(() => assertFreshDeploymentPreflight(f.config, missingWriter), /Adopted UPV4 payment nullifier writer missing/);
+    await (await f.deployed.NullifierRegistryV2.addWritePermission(upv4)).wait();
+    await (await f.deployed.NullifierRegistryV2.addWritePermission(other)).wait();
+    const extra = await inspect(f.hre, f.config);
+    assert.throws(() => assertFreshDeploymentPreflight(f.config, extra), /Unexpected payment nullifier writer/);
+    await (await f.deployed.NullifierRegistryV2.removeWritePermission(other)).wait();
+    await rebuildRoutes(f, [upv4, f.deployed.DisputeVerifier.address, upv4]);
+    const unknown = await inspect(f.hre, f.config);
+    assert.throws(() => assertFreshDeploymentPreflight(f.config, unknown), /Unrecognized payment verifier/);
+    const nonce = await wallet.getTransactionCount();
+    await assert.rejects(deploySuite(f.hre, f.journal), /Unrecognized payment verifier/);
+    assert.equal(await wallet.getTransactionCount(), nonce);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
+test("Base refuses missing or mismatched adopted records, owner, wiring and catalog before deployment", async () => {
+  const f = await baseFixture();
+  try {
+    const record = readFileSync(f.adoptedRecordPath, "utf8"), nonce = await wallet.getTransactionCount();
+    rmSync(f.adoptedRecordPath);
+    await assert.rejects(inspect(f.hre, f.config), /Adopted Base UnifiedPaymentVerifierV4 record is missing/);
+    await assert.rejects(deploySuite(f.hre, f.journal), /Adopted Base UnifiedPaymentVerifierV4 record is missing/);
+    for (const field of ["address", "transactionHash"]) {
+      writeFileSync(f.adoptedRecordPath, JSON.stringify({ ...JSON.parse(record), [field]: field === "address" ? other : constants.HashZero }));
+      await assert.rejects(deploySuite(f.hre, f.journal), /record differs from its pin/);
+    }
+    writeFileSync(f.adoptedRecordPath, record);
+    assert.equal(await wallet.getTransactionCount(), nonce); assert.equal(f.manifest.transactions.length, 0);
+    await (await f.deployed.UnifiedPaymentVerifierV4.transferOwnership(wallet.address)).wait();
+    await assert.rejects(deploySuite(f.hre, f.journal), /Adopted UPV4 owner mismatch/);
+    await (await f.deployed.UnifiedPaymentVerifierV4.connect(wallet).transferOwnership(other)).wait();
+    const originalCatalog = f.config.paymentMethods;
+    f.config.paymentMethods = [...originalCatalog].reverse();
+    await assert.rejects(deploySuite(f.hre, f.journal), /UPV4 method catalog mismatch/);
+    f.config.paymentMethods = originalCatalog;
+    const originalRegistry = f.config.existing.OrchestratorRegistry;
+    f.config.existing.OrchestratorRegistry = f.config.existing.EscrowRegistry;
+    await assert.rejects(deploySuite(f.hre, f.journal), /Adopted UPV4 orchestratorRegistry mismatch/);
+    f.config.existing.OrchestratorRegistry = originalRegistry;
+    const pin = f.config.existing.UnifiedPaymentVerifierV4, originalHash = pin.runtimeCodeHash;
+    pin.runtimeCodeHash = constants.HashZero;
+    await assert.rejects(deploySuite(f.hre, f.journal), /UnifiedPaymentVerifierV4 bytecode differs/);
+    pin.runtimeCodeHash = originalHash;
+    assert.equal(f.manifest.transactions.length, 0);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
+test("Base mixed routes trigger the full ordered rebuild before registration without payment writer calls", async () => {
+  const f = await baseFixture();
+  try {
+    await deploySuite(f.hre, f.journal);
+    await rebuildRoutes(f, [f.deployed.UnifiedPaymentVerifierV4.address, f.deployed.UnifiedPaymentVerifierV3.address, f.deployed.UnifiedPaymentVerifierV4.address]);
+    await assert.rejects(activationTransactions(f.hre, f.manifest), /requires a live inspection snapshot/);
+    await prepareGovernance(f.hre, new TransactionJournal(f.path, f.manifest, new VoidSigner(wallet.address, hre.ethers.provider)));
+    const transactions = f.manifest.governanceTransactions, methods = f.config.paymentMethods;
+    assert.deepEqual(transactions.map((tx) => tx.step), ["accept:StakeVaultV2", "accept:DisputeProtectionPolicyV2", "authorize-policy-writer", ...[...methods].reverse().map(({ method }) => `remove-route:${method}`), ...methods.map(({ method }) => `add-route:${method}`), "register-orchestrator"]);
+    for (const tx of transactions.filter((tx) => tx.step.startsWith("remove-route:"))) {
+      assert.equal(tx.to, f.deployed.PaymentVerifierRegistry.address);
+      assert.deepEqual(Array.from(f.deployed.PaymentVerifierRegistry.interface.decodeFunctionData("removePaymentMethod", tx.data)), [tx.step.split(":")[1]]);
+    }
+    for (const [index, tx] of transactions.filter((tx) => tx.step.startsWith("add-route:")).entries()) {
+      assert.equal(tx.to, f.deployed.PaymentVerifierRegistry.address);
+      const args = f.deployed.PaymentVerifierRegistry.interface.decodeFunctionData("addPaymentMethod", tx.data);
+      assert.deepEqual(Array.from(args), [methods[index].method, f.deployed.UnifiedPaymentVerifierV4.address, methods[index].currencies]);
+    }
+    for (const { to, data, value } of transactions) await (await f.governance.sendTransaction({ to, data, value })).wait();
+    await verifySuite(f.hre, f.journal, true);
+    assert.deepEqual(await f.deployed.PaymentVerifierRegistry.getPaymentMethods(), methods.map(({ method }) => method));
+    assert.equal(await f.deployed.NullifierRegistryV2.isWriter(f.deployed.UnifiedPaymentVerifierV3.address), true);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
+test("Base acknowledgement records exact discovery and active verification uses only its latest acceptance", async () => {
+  const f = await baseFixture();
+  try {
+    const retained = await createPrivateDeposit(f), deleted = await createPrivateDeposit(f, false);
+    await (await f.deployed.EscrowV2.withdrawDeposit(retained.depositId)).wait();
+    await (await f.deployed.EscrowV2.withdrawDeposit(deleted.depositId)).wait();
+    const later = await createPrivateDeposit(f), preserved = await createPrivateDeposit(f);
+    const secondEscrow = await (await hre.ethers.getContractFactory("EscrowV2", wallet)).deploy(wallet.address, f.config.chainId, f.deployed.OrchestratorRegistry.address, f.deployed.PaymentVerifierRegistry.address, f.deployed.RelayerRegistry.address, 1, 100, 3600);
+    await secondEscrow.deployed(); await (await f.deployed.EscrowRegistry.addEscrow(secondEscrow.address)).wait();
+    const another = await createPrivateDeposit({ ...f, deployed: { ...f.deployed, EscrowV2: secondEscrow } });
+    await deploySuite(f.hre, f.journal);
+    const whitelist = await hre.ethers.getContractAt("WhitelistPolicyV2", f.manifest.contracts.WhitelistPolicyV2.address, wallet);
+    await (await whitelist.setEnabled(preserved.escrow, preserved.depositId, true)).wait();
+    const journal = new TransactionJournal(f.path, f.manifest, new VoidSigner(wallet.address, hre.ethers.provider));
+    const nonce = await wallet.getTransactionCount(), governanceNonce = await f.governance.getTransactionCount();
+    await assert.rejects(prepareGovernance(f.hre, journal), /Existing private deposits require their depositors to enable WhitelistPolicyV2/);
+    for (const input of ["", "true", "03", " 3", "3 ", "-3", "0", "1.5"]) await assert.rejects(prepareGovernance(f.hre, journal, input), /O4_BASE_ACCEPT_PUBLIC_PRIVATE_DEPOSITS must be the exact positive decimal count/);
+    await assert.rejects(prepareGovernance(f.hre, journal, "4"), /O4_BASE_ACCEPT_PUBLIC_PRIVATE_DEPOSITS count mismatch: discovered 3/);
+    assert.equal(f.manifest.basePublicPrivateDepositAcceptances, undefined);
+    await prepareGovernance(f.hre, journal, "3");
+    const expected = [retained, later, another].map(({ escrow, depositId }) => ({ escrow, depositId }));
+    assert.deepEqual(f.manifest.basePublicPrivateDepositAcceptances, [{ checkedAtBlock: await hre.ethers.provider.getBlockNumber(), predecessorPolicy: f.deployed.PredecessorWhitelistPolicy.address, whitelistPolicy: whitelist.address, acknowledgement: "3", acceptedDeposits: expected }]);
+    assert.equal(f.manifest.stagingPublicPrivateDepositAcceptances, undefined);
+    assert.deepEqual(f.manifest.verification.privateDeposits.deletedDeposits, [{ escrow: deleted.escrow, depositId: deleted.depositId }]);
+    // Preparation is a fresh decision every time, regardless of earlier acceptances.
+    await assert.rejects(prepareGovernance(f.hre, journal), /Existing private deposits require/);
+    await (await whitelist.setEnabled(retained.escrow, retained.depositId, true)).wait();
+    await prepareGovernance(f.hre, journal, "2");
+    assert.equal(f.manifest.basePublicPrivateDepositAcceptances.length, 2);
+    assert.deepEqual(f.manifest.basePublicPrivateDepositAcceptances[1].acceptedDeposits, expected.slice(1));
+    assert.equal(await wallet.getTransactionCount(), nonce + 1); assert.equal(await f.governance.getTransactionCount(), governanceNonce);
+    for (const { to, data, value } of f.manifest.governanceTransactions) await (await f.governance.sendTransaction({ to, data, value })).wait();
+    await verifySuite(f.hre, journal, true);
+    await (await whitelist.setEnabled(retained.escrow, retained.depositId, false)).wait();
+    await assert.rejects(verifySuite(f.hre, journal, true), /Existing private deposits require/);
+    await (await whitelist.setEnabled(retained.escrow, retained.depositId, true)).wait();
+    await (await secondEscrow.withdrawDeposit(another.depositId)).wait();
+    await verifySuite(f.hre, journal, true);
+    await createPrivateDeposit(f);
+    await assert.rejects(verifySuite(f.hre, journal, true), /Existing private deposits require/);
+    const saved = JSON.parse(readFileSync(f.path));
+    assert.equal(saved.basePublicPrivateDepositAcceptances.length, 2);
+    assert.equal(saved.stagingPublicPrivateDepositAcceptances, undefined);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
+test("real Base configuration has the reviewed pins and leaves staging configuration hash unchanged", () => {
+  const config = JSON.parse(readFileSync("deployments/orchestrator-v4/base.json"));
+  validateConfig(config);
+  assert.equal(config.signer, "0x41123d6419C7b8e44157f6F3b0088442116641eC");
+  assert.equal(config.gatingService, "0x7aCe8cF3cb5fEa7103594dA6C6478e69fD7717a4");
+  assert.deepEqual(config.existing.UnifiedPaymentVerifierV4, { address: "0x7bE50E6206a9b3AdF36dbEAFac0e45Cc03A72048", artifact: "UnifiedPaymentVerifierV4", runtimeCodeHash: "0xa2f9051e7621040a5c366f340182270b530464c7dadbf29563159c42c8761269", deploymentTransaction: "0xa6fa3ce43ca5352460be4ce917709f17d60fda677fa48a1fbc6f081902dcf931", deploymentBlock: 53210472 });
+  assert.deepEqual(config.existing.PredecessorWhitelistPolicy, { address: "0x389Cd9bA91FfFcd83d267B241E975541892759Ce", artifact: "WhitelistPolicy", runtimeCodeHash: "0xa83d138a5b89d2fd2861702febc6333e542dcdc8994ee76c345dcbd22fe685a4", deploymentTransaction: "0x82940c1c4e0098678bfdc89e4810e94d931cdfb617a997c56404f3d545b1c58c", deploymentBlock: 50528043 });
+  assert.deepEqual(config.legacyDrainCheckpoints, []);
+  assert.deepEqual(config.legacyWhitelistCheckpoint, { indexedBlock: 50528042, enabled: [] });
+  assert.equal(config.baselineBlock, 53247430);
+  assert.equal(hash(JSON.parse(readFileSync("deployments/orchestrator-v4/base_staging.json"))), "554cb2fd04450bce12a12791388abab10d1643e07a784b4cb856c30b54afa729");
+});
+
+test("Base discovery bounds concurrent logs and reads and preserves staging's checkpoint and event order", async () => {
+  const f = await baseFixture();
+  try {
+    await deploySuite(f.hre, f.journal);
+    const checkpointRows = [], laterRows = [];
+    for (let index = 0; index < 18; index++) checkpointRows.push(await createPrivateDeposit(f));
+    f.config.legacyWhitelistCheckpoint = { indexedBlock: await hre.ethers.provider.getBlockNumber(), enabled: [...checkpointRows].reverse() };
+    for (let index = 0; index < 18; index++) {
+      await hre.network.provider.send("hardhat_mine", ["0x3e8"]);
+      laterRows.push(await createPrivateDeposit(f));
+    }
+    const repeated = checkpointRows[0];
+    await (await f.deployed.PredecessorWhitelistPolicy.setEnabled(repeated.escrow, repeated.depositId, repeated.paymentMethod, false)).wait();
+    await (await f.deployed.PredecessorWhitelistPolicy.setEnabled(repeated.escrow, repeated.depositId, repeated.paymentMethod, true)).wait();
+    const active = { getLogs: 0, call: 0 }, peak = { getLogs: 0, call: 0 }, started = { getLogs: 0, call: 0 };
+    const finishedLogs = [];
+    const provider = new Proxy(hre.ethers.provider, {
+      get(target, property) {
+        if (property === "getLogs" || property === "call") return async (...args) => {
+          const index = started[property]++;
+          active[property]++; peak[property] = Math.max(peak[property], active[property]);
+          try {
+            await new Promise((resolve) => setTimeout(resolve, 20 - index % 16));
+            const result = await target[property](...args);
+            if (property === "getLogs") { finishedLogs.push(index); return result.reverse(); }
+            return result;
+          } finally { active[property]--; }
+        };
+        const value = Reflect.get(target, property); return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const observed = { ...f.hre, ethers: { ...hre.ethers, provider } };
+    await assertPrivateDepositsPreserved(observed, f.journal, { acknowledgement: "36" });
+    assert.equal(peak.getLogs, 16); assert.equal(peak.call, 16);
+    assert.deepEqual(active, { getLogs: 0, call: 0 });
+    assert.notDeepEqual(finishedLogs, [...finishedLogs].sort((a, b) => a - b));
+    const expected = [...checkpointRows].reverse().concat(laterRows).map(({ escrow, depositId }) => ({ escrow, depositId }));
+    assert.deepEqual(f.manifest.basePublicPrivateDepositAcceptances[0].acceptedDeposits, expected);
+    const stagingConfig = { ...f.config, environment: "base_staging", governance: wallet.address, existing: { ...f.config.existing }, legacyDrainCheckpoints: [{ contract: "Orchestrator", intentCounter: "0", indexedBlock: f.config.existing.Orchestrator.deploymentBlock }] };
+    delete stagingConfig.existing.UnifiedPaymentVerifierV4;
+    validateConfig(stagingConfig);
+    const stagingManifest = { ...f.manifest, configuration: stagingConfig, verification: {}, basePublicPrivateDepositAcceptances: [] };
+    await assertPrivateDepositsPreserved(hre, new TransactionJournal(join(f.directory, "staging-discovery.json"), stagingManifest, new VoidSigner(wallet.address, hre.ethers.provider)), { acknowledgement: "36" });
+    assert.deepEqual(stagingManifest.stagingPublicPrivateDepositAcceptances[0], f.manifest.basePublicPrivateDepositAcceptances[0]);
+    assert.deepEqual(stagingManifest.verification.privateDeposits, f.manifest.verification.privateDeposits);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
+test("staging activation calldata still matches every committed transaction byte for byte", async () => {
+  const manifest = JSON.parse(readFileSync("deployments/outputs/orchestrator-v4-base_staging.json"));
+  const recorded = JSON.parse(readFileSync("deployments/outputs/orchestrator-v4-base_staging.activation-transactions.json"));
+  const transactions = await activationTransactions(hre, manifest);
+  assert.deepEqual(transactions, recorded.activationTransactions.map(({ step, target, function: signature, args, value }) => ({
+    step, to: target, data: new utils.Interface([`function ${signature}`]).encodeFunctionData(signature, args), value,
+  })));
 });
 
 

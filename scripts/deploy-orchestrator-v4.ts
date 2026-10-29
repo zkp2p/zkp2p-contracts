@@ -7,6 +7,7 @@ import type { HardhatRuntimeEnvironment } from "hardhat/types";
 import { SourceVerificationError, verifySources } from "./verify-orchestrator-v4-source";
 import { zeroImmutableValues } from "../deployments/canonicalDeployment";
 import { assertReleaseProvenance, releasePaths } from "./orchestrator-v4-provenance";
+import { RETIRED_DEPLOYERS } from "../utils/deployerKeys";
 
 const ZERO = constants.AddressZero;
 const REQUIRED_REGISTRY_OWNERS = ["OrchestratorRegistry", "PaymentVerifierRegistry", "NullifierRegistryV2", "DisputeNullifierRegistry"] as const;
@@ -40,7 +41,7 @@ export type DrainEvidence = {
   legacySignals: Record<string, Array<{ transactionHash: string; logIndex: number; unlock?: { transactionHash: string; logIndex: number } }>>;
 };
 type PrivateDeposit = { escrow: string; depositId: string };
-type StagingPublicPrivateDepositAcceptance = {
+type PublicPrivateDepositAcceptance = {
   checkedAtBlock: number; predecessorPolicy: string; whitelistPolicy: string;
   acknowledgement: string; acceptedDeposits: PrivateDeposit[];
 };
@@ -48,13 +49,15 @@ export type Manifest = {
   version: 1; sourceCommit: string; executionToolCommit?: string; configurationHash: string; configuration: ReleaseConfig;
   baseline: Awaited<ReturnType<typeof inspect>>; transactions: Transaction[]; activationDrainEvidence: DrainEvidence | null;
   contracts: Partial<Record<NewName, NewContract>>; verification: Record<string, unknown>; governanceTransactions: Array<{ to: string; data: string; value: string }>;
-  stagingPublicPrivateDepositAcceptances?: StagingPublicPrivateDepositAcceptance[];
+  governancePreparedAt?: { blockNumber: number; blockHash: string };
+  stagingPublicPrivateDepositAcceptances?: PublicPrivateDepositAcceptance[];
+  basePublicPrivateDepositAcceptances?: PublicPrivateDepositAcceptance[];
 };
 class ReleaseError extends Error {}
 function check(condition: unknown, message: string): asserts condition { if (!condition) throw new ReleaseError(message); }
 const same = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
 const equal = (a: unknown, b: unknown): boolean => JSON.stringify(a).toLowerCase() === JSON.stringify(b).toLowerCase();
-const hash = (value: unknown): string => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+export const hash = (value: unknown): string => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 function atomicJson(path: string, value: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
   const temporary = `${path}.tmp`;
@@ -69,11 +72,14 @@ export function validateConfig(value: unknown): asserts value is ReleaseConfig {
   check(Number.isSafeInteger(c.chainId) && c.chainId > 0, "Invalid configured chain ID");
   for (const name of ["signer", "governance", "gatingService", "stakeToken", "protocolFeeRecipient", "predecessorHook"] as const)
     check(typeof c[name] === "string" && utils.isAddress(c[name]) && !same(c[name], ZERO), `Invalid configured ${name}`);
+  for (const name of ["signer", "governance"] as const)
+    check(!RETIRED_DEPLOYERS.some((address) => same(address, c[name])), `Configured ${name} is retired`);
   if (c.environment === "base_staging") check(same(c.signer, c.governance), "Staging governance must be its verified signer");
   check(typeof c.protocolFee === "string" && /^\d+$/.test(c.protocolFee) && BigNumber.from(c.protocolFee).lte("50000000000000000"), "Invalid protocol fee");
   check(typeof c.allowMultipleIntents === "boolean", "Missing allowMultipleIntents setting");
   check(c.existing && typeof c.existing === "object", "Missing reused contract pins");
-  for (const name of ["EscrowV2", "EscrowRegistry", "OrchestratorRegistry", "PaymentVerifierRegistry", "RelayerRegistry", "NullifierRegistryV2", "DisputeNullifierRegistry", "DisputeVerifier", "MultiAttestationVerifier", "OrchestratorV3", "UnifiedPaymentVerifierV3", "Orchestrator", "PredecessorWhitelistPolicy"]) {
+  if (c.environment === "base_staging") check(!("UnifiedPaymentVerifierV4" in c.existing), "Staging must not pin UnifiedPaymentVerifierV4");
+  for (const name of ["EscrowV2", "EscrowRegistry", "OrchestratorRegistry", "PaymentVerifierRegistry", "RelayerRegistry", "NullifierRegistryV2", "DisputeNullifierRegistry", "DisputeVerifier", "MultiAttestationVerifier", "OrchestratorV3", "UnifiedPaymentVerifierV3", "Orchestrator", "PredecessorWhitelistPolicy", ...(c.environment === "base" ? ["UnifiedPaymentVerifierV4"] : [])]) {
     const pin = c.existing[name];
     check(pin && utils.isAddress(pin.address) && !same(pin.address, ZERO) && /^0x[\da-f]{64}$/i.test(pin.runtimeCodeHash), `Invalid ${name} pin`);
     check(typeof pin.artifact === "string" && /^0x[\da-f]{64}$/i.test(pin.deploymentTransaction) && Number.isSafeInteger(pin.deploymentBlock), `Missing ${name} provenance`);
@@ -84,13 +90,40 @@ export function validateConfig(value: unknown): asserts value is ReleaseConfig {
   check(new Set(c.paymentMethods.map((m) => m.method.toLowerCase())).size === c.paymentMethods.length, "Duplicate payment method");
   for (const list of [c.retainedDisputeWriters, c.attestationWitnesses]) check(Array.isArray(list) && list.length > 0 && list.every(utils.isAddress), "Invalid writer/witness list");
   check(typeof c.attestationThreshold === "string" && /^[1-9]\d*$/.test(c.attestationThreshold), "Invalid witness threshold");
-  check(Array.isArray(c.legacyDrainCheckpoints) && c.legacyDrainCheckpoints.length > 0, "Missing reviewed legacy drain checkpoints");
-  for (const checkpoint of c.legacyDrainCheckpoints) check(c.existing[checkpoint.contract] && /^\d+$/.test(checkpoint.intentCounter) && Number.isSafeInteger(checkpoint.indexedBlock), "Invalid legacy drain checkpoint");
-  check(c.legacyDrainCheckpoints.some((checkpoint) => checkpoint.contract === "Orchestrator"), "V1 drain checkpoint is required");
+  if (c.environment === "base") check(Array.isArray(c.legacyDrainCheckpoints) && c.legacyDrainCheckpoints.length === 0, "Base legacy drain checkpoints must be empty");
+  else {
+    check(Array.isArray(c.legacyDrainCheckpoints) && c.legacyDrainCheckpoints.length > 0, "Missing reviewed legacy drain checkpoints");
+    for (const checkpoint of c.legacyDrainCheckpoints) check(c.existing[checkpoint.contract] && /^\d+$/.test(checkpoint.intentCounter) && Number.isSafeInteger(checkpoint.indexedBlock), "Invalid legacy drain checkpoint");
+    check(c.legacyDrainCheckpoints.some((checkpoint) => checkpoint.contract === "Orchestrator"), "V1 drain checkpoint is required");
+  }
   const privacy = c.legacyWhitelistCheckpoint;
   check(privacy && Number.isSafeInteger(privacy.indexedBlock) && privacy.indexedBlock > 0 && Array.isArray(privacy.enabled), "Missing reviewed private-deposit checkpoint");
   for (const row of privacy.enabled) check(utils.isAddress(row.escrow) && typeof row.depositId === "string" && /^\d+$/.test(row.depositId) && bytes32(row.paymentMethod), "Invalid private-deposit checkpoint row");
   check(new Set(privacy.enabled.map((row) => `${row.escrow.toLowerCase()}:${row.depositId}:${row.paymentMethod.toLowerCase()}`)).size === privacy.enabled.length, "Duplicate private-deposit checkpoint row");
+}
+
+/** Derive locally before any chain read. No legacy key alias or alternate signer is permitted. */
+export function createReleaseSigner(c: Pick<ReleaseConfig, "environment" | "signer">, env: Record<string, string | undefined>, retiredDeployers: readonly string[] = RETIRED_DEPLOYERS): Wallet {
+  const keyName = c.environment === "base" ? "BASE_DEPLOYER_KEY" : "STAGING_DEPLOYER_KEY";
+  const key = env[keyName]; check(key, `${keyName} is unavailable; no fallback signer is permitted`);
+  let wallet: Wallet;
+  try { wallet = new Wallet(key.startsWith("0x") ? key : `0x${key}`); }
+  catch { throw new ReleaseError(`${keyName} private key is invalid`); }
+  check(!retiredDeployers.some((address) => same(address, wallet.address)), `${keyName} signer is retired`);
+  check(same(wallet.address, c.signer), "Derived signer differs from the verified configuration");
+  return wallet;
+}
+
+function releaseVerifier(c: ReleaseConfig, m?: Manifest): string | undefined {
+  return c.environment === "base" ? c.existing.UnifiedPaymentVerifierV4.address : m?.contracts.UnifiedPaymentVerifierV4?.address;
+}
+
+function assertBaseVerifierRecord(hre: HardhatRuntimeEnvironment, c: ReleaseConfig): void {
+  const path = resolve(hre.config.paths.root, "deployments/base/UnifiedPaymentVerifierV4.json");
+  check(existsSync(path), "Adopted Base UnifiedPaymentVerifierV4 record is missing");
+  const record = JSON.parse(readFileSync(path, "utf8"));
+  const pin = c.existing.UnifiedPaymentVerifierV4;
+  check(typeof record.address === "string" && typeof record.transactionHash === "string" && same(record.address, pin.address) && same(record.transactionHash, pin.deploymentTransaction), "Adopted Base UnifiedPaymentVerifierV4 record differs from its pin");
 }
 
 async function existing(hre: HardhatRuntimeEnvironment, c: ReleaseConfig, name: string): Promise<Contract> {
@@ -101,6 +134,7 @@ async function existing(hre: HardhatRuntimeEnvironment, c: ReleaseConfig, name: 
 /** One pinned read produces both the rollback baseline and actionable permission errors. */
 export async function inspect(hre: HardhatRuntimeEnvironment, c: ReleaseConfig) {
   validateConfig(c);
+  if (c.environment === "base") assertBaseVerifierRecord(hre, c);
   const provider = hre.ethers.provider;
   check((await provider.getNetwork()).chainId === c.chainId, "RPC chain ID differs from configuration");
   const block = await provider.getBlock("latest");
@@ -111,6 +145,13 @@ export async function inspect(hre: HardhatRuntimeEnvironment, c: ReleaseConfig) 
     check(code !== "0x" && same(utils.keccak256(code), pin.runtimeCodeHash), `${name} bytecode differs from pinned deployment`);
     const contract = await existing(hre, c, name);
     contracts[name] = { address: pin.address, runtimeCodeHash: utils.keccak256(code), owner: await contract.owner(at) };
+  }
+  if (c.environment === "base") {
+    const adopted = await existing(hre, c, "UnifiedPaymentVerifierV4");
+    check(same(contracts.UnifiedPaymentVerifierV4.owner, c.governance), "Adopted UPV4 owner mismatch");
+    for (const [field, name] of [["orchestratorRegistry", "OrchestratorRegistry"], ["nullifierRegistry", "NullifierRegistryV2"], ["attestationVerifier", "MultiAttestationVerifier"]])
+      check(same(await adopted[field](at), c.existing[name].address), `Adopted UPV4 ${field} mismatch`);
+    check(equal(await adopted.getPaymentMethods(at), c.paymentMethods.map(({ method }) => method)), "UPV4 method catalog mismatch");
   }
   const pvr = await existing(hre, c, "PaymentVerifierRegistry");
   const paymentMethods = [];
@@ -142,6 +183,12 @@ function assertRegistryOwnership(snapshot: Awaited<ReturnType<typeof inspect>>):
   check(snapshot.requiredOwnershipChanges.length === 0, `Activation ownership missing: ${snapshot.requiredOwnershipChanges.map((x) => `${x.name} owner ${x.owner}; requires ${x.requiredOwner}`).join("; ")}`);
 }
 
+function assertBasePaymentWriters(c: ReleaseConfig, writers: string[]): void {
+  const upv4 = releaseVerifier(c)!;
+  check(writers.length > 0 && new Set(writers.map((writer) => writer.toLowerCase())).size === writers.length && writers.every((writer) => same(writer, upv4) || same(writer, c.existing.UnifiedPaymentVerifierV3.address)), "Unexpected payment nullifier writer");
+  check(writers.some((writer) => same(writer, upv4)), "Adopted UPV4 payment nullifier writer missing");
+}
+
 export function assertBaseline(c: ReleaseConfig, snapshot: Awaited<ReturnType<typeof inspect>>, manifest?: Manifest, completedActivationSteps?: string[]): void {
   const a = (name: string): string => c.existing[name].address;
   check(snapshot.escrow.chainId === String(c.chainId) && snapshot.escrow.registered && same(snapshot.escrow.orchestratorRegistry, a("OrchestratorRegistry")) && same(snapshot.escrow.paymentVerifierRegistry, a("PaymentVerifierRegistry")), "Existing escrow is incompatible with reused registries");
@@ -152,7 +199,7 @@ export function assertBaseline(c: ReleaseConfig, snapshot: Awaited<ReturnType<ty
   check(same(snapshot.paymentVerifier.orchestratorRegistry, a("OrchestratorRegistry")), "Predecessor UPV orchestrator registry changed");
   check(snapshot.predecessor.protocolFee === c.protocolFee && same(snapshot.predecessor.protocolFeeRecipient, c.protocolFeeRecipient) && snapshot.predecessor.allowMultipleIntents === c.allowMultipleIntents, "Predecessor fee or intent configuration changed");
   check(equal(snapshot.attestation.witnesses, c.attestationWitnesses) && snapshot.attestation.threshold === c.attestationThreshold, "Attestation witnesses or threshold changed");
-  const freshVerifier = manifest?.contracts.UnifiedPaymentVerifierV4?.address;
+  const freshVerifier = releaseVerifier(c, manifest);
   const freshPolicy = manifest?.contracts.DisputeProtectionPolicyV2?.address;
   if (completedActivationSteps) {
     const done = new Set(completedActivationSteps);
@@ -166,9 +213,12 @@ export function assertBaseline(c: ReleaseConfig, snapshot: Awaited<ReturnType<ty
   }
   check(equal(snapshot.paymentMethods.map(({ method, currencies }) => ({ method, currencies })), c.paymentMethods), "Payment catalog or currency order changed");
   for (const method of snapshot.paymentMethods) check(same(method.verifier, a("UnifiedPaymentVerifierV3")) || (freshVerifier && same(method.verifier, freshVerifier)), `Unrecognized payment verifier for ${method.method}`);
-  const expectedNullifiers = [a("UnifiedPaymentVerifierV3"), ...(freshVerifier ? [freshVerifier] : [])];
-  check(snapshot.nullifierWriters.length > 0 && snapshot.nullifierWriters.every((w) => expectedNullifiers.some((x) => same(w, x))), "Unexpected payment nullifier writer");
-  if (!freshVerifier) check(equal(snapshot.nullifierWriters, expectedNullifiers), "Predecessor payment nullifier writer missing");
+  if (c.environment === "base") assertBasePaymentWriters(c, snapshot.nullifierWriters);
+  else {
+    const expectedNullifiers = [a("UnifiedPaymentVerifierV3"), ...(freshVerifier ? [freshVerifier] : [])];
+    check(snapshot.nullifierWriters.length > 0 && snapshot.nullifierWriters.every((w) => expectedNullifiers.some((x) => same(w, x))), "Unexpected payment nullifier writer");
+    if (!freshVerifier) check(equal(snapshot.nullifierWriters, expectedNullifiers), "Predecessor payment nullifier writer missing");
+  }
   check(c.retainedDisputeWriters.every((w) => snapshot.disputeWriters.some((x) => same(w, x))) && snapshot.disputeWriters.every((w) => c.retainedDisputeWriters.some((x) => same(w, x)) || (freshPolicy && same(w, freshPolicy))), "Dispute writer set changed");
 }
 
@@ -242,6 +292,7 @@ async function assertRuntime(hre: HardhatRuntimeEnvironment, address: string, ar
 
 export async function deploySuite(hre: HardhatRuntimeEnvironment, journal: TransactionJournal): Promise<void> {
   const m = journal.manifest, c = m.configuration;
+  assertAcceptanceEnvironment(m);
   check(same(journal.wallet.address, c.signer), "Signer differs from configured migrated deployer");
   const snapshot = await inspect(hre, c);
   if (c.environment === "base") assertRegistryOwnership(snapshot);
@@ -270,19 +321,31 @@ export async function deploySuite(hre: HardhatRuntimeEnvironment, journal: Trans
   await deploy("IntentSignalPolicy", [c.gatingService, fresh("WhitelistPolicyV2")]);
   await deploy("DisputeProtectionPolicyV2", [c.signer, fresh("StakeVaultV2"), a("DisputeVerifier"), a("DisputeNullifierRegistry"), a("OrchestratorRegistry")]);
   await call("StakeVaultV2", "setController", [fresh("DisputeProtectionPolicyV2"), true]);
-  await deploy("UnifiedPaymentVerifierV4", [a("OrchestratorRegistry"), a("NullifierRegistryV2"), a("MultiAttestationVerifier")]);
-  const upv = new Contract(fresh("UnifiedPaymentVerifierV4"), (await hre.artifacts.readArtifact("UnifiedPaymentVerifierV4")).abi);
-  for (const { method } of c.paymentMethods) await journal.execute(`verifier-method:${method}`, { to: upv.address, data: upv.interface.encodeFunctionData("addPaymentMethod", [method]) });
+  if (c.environment === "base_staging") {
+    await deploy("UnifiedPaymentVerifierV4", [a("OrchestratorRegistry"), a("NullifierRegistryV2"), a("MultiAttestationVerifier")]);
+    const upv = new Contract(releaseVerifier(c, m)!, (await hre.artifacts.readArtifact("UnifiedPaymentVerifierV4")).abi);
+    for (const { method } of c.paymentMethods) await journal.execute(`verifier-method:${method}`, { to: upv.address, data: upv.interface.encodeFunctionData("addPaymentMethod", [method]) });
+  }
   await deploy("OrchestratorV4", [c.signer, a("EscrowRegistry"), a("PaymentVerifierRegistry"), c.protocolFee, c.protocolFeeRecipient]);
   await call("OrchestratorV4", "setSignalPolicy", [fresh("IntentSignalPolicy")]);
   await call("OrchestratorV4", "setSettlementPolicy", [fresh("DisputeProtectionPolicyV2")]);
   await deploy("ProtocolViewerV4", []);
-  if (!same(c.signer, c.governance)) for (const name of ["StakeVaultV2", "DisputeProtectionPolicyV2", "UnifiedPaymentVerifierV4", "OrchestratorV4"] as const) await call(name, "transferOwnership", [c.governance]);
+  if (!same(c.signer, c.governance)) for (const name of ["StakeVaultV2", "DisputeProtectionPolicyV2", "UnifiedPaymentVerifierV4", "OrchestratorV4"] as const) {
+    if (c.environment === "base" && name === "UnifiedPaymentVerifierV4") continue;
+    await call(name, "transferOwnership", [c.governance]);
+  }
   await verifySuite(hre, journal, false);
 }
 
-export async function activationTransactions(hre: HardhatRuntimeEnvironment, m: Manifest) {
+export async function activationTransactions(hre: HardhatRuntimeEnvironment, m: Manifest, baseSnapshot?: Awaited<ReturnType<typeof inspect>>) {
   const c = m.configuration, transactions: Array<{ step: string; to: string; data: string; value: string }> = [];
+  assertAcceptanceEnvironment(m);
+  if (c.environment === "base") {
+    check(baseSnapshot, "Base governance requires a live inspection snapshot");
+    assertRegistryOwnership(baseSnapshot);
+    assertBaseline(c, baseSnapshot, m);
+  }
+  const verifier = releaseVerifier(c, m); check(verifier, "UnifiedPaymentVerifierV4 has not been deployed");
   const fresh = (name: NewName): string => { const record = m.contracts[name]; check(record, `${name} has not been deployed`); return record.address; };
   async function append(step: string, address: string, artifact: string, method: string, args: unknown[]) {
     const iface = new utils.Interface((await hre.artifacts.readArtifact(artifact)).abi);
@@ -290,23 +353,53 @@ export async function activationTransactions(hre: HardhatRuntimeEnvironment, m: 
   }
   if (!same(c.signer, c.governance)) for (const name of ["StakeVaultV2", "DisputeProtectionPolicyV2"] as const) await append(`accept:${name}`, fresh(name), name, "acceptOwnership", []);
   await append("authorize-policy-writer", c.existing.DisputeNullifierRegistry.address, "NullifierRegistry", "addWritePermission", [fresh("DisputeProtectionPolicyV2")]);
-  await append("authorize-payment-writer", c.existing.NullifierRegistryV2.address, "NullifierRegistryV2", "addWritePermission", [fresh("UnifiedPaymentVerifierV4")]);
-  // Remove backwards before rebuilding: forward remove/add changes this swap-and-pop registry's order.
-  for (const { method } of [...c.paymentMethods].reverse()) {
-    await append(`remove-route:${method}`, c.existing.PaymentVerifierRegistry.address, "PaymentVerifierRegistry", "removePaymentMethod", [method]);
+  if (c.environment === "base_staging") await append("authorize-payment-writer", c.existing.NullifierRegistryV2.address, "NullifierRegistryV2", "addWritePermission", [verifier]);
+  if (c.environment === "base_staging" || baseSnapshot!.paymentMethods.some((method) => !same(method.verifier, verifier))) {
+    // Remove backwards before rebuilding: forward remove/add changes this swap-and-pop registry's order.
+    for (const { method } of [...c.paymentMethods].reverse()) {
+      await append(`remove-route:${method}`, c.existing.PaymentVerifierRegistry.address, "PaymentVerifierRegistry", "removePaymentMethod", [method]);
+    }
+    for (const { method, currencies } of c.paymentMethods) {
+      await append(`add-route:${method}`, c.existing.PaymentVerifierRegistry.address, "PaymentVerifierRegistry", "addPaymentMethod", [method, verifier, currencies]);
+    }
   }
-  for (const { method, currencies } of c.paymentMethods) {
-    await append(`add-route:${method}`, c.existing.PaymentVerifierRegistry.address, "PaymentVerifierRegistry", "addPaymentMethod", [method, fresh("UnifiedPaymentVerifierV4"), currencies]);
-  }
-  await append("retire-payment-writer", c.existing.NullifierRegistryV2.address, "NullifierRegistryV2", "removeWritePermission", [c.existing.UnifiedPaymentVerifierV3.address]);
+  if (c.environment === "base_staging") await append("retire-payment-writer", c.existing.NullifierRegistryV2.address, "NullifierRegistryV2", "removeWritePermission", [c.existing.UnifiedPaymentVerifierV3.address]);
   await append("register-orchestrator", c.existing.OrchestratorRegistry.address, "OrchestratorRegistry", "addOrchestrator", [fresh("OrchestratorV4")]);
   return transactions;
 }
 
+export async function prepareGovernance(hre: HardhatRuntimeEnvironment, journal: TransactionJournal, acknowledgement?: string): Promise<void> {
+  const m = journal.manifest, c = m.configuration;
+  check(c.environment === "base", "Governance batch is only for Base production");
+  assertBasePublicDepositAcknowledgement(c.environment, acknowledgement);
+  await verifySuite(hre, journal, false);
+  await assertPrivateDepositsPreserved(hre, journal, { acknowledgement });
+  const snapshot = await inspect(hre, c);
+  m.governanceTransactions = await activationTransactions(hre, m, snapshot);
+  m.governancePreparedAt = { blockNumber: snapshot.blockNumber, blockHash: snapshot.blockHash };
+  journal.save();
+}
+
 export function assertStagingPublicDepositAcknowledgement(environment: string, acknowledgement: string | undefined): void {
   if (acknowledgement === undefined) return;
-  check(environment === "base_staging", "Public private-deposit acknowledgement is staging-only; forbidden on base");
+  check(environment === "base_staging", "O4_STAGING_ACCEPT_PUBLIC_PRIVATE_DEPOSITS acknowledgement is staging-only; forbidden on base");
   check(/^[1-9]\d*$/.test(acknowledgement), "O4_STAGING_ACCEPT_PUBLIC_PRIVATE_DEPOSITS must be the exact positive decimal count of private deposits accepted as public");
+}
+
+function assertBasePublicDepositAcknowledgement(environment: string, acknowledgement: string | undefined): void {
+  if (acknowledgement === undefined) return;
+  check(environment === "base", "O4_BASE_ACCEPT_PUBLIC_PRIVATE_DEPOSITS is Base-only; forbidden on base_staging");
+  check(/^[1-9]\d*$/.test(acknowledgement), "O4_BASE_ACCEPT_PUBLIC_PRIVATE_DEPOSITS must be the exact positive decimal count of private deposits accepted as public");
+}
+
+function assertPublicDepositAcknowledgement(environment: ReleaseConfig["environment"], acknowledgement: string | undefined): void {
+  if (environment === "base") assertBasePublicDepositAcknowledgement(environment, acknowledgement);
+  else assertStagingPublicDepositAcknowledgement(environment, acknowledgement);
+}
+
+function assertAcceptanceEnvironment(m: Manifest): void {
+  check(m.configuration.environment === "base_staging" || !m.stagingPublicPrivateDepositAcceptances?.length, "Recorded public private-deposit acceptance is staging-only; forbidden on base");
+  check(m.configuration.environment === "base" || !m.basePublicPrivateDepositAcceptances?.length, "Recorded public private-deposit acceptance is Base-only; forbidden on base_staging");
 }
 
 export async function activate(hre: HardhatRuntimeEnvironment, journal: TransactionJournal, acknowledgement?: string): Promise<void> {
@@ -349,25 +442,40 @@ export async function activate(hre: HardhatRuntimeEnvironment, journal: Transact
   await verifySuite(hre, journal, true);
 }
 
-/** Discover all private liquidity; only explicit staging activation may record a public exception. */
+/** Bound RPC work while applying results in input order, regardless of completion order. */
+async function mapOrdered<T, R>(items: T[], concurrency: number, read: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = [];
+  for (let offset = 0; offset < items.length; offset += concurrency)
+    results.push(...await Promise.all(items.slice(offset, offset + concurrency).map(read)));
+  return results;
+}
+
+/** Discover all private liquidity before recording or verifying an explicit public exception. */
 export async function assertPrivateDepositsPreserved(hre: HardhatRuntimeEnvironment, journal: TransactionJournal, options: { acknowledgement?: string; verifyRecordedAcceptance?: boolean } = {}): Promise<void> {
   const m = journal.manifest, c = m.configuration, checkpoint = c.legacyWhitelistCheckpoint;
-  assertStagingPublicDepositAcknowledgement(c.environment, options.acknowledgement);
-  check(c.environment === "base_staging" || !m.stagingPublicPrivateDepositAcceptances?.length, "Recorded public private-deposit acceptance is staging-only; forbidden on base");
+  assertPublicDepositAcknowledgement(c.environment, options.acknowledgement);
+  assertAcceptanceEnvironment(m);
   check(options.acknowledgement === undefined || !options.verifyRecordedAcceptance, "Verification cannot record a new private-deposit acknowledgement");
+  const acceptanceField = c.environment === "base" ? "basePublicPrivateDepositAcceptances" : "stagingPublicPrivateDepositAcceptances";
+  const acknowledgementVariable = c.environment === "base" ? "O4_BASE_ACCEPT_PUBLIC_PRIVATE_DEPOSITS" : "O4_STAGING_ACCEPT_PUBLIC_PRIVATE_DEPOSITS";
+  const concurrency = c.environment === "base" ? 16 : 1;
   const policy = await existing(hre, c, "PredecessorWhitelistPolicy");
   const fresh = m.contracts.WhitelistPolicyV2; check(fresh, "Fresh whitelist policy is missing");
   const whitelist = new Contract(fresh.address, (await hre.artifacts.readArtifact("WhitelistPolicyV2")).abi, hre.ethers.provider);
   const block = await hre.ethers.provider.getBlockNumber(), at = { blockTag: block };
   check(checkpoint.indexedBlock <= block, "Private-deposit checkpoint is ahead of the selected chain");
   const candidates = new Map<string, { escrow: string; depositId: string; paymentMethod: string }>();
-  for (const row of checkpoint.enabled) {
+  for (const row of await mapOrdered(checkpoint.enabled, concurrency, async (row) => {
     check(await policy.enabled(row.escrow, row.depositId, row.paymentMethod, { blockTag: checkpoint.indexedBlock }), "Private-deposit checkpoint differs from on-chain policy");
+    return row;
+  })) {
     candidates.set(`${row.escrow.toLowerCase()}:${row.depositId}:${row.paymentMethod.toLowerCase()}`, row);
   }
   // A depositor may enable another private method while the release waits. Include every later event.
-  for (let fromBlock = checkpoint.indexedBlock + 1; fromBlock <= block; fromBlock += 1000) {
-    const events = await policy.queryFilter(policy.filters.EnabledUpdated(), fromBlock, Math.min(fromBlock + 999, block));
+  const windows: number[] = [];
+  for (let fromBlock = checkpoint.indexedBlock + 1; fromBlock <= block; fromBlock += 1000) windows.push(fromBlock);
+  for (const events of await mapOrdered(windows, concurrency, (fromBlock) => policy.queryFilter(policy.filters.EnabledUpdated(), fromBlock, Math.min(fromBlock + 999, block)))) {
+    if (c.environment === "base") events.sort((a, b) => a.blockNumber - b.blockNumber || a.logIndex - b.logIndex);
     for (const event of events) {
       const args = policy.interface.parseLog(event).args;
       const row = { escrow: args.escrow as string, depositId: args.depositId.toString(), paymentMethod: args.paymentMethod as string };
@@ -375,24 +483,28 @@ export async function assertPrivateDepositsPreserved(hre: HardhatRuntimeEnvironm
     }
   }
   const privateDeposits = new Map<string, { escrow: string; depositId: string }>();
-  for (const row of candidates.values()) if (await policy.enabled(row.escrow, row.depositId, row.paymentMethod, at))
+  for (const { row, enabled } of await mapOrdered([...candidates.values()], concurrency, async (row) => ({ row, enabled: await policy.enabled(row.escrow, row.depositId, row.paymentMethod, at) }))) if (enabled)
     privateDeposits.set(`${row.escrow.toLowerCase()}:${row.depositId}`, { escrow: row.escrow, depositId: row.depositId });
   const required: PrivateDeposit[] = [], deleted: PrivateDeposit[] = [], missing: PrivateDeposit[] = [];
-  for (const deposit of privateDeposits.values()) {
+  for (const result of await mapOrdered([...privateDeposits.values()], concurrency, async (deposit) => {
     const escrow = new Contract(deposit.escrow, (await hre.artifacts.readArtifact("EscrowV2")).abi, hre.ethers.provider);
     // Escrow IDs are monotonic. Deleted deposits cannot be re-created or funded again.
-    if (same((await escrow.getDeposit(deposit.depositId, at)).depositor, ZERO)) { deleted.push(deposit); continue; }
+    const deleted = same((await escrow.getDeposit(deposit.depositId, at)).depositor, ZERO);
+    return { deposit, deleted, missing: !deleted && !await whitelist.enabled(deposit.escrow, deposit.depositId, at) };
+  })) {
+    const { deposit } = result;
+    if (result.deleted) { deleted.push(deposit); continue; }
     required.push(deposit);
-    if (!await whitelist.enabled(deposit.escrow, deposit.depositId, at)) missing.push(deposit);
+    if (result.missing) missing.push(deposit);
   }
   if (options.acknowledgement !== undefined) {
-    check(options.acknowledgement === String(missing.length), `O4_STAGING_ACCEPT_PUBLIC_PRIVATE_DEPOSITS count mismatch: discovered ${missing.length} private deposits not enabled on WhitelistPolicyV2`);
-    (m.stagingPublicPrivateDepositAcceptances ??= []).push({ checkedAtBlock: block, predecessorPolicy: policy.address, whitelistPolicy: fresh.address, acknowledgement: options.acknowledgement, acceptedDeposits: missing });
+    check(options.acknowledgement === String(missing.length), `${acknowledgementVariable} count mismatch: discovered ${missing.length} private deposits not enabled on WhitelistPolicyV2`);
+    (m[acceptanceField] ??= []).push({ checkedAtBlock: block, predecessorPolicy: policy.address, whitelistPolicy: fresh.address, acknowledgement: options.acknowledgement, acceptedDeposits: missing });
   } else {
-    const acceptance = options.verifyRecordedAcceptance ? m.stagingPublicPrivateDepositAcceptances?.slice(-1)[0] : undefined;
+    const acceptance = options.verifyRecordedAcceptance ? m[acceptanceField]?.slice(-1)[0] : undefined;
     if (acceptance) {
-      assertStagingPublicDepositAcknowledgement(c.environment, acceptance.acknowledgement);
-      check(Number.isSafeInteger(acceptance.checkedAtBlock) && acceptance.checkedAtBlock > 0 && acceptance.checkedAtBlock <= block && same(acceptance.predecessorPolicy, policy.address) && same(acceptance.whitelistPolicy, fresh.address) && acceptance.acknowledgement === String(acceptance.acceptedDeposits.length), "Recorded staging private-deposit acceptance differs from this suite");
+      assertPublicDepositAcknowledgement(c.environment, acceptance.acknowledgement);
+      check(Number.isSafeInteger(acceptance.checkedAtBlock) && acceptance.checkedAtBlock > 0 && acceptance.checkedAtBlock <= block && same(acceptance.predecessorPolicy, policy.address) && same(acceptance.whitelistPolicy, fresh.address) && acceptance.acknowledgement === String(acceptance.acceptedDeposits.length), `Recorded ${c.environment === "base" ? "Base" : "staging"} private-deposit acceptance differs from this suite`);
     }
     const unaccepted = missing.filter((deposit) => !acceptance?.acceptedDeposits.some((accepted) => same(accepted.escrow, deposit.escrow) && accepted.depositId === deposit.depositId));
     check(unaccepted.length === 0, `Existing private deposits require their depositors to enable WhitelistPolicyV2: ${unaccepted.map((deposit) => `${deposit.escrow}:${deposit.depositId}`).join(", ")}`);
@@ -479,6 +591,7 @@ export async function assertDrainEvidence(hre: HardhatRuntimeEnvironment, c: Rel
 }
 
 export async function recordDrainEvidence(hre: HardhatRuntimeEnvironment, journal: TransactionJournal, evidence: unknown): Promise<void> {
+  check(journal.manifest.configuration.environment === "base_staging", "record-drain is staging-only; Base does not require legacy drain evidence");
   await assertDrainEvidence(hre, journal.manifest.configuration, evidence);
   journal.manifest.activationDrainEvidence = evidence as DrainEvidence; journal.save();
 }
@@ -493,11 +606,13 @@ function assertLegacyDrained(c: ReleaseConfig, snapshot: Awaited<ReturnType<type
 
 export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: TransactionJournal, active: boolean): Promise<void> {
   const m = journal.manifest, c = m.configuration;
+  assertAcceptanceEnvironment(m);
   const snapshot = await inspect(hre, c);
   if (active || c.environment === "base") assertRegistryOwnership(snapshot);
   assertBaseline(c, snapshot, m);
   const contracts = {} as Record<NewName, Contract>;
   for (const name of Object.keys(NEW_CONTRACTS) as NewName[]) {
+    if (c.environment === "base" && name === "UnifiedPaymentVerifierV4") continue;
     const record = m.contracts[name]; check(record, `Missing deployed ${name}`);
     check(same(await assertRuntime(hre, record.address, record.artifact), record.runtimeCodeHash), `${name} runtime changed`);
     const tx = await hre.ethers.provider.getTransaction(record.transactionHash);
@@ -505,7 +620,8 @@ export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: Trans
     check(tx && same(tx.from, c.signer) && tx.to === null && tx.data === new ContractFactory(artifact.abi, artifact.bytecode).getDeployTransaction(...record.constructorArguments).data, `${name} constructor transaction differs`);
     contracts[name] = new Contract(record.address, artifact.abi, hre.ethers.provider);
   }
-  const o = contracts.OrchestratorV4, v = contracts.UnifiedPaymentVerifierV4, p = contracts.DisputeProtectionPolicyV2, vault = contracts.StakeVaultV2, signal = contracts.IntentSignalPolicy;
+  const v = new Contract(releaseVerifier(c, m)!, (await hre.artifacts.readArtifact("UnifiedPaymentVerifierV4")).abi, hre.ethers.provider);
+  const o = contracts.OrchestratorV4, p = contracts.DisputeProtectionPolicyV2, vault = contracts.StakeVaultV2, signal = contracts.IntentSignalPolicy;
   const expectedFields: Array<[Contract, string, string]> = [
     [o, "signalPolicy", signal.address], [o, "settlementPolicy", p.address],
     [o, "escrowRegistry", c.existing.EscrowRegistry.address], [o, "paymentVerifierRegistry", c.existing.PaymentVerifierRegistry.address],
@@ -528,10 +644,10 @@ export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: Trans
   const registered = await (await existing(hre, c, "OrchestratorRegistry")).isOrchestrator(o.address);
   check(registered === active, "O4 registration does not match release phase");
   if (active) {
-    await assertDrainEvidence(hre, c, m.activationDrainEvidence);
+    if (c.environment === "base_staging") await assertDrainEvidence(hre, c, m.activationDrainEvidence);
     await assertPrivateDepositsPreserved(hre, journal, { verifyRecordedAcceptance: true });
     check(snapshot.paymentMethods.every((method) => same(method.verifier, v.address)), "Not all payment routes select UPV4");
-    check(equal(snapshot.nullifierWriters, [v.address]), "UPV4 must be the only payment nullifier writer");
+    if (c.environment === "base_staging") check(equal(snapshot.nullifierWriters, [v.address]), "UPV4 must be the only payment nullifier writer");
     check(equal(snapshot.disputeWriters, [...c.retainedDisputeWriters, p.address]), "Policy writer missing or predecessor writer changed");
   }
   m.verification = { ...m.verification, verifiedAtBlock: snapshot.blockNumber, active, bytecode: true, constructors: true, wiring: true, newContractOwnership: true, governance: snapshot.requiredOwnershipChanges.length === 0, pendingRegistryOwnership: snapshot.requiredOwnershipChanges, paymentCatalog: true, escrowCompatible: true, predecessorPreserved: true };
@@ -540,10 +656,15 @@ export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: Trans
 
 async function main(): Promise<void> {
   const [environment, action, evidencePath] = process.argv.slice(2);
-  check(["base_staging", "base"].includes(environment) && ["inspect", "deploy", "activate", "prepare-governance", "verify", "verify-source", "record-drain"].includes(action), "Usage: deploy-orchestrator-v4.ts base_staging|base inspect|deploy|activate|prepare-governance|verify|verify-source|record-drain [EVIDENCE_JSON]");
+  check(["base_staging", "base"].includes(environment) && ["inspect", "deploy", "activate", "prepare-governance", "verify", "verify-source", "record-drain"].includes(action), "Usage: deploy-orchestrator-v4.ts base_staging|base inspect|deploy|verify|verify-source; base prepare-governance; base_staging activate|record-drain [EVIDENCE_JSON]. Public private-deposit acknowledgement: O4_BASE_ACCEPT_PUBLIC_PRIVATE_DEPOSITS=N for base prepare-governance, O4_STAGING_ACCEPT_PUBLIC_PRIVATE_DEPOSITS=N for base_staging activate");
   const acknowledgement = process.env.O4_STAGING_ACCEPT_PUBLIC_PRIVATE_DEPOSITS;
   assertStagingPublicDepositAcknowledgement(environment, acknowledgement);
   check(acknowledgement === undefined || action === "activate", "O4_STAGING_ACCEPT_PUBLIC_PRIVATE_DEPOSITS is only accepted by activate");
+  const baseAcknowledgement = process.env.O4_BASE_ACCEPT_PUBLIC_PRIVATE_DEPOSITS;
+  assertBasePublicDepositAcknowledgement(environment, baseAcknowledgement);
+  check(baseAcknowledgement === undefined || action === "prepare-governance", "O4_BASE_ACCEPT_PUBLIC_PRIVATE_DEPOSITS is only accepted by prepare-governance");
+  check(action !== "activate" || environment === "base_staging", "Direct activation is staging-only; production uses its Safe batch");
+  check(action !== "record-drain" || environment === "base_staging", "record-drain is staging-only; Base does not require legacy drain evidence");
   process.env.HARDHAT_NETWORK = environment;
   const hre = require("hardhat") as HardhatRuntimeEnvironment;
   const configPath = resolve(`deployments/orchestrator-v4/${environment}.json`);
@@ -563,10 +684,7 @@ async function main(): Promise<void> {
   }
   let wallet: Wallet | VoidSigner;
   if (action === "deploy" || action === "activate") {
-    const keyName = environment === "base_staging" ? "STAGING_DEPLOYER_KEY" : "O4_PRODUCTION_DEPLOYER_KEY";
-    const key = process.env[keyName]; check(key, `${keyName} is unavailable; no fallback signer is permitted`);
-    wallet = new Wallet(key.startsWith("0x") ? key : `0x${key}`, hre.ethers.provider);
-    check(same(wallet.address, c.signer), "Derived signer differs from the verified configuration");
+    wallet = createReleaseSigner(c, process.env).connect(hre.ethers.provider);
   } else wallet = new VoidSigner(c.signer, hre.ethers.provider);
   const paths = releasePaths(environment), protectedPaths = [...paths.deployed, ...paths.execution];
   for (const path of ["scripts/deploy-orchestrator-v4.ts", "scripts/verify-orchestrator-v4-source.ts", `deployments/orchestrator-v4/${environment}.json`])
@@ -598,11 +716,7 @@ async function main(): Promise<void> {
     }
     if (action === "activate") await activate(hre, journal, acknowledgement);
     if (action === "prepare-governance") {
-      check(environment === "base", "Governance batch is only for Base production");
-      await verifySuite(hre, journal, false);
-      await assertDrainEvidence(hre, c, manifest.activationDrainEvidence);
-      await assertPrivateDepositsPreserved(hre, journal);
-      manifest.governanceTransactions = await activationTransactions(hre, manifest); journal.save();
+      await prepareGovernance(hre, journal, baseAcknowledgement);
       console.log("Unsigned Safe calls recorded; no governance transaction submitted.");
     }
     if (action === "verify") await verifySuite(hre, journal, true);

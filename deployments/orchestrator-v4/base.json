@@ -2,9 +2,9 @@
   "version": 1,
   "environment": "base",
   "chainId": 8453,
-  "signer": null,
+  "signer": "0x41123d6419C7b8e44157f6F3b0088442116641eC",
   "governance": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
-  "gatingService": null,
+  "gatingService": "0x7aCe8cF3cb5fEa7103594dA6C6478e69fD7717a4",
   "existing": {
     "EscrowV2": {
       "address": "0x777777779d229cdF3110e9de47943791c26300Ef",
@@ -82,6 +82,20 @@
       "runtimeCodeHash": "0x7636c79f0f46cf88c7122767e553264f1898fa253ea214f6a1c3187b0f0a4bcf",
       "deploymentTransaction": "0xa5b62cfc333a942673cac178d74ed18732ab4b9d776ccce653611c36aa7a2d51",
       "deploymentBlock": 49352536
+    },
+    "PredecessorWhitelistPolicy": {
+      "address": "0x389Cd9bA91FfFcd83d267B241E975541892759Ce",
+      "artifact": "WhitelistPolicy",
+      "runtimeCodeHash": "0xa83d138a5b89d2fd2861702febc6333e542dcdc8994ee76c345dcbd22fe685a4",
+      "deploymentTransaction": "0x82940c1c4e0098678bfdc89e4810e94d931cdfb617a997c56404f3d545b1c58c",
+      "deploymentBlock": 50528043
+    },
+    "UnifiedPaymentVerifierV4": {
+      "address": "0x7bE50E6206a9b3AdF36dbEAFac0e45Cc03A72048",
+      "artifact": "UnifiedPaymentVerifierV4",
+      "runtimeCodeHash": "0xa2f9051e7621040a5c366f340182270b530464c7dadbf29563159c42c8761269",
+      "deploymentTransaction": "0xa6fa3ce43ca5352460be4ce917709f17d60fda677fa48a1fbc6f081902dcf931",
+      "deploymentBlock": 53210472
     },
     "Orchestrator": {
       "address": "0x88888883Ed048FF0a415271B28b2F52d431810D0",
@@ -243,7 +257,10 @@
     "0xE078D93bFdd87A8c5C5cCA5905DCbA0Dd7A1F0BD"
   ],
   "attestationThreshold": "1",
-  "baselineBlock": 52936874,
-  "legacyDrainCheckpoints": null,
-  "legacyWhitelistCheckpoint": null
+  "baselineBlock": 53247430,
+  "legacyDrainCheckpoints": [],
+  "legacyWhitelistCheckpoint": {
+    "indexedBlock": 50528042,
+    "enabled": []
+  }
 }
