@@ -37,6 +37,20 @@ rendered for Safe nonce 87:
 - **Rollback:** a direct call at nonce 88, safeTxHash
   `0xa18405c2bed0afd7d3193167ebad72296b4497a6566de0a2cb9a0d76687c70e1`.
 
+Source verification: Basescan auto-verified all seven contracts as similar
+matches of identical earlier deployments. Six of those are staging-suite
+contracts. StakeVaultV2 matched `0xa33d…Fb4e` and DisputeProtectionPolicyV2
+matched `0x3C53…94b1`. Each source contract carries the same compiler metadata
+(IPFS) hash as our runtime, so Basescan shows our exact source; it just does not
+display our constructor arguments.
+
+The runner's `verify-source` requires an exact match with constructor arguments,
+so it stopped at StakeVaultV2 (`Explorer source verification failed`).
+`hardhat verify --force` got `already verified` back from Etherscan, which does
+not re-verify through the API. The exact-match check lives in
+`scripts/verify-orchestrator-v4-source.ts`, a protected deployed path, so it was
+not changed after the deploy. `verification.sources` stays unrecorded.
+
 An anvil fork at block 53251436 ran both through `execTransaction` with
 impersonated owners:
 
@@ -139,7 +153,8 @@ HARDHAT_CONFIG=hardhat.readonly.config.ts yarn deploy:orchestrator-v4 base inspe
 BASE_DEPLOYER_KEY=<0x4112 key> HARDHAT_CONFIG=hardhat.canonical.config.ts \
   yarn deploy:orchestrator-v4 base deploy
 
-# 2. Basescan source verification (no key)
+# 2. Basescan source verification (no key). Run it before Basescan auto-similar-matches the
+#    new addresses; once a similar match exists, Etherscan rejects exact re-verification.
 ETHERSCAN_API_KEY=<key> HARDHAT_CONFIG=hardhat.readonly.config.ts \
   yarn deploy:orchestrator-v4 base verify-source
 
