@@ -1,0 +1,21 @@
+{
+  "version": "1.0",
+  "chainId": "8453",
+  "createdAt": 1793292145000,
+  "meta": {
+    "name": "Base O4 pause rollback",
+    "description": "1 call. O4 0x74c55679268FAfB493864915aD16A320AB8c40Ba; DPPV2 0xB49Fa38C6Bb3C8C51ddb13711BB213cDD9DB1799; StakeVaultV2 0x4aDE08EC1098D0d8856dd7bbBBc7789794089A97. Source 526f81d2ea53f2045b821931b21f7b7e8f15a2c4. Prepared block 53251399 (0xf79214333afd121247af5bb552e242c250c4d30bb85075fdf7811558608b9b80). Pauses O4 only. O3 stays registered and the UPV3 writer is NOT revoked.",
+    "txBuilderVersion": "1.16.5",
+    "createdFromSafeAddress": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+    "createdFromOwnerAddress": ""
+  },
+  "transactions": [
+    {
+      "to": "0x74c55679268FAfB493864915aD16A320AB8c40Ba",
+      "value": "0",
+      "data": "0x45a734b7",
+      "contractMethod": null,
+      "contractInputsValues": null
+    }
+  ]
+}

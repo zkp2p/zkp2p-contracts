@@ -5,6 +5,46 @@ are ready. Nothing is deployed on Base, and no transaction has been sent or
 proposed. Each step below is its own approval boundary (see
 `.claude/skills/ship-contracts/SKILL.md`).
 
+## Deployment (executed 2026-10-29)
+
+The deploy ran from `526f81d2ea53f2045b821931b21f7b7e8f15a2c4`, with CI green
+(Complete Foundry suite and Release readiness) on that exact SHA.
+
+- **Deployer:** `0x41123d6419C7b8e44157f6F3b0088442116641eC`, nonces 133–145,
+  13 confirmed transactions, blocks 53251251–53251289.
+- **Config hash:** `9b3e56c1…4512`.
+- **State:** the suite is passive. O4 is not registered, and no shared registry,
+  route or writer changed.
+
+| Contract | Address | Deploy tx |
+| --- | --- | --- |
+| StakeVaultV2 | `0x4aDE08EC1098D0d8856dd7bbBBc7789794089A97` | `0x3ef9b7c5…ea22` |
+| AddressGroupRegistryV4 | `0xDcafc54E4fb47B1d41ADD08dd82142a30ec4706E` | `0xc7a433db…10a2` |
+| WhitelistPolicyV2 | `0xF7069D157D1AFb2CbE117e24f4262aE51eeD390c` | `0xdfa2da0d…839f` |
+| IntentSignalPolicy | `0x572f1Eb9043a7217C998221D6d3BCfb3D69338cC` | `0x93ca8f6f…f994` |
+| DisputeProtectionPolicyV2 | `0xB49Fa38C6Bb3C8C51ddb13711BB213cDD9DB1799` | `0xac51f76e…6283` |
+| OrchestratorV4 | `0x74c55679268FAfB493864915aD16A320AB8c40Ba` | `0x80694325…0393` |
+| ProtocolViewerV4 | `0x685123dB5fE2b88D00ED3764c088d600D9B2b6Fc` | `0xb26b8f4e…d0f5` |
+
+`prepare-governance` ran at block 53251399 and recorded the acknowledgement of
+1507 public private deposits (checked at block 53251338). The batches were
+rendered for Safe nonce 87:
+
+- **Activation:** safeTxHash `0xa09c600337986d8095fd800f6ebd9c36ea684721b56c4b1a8d423b9af58a59b0`
+  via MultiSendCallOnly `0xA1da…102B`, or
+  `0xd5d697dcacb8d4718d39b54a4e0d1fa094b340939af9c7307a7a9e0b375be8bc` via
+  `0x40A2…130D`. Both matched the live Safe's `getTransactionHash`.
+- **Rollback:** a direct call at nonce 88, safeTxHash
+  `0xa18405c2bed0afd7d3193167ebad72296b4497a6566de0a2cb9a0d76687c70e1`.
+
+An anvil fork at block 53251436 ran both through `execTransaction` with
+impersonated owners:
+
+- **Activation:** ExecutionSuccess, 176,449 gas. O4 was registered, O3 was
+  unchanged, the vault, policy and O4 were owned by the Safe, and the DPPV2
+  writer was added. NRV2 writers and all 13 routes were unchanged.
+- **Rollback:** ExecutionSuccess, 69,010 gas. O4 was paused.
+
 ## Decisions
 
 - O3 (`0x0140…b5c7`) stays registered and unpaused while clients migrate. O4 is
@@ -104,7 +144,8 @@ ETHERSCAN_API_KEY=<key> HARDHAT_CONFIG=hardhat.readonly.config.ts \
   yarn deploy:orchestrator-v4 base verify-source
 
 # 3. Record the private-deposit acknowledgement and the unsigned batch (no key).
-#    Run once without the variable or with a wrong count to read "discovered N".
+#    A deliberately wrong count (e.g. 999999999) fails with "discovered N"; without
+#    the variable the error lists every deposit instead.
 O4_BASE_ACCEPT_PUBLIC_PRIVATE_DEPOSITS=<N> HARDHAT_CONFIG=hardhat.readonly.config.ts \
   yarn deploy:orchestrator-v4 base prepare-governance
 
@@ -124,6 +165,21 @@ each with a `.sha256.json` sidecar. Commit them in a recording PR after step 4.
 
 The Safe has no delegates, so the Transaction Service rejects API proposals.
 Import the Transaction Builder JSON in Safe{Wallet} instead.
+
+The privacy acknowledgement is checked when `prepare-governance` runs, not when
+the Safe executes. A deposit made private on the O3 policy after that point is
+public through O4 once the batch executes. So the last step before the final
+signer executes is `simulate` at the live nonce: its active `verifySuite` runs
+discovery again. If that fails on a newly private deposit, run
+`prepare-governance` with the new N and render again. The calldata and the
+safeTxHash do not change, so existing signatures stay valid; only `createdAt` and
+the description change. A race of minutes remains.
+
+After activation, `verify` fails if any deposit becomes private on the O3 policy
+after the last recorded acceptance. Nothing can record a new acceptance once O4
+is registered: `prepare-governance` requires O4 to be unregistered, and `verify`
+refuses an acknowledgement. That is intended behaviour, but it needs a decision:
+either accept that `verify` fails, or add a dated follow-up acknowledgement.
 
 `simulate` forks Base and checks the Safe's runtime, version, guard, modules,
 owners, threshold and nonce. It compares the on-chain `getTransactionHash` with
@@ -156,6 +212,16 @@ Safe nonce 87 may be taken first by another queued batch, such as
 Safe{Wallet} sends a single call directly (operation 0), and `render` prints
 that hash too. It pauses O4 only. O3, the routes and the writers are untouched,
 and O4 stays registered.
+
+Once O4 is registered, never run the lane-47 UPV4 rollback
+(`base_upv4_rollback.json`, which routes back to UPV3) while O4 is unpaused.
+UPV3 cannot serve O4:
+
+- O4 has no `getDepositPreIntentHook`, so UPV3 treats it as a V1 orchestrator
+  and decodes the wrong intent layout.
+- The attestor signs O4 proofs only under the UPV4 domain.
+
+Every O4 fulfil would revert. Pause O4 first with `base_o4_rollback.json`.
 
 ## Fork rehearsal (2026-10-29)
 
