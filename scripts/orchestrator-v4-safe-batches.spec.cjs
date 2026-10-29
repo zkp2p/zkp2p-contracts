@@ -4,7 +4,7 @@ const { createHash } = require("node:crypto");
 const { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
-const { spawnSync } = require("node:child_process");
+const { execFileSync, spawnSync } = require("node:child_process");
 const { test } = require("node:test");
 const { constants, utils } = require("ethers");
 const hre = require("hardhat");
@@ -21,8 +21,13 @@ const { assertApprovedBaseManifest, main, renderO4Artifacts, writeO4Artifacts, v
 const ROOT = resolve(__dirname, ".."), MANIFEST_FILE = join(ROOT, "deployments/outputs/orchestrator-v4-base.json");
 const committedManifest = () => JSON.parse(readFileSync(MANIFEST_FILE, "utf8"));
 
-test("approved Base manifest matches the committed configuration and release provenance at HEAD", () => {
-  assert.doesNotThrow(() => assertApprovedBaseManifest(committedManifest(), ROOT));
+test("approved Base manifest matches the committed configuration and delegates release provenance", (t) => {
+  const m = committedManifest(), cwd = process.cwd();
+  const provenance = t.mock.fn(() => assert.equal(process.cwd(), ROOT));
+  assert.doesNotThrow(() => assertApprovedBaseManifest(m, ROOT, provenance));
+  assert.equal(provenance.mock.callCount(), 1);
+  assert.deepEqual(provenance.mock.calls[0].arguments, [m.sourceCommit, m.executionToolCommit, "base"]);
+  assert.equal(process.cwd(), cwd);
 });
 
 test("approved Base manifest rejects a tampered configuration hash", () => {
@@ -39,8 +44,12 @@ test("approved Base manifest rejects unapproved configuration even with a recomp
 for (const field of ["sourceCommit", "executionToolCommit"]) for (const [name, commit] of [
   ["short", "526f81d"], ["zero", "0".repeat(40)], ["unknown", "f".repeat(40)],
 ]) test(`approved Base manifest rejects ${name} ${field}`, () => {
-  const m = committedManifest(); m[field] = commit;
-  assert.throws(() => assertApprovedBaseManifest(m, ROOT), /full commit SHAs|git merge-base --is-ancestor/);
+  const m = committedManifest();
+  // Only the malformed or unknown SHA should fail, even in a depth-one checkout.
+  m.sourceCommit = m.executionToolCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim();
+  m[field] = commit;
+  const expected = name === "short" ? /Release provenance requires full commit SHAs/ : new RegExp(`Not a valid commit name ${commit}`);
+  assert.throws(() => assertApprovedBaseManifest(m, ROOT), expected);
 });
 
 for (const [name, pin] of [
@@ -58,16 +67,23 @@ for (const [name, pin] of [
   assert.throws(() => assertApprovedBaseManifest(m, ROOT), new RegExp(`${name} pin mismatch`));
 });
 
-test("approval resolves configuration and provenance from the repository root and restores cwd", () => {
+test("approval resolves configuration and provenance from the repository root and restores cwd", (t) => {
   const m = committedManifest(), cwd = process.cwd(), directory = mkdtempSync(join(tmpdir(), "o4-approval-cwd-"));
   try {
     process.chdir(directory);
     const outsideCwd = process.cwd();
-    assert.doesNotThrow(() => assertApprovedBaseManifest(m, ROOT));
-    assert.equal(process.cwd(), outsideCwd);
-    m.sourceCommit = "0".repeat(40);
-    assert.throws(() => assertApprovedBaseManifest(m, ROOT), /git merge-base --is-ancestor/);
-    assert.equal(process.cwd(), outsideCwd);
+    for (const error of [undefined, new Error("Provenance rejected")]) {
+      const provenance = t.mock.fn(() => {
+        assert.equal(process.cwd(), ROOT);
+        if (error) throw error;
+      });
+      const approve = () => assertApprovedBaseManifest(m, ROOT, provenance);
+      if (error) assert.throws(approve, (actual) => actual === error);
+      else assert.doesNotThrow(approve);
+      assert.equal(provenance.mock.callCount(), 1);
+      assert.deepEqual(provenance.mock.calls[0].arguments, [m.sourceCommit, m.executionToolCommit, "base"]);
+      assert.equal(process.cwd(), outsideCwd);
+    }
   } finally { process.chdir(cwd); rmSync(directory, { recursive: true, force: true }); }
 });
 
@@ -103,7 +119,12 @@ test("CLI verify reproduces committed O4 artifact bytes, sidecars and nonce 87/8
   const rollback = o4SafeTransactions(Kind.Rollback, buildO4SafeCalls(Kind.Rollback, m), 88).find(({ safeTx }) => safeTx.operation === 0);
   assert.equal(rollback.safeTxHash, "0xa18405c2bed0afd7d3193167ebad72296b4497a6566de0a2cb9a0d76687c70e1");
   const output = t.mock.method(console, "log", () => {});
+  const cwd = process.cwd();
+  const provenance = t.mock.method(require("./orchestrator-v4-provenance.ts"), "assertReleaseProvenance", () => assert.equal(process.cwd(), ROOT));
   await main(["verify", "--safe-nonce", "87"]);
+  assert.equal(provenance.mock.callCount(), 1);
+  assert.deepEqual(provenance.mock.calls[0].arguments, [m.sourceCommit, m.executionToolCommit, "base"]);
+  assert.equal(process.cwd(), cwd);
   for (const { kind, safeTx, safeTxHash } of [...activation, rollback]) {
     assert.ok(output.mock.calls.some(({ arguments: [line] }) => line === `${kind}: nonce=${safeTx.nonce} to=${safeTx.to} operation=${safeTx.operation} safeTxHash=${safeTxHash}`));
   }

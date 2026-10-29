@@ -37,7 +37,7 @@ const normalized = (values: readonly string[]): string[] => values.map((v) => v.
 const sameAddress = (actual: string, expected: string, label: string): void => assert.equal(actual.toLowerCase(), expected.toLowerCase(), label);
 
 /** CLI approval boundary; pure builders and fork rehearsals may use synthetic manifests. */
-export function assertApprovedBaseManifest(manifest: Manifest, root = ROOT): void {
+export function assertApprovedBaseManifest(manifest: Manifest, root = ROOT, provenance: typeof assertReleaseProvenance = assertReleaseProvenance): void {
   const c = manifest.configuration;
   assert.equal(manifest.configurationHash, hash(c), "Configuration hash mismatch");
   sameAddress(c.governance, UPV4_BASE_RELEASE.safe, "Safe pin mismatch");
@@ -53,7 +53,7 @@ export function assertApprovedBaseManifest(manifest: Manifest, root = ROOT): voi
   const cwd = process.cwd();
   try {
     process.chdir(root);
-    assertReleaseProvenance(manifest.sourceCommit, manifest.executionToolCommit, "base");
+    provenance(manifest.sourceCommit, manifest.executionToolCommit, "base");
   } finally { process.chdir(cwd); }
 }
 
