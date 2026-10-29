@@ -2,6 +2,16 @@
 
 Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, and utilities.
 
+## Candidate 0.4.4-rc.12
+
+- Exports the Base production O4 suite recorded in zkp2p-contracts #362,
+  deployed from source `526f81d` by `0x41123d6419C7b8e44157f6F3b0088442116641eC`
+  (`0x4112…41eC`), alongside the existing Base `UnifiedPaymentVerifierV4`.
+- The suite remains passive until the Safe activation batch (nonce 87) executes.
+  Existing Base addresses and Base staging exports are unchanged from rc.11.
+- Like rc.11, this candidate is consumed as a local branch tarball; no npm
+  registry tag changes.
+
 ## Candidate 0.4.4-rc.11
 
 - Adds the Base production `UnifiedPaymentVerifierV4` address
