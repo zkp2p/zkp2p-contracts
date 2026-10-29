@@ -2,6 +2,15 @@
 
 Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, and utilities.
 
+## Candidate 0.4.4-rc.13
+
+- Corrects Base `INTENT_EXPIRATION_PERIOD` from rc.12's `3600` to `21600`,
+  matching live `EscrowV2` until the #349 Safe batch executes.
+- Base staging remains `3600`. All other exported constants, addresses, and
+  ABIs are unchanged from rc.12.
+- Like rc.12, this candidate is consumed as a local branch tarball; no npm
+  registry tag changes.
+
 ## Candidate 0.4.4-rc.12
 
 - Exports the Base production O4 suite recorded in zkp2p-contracts #362,

@@ -356,9 +356,9 @@ test('derives a future RC release line from the package version', () => {
   );
 });
 
-test('commits the Orchestrator V4 RC candidate', () => {
+test('commits the Orchestrator V4 RC candidate with the Base expiry correction', () => {
   const packageManifest = JSON.parse(fs.readFileSync(packageManifestPath, 'utf8'));
-  assert.equal(packageManifest.version, '0.4.4-rc.12');
+  assert.equal(packageManifest.version, '0.4.4-rc.13');
   assert.deepEqual(
     resolveReleasePolicy({
       release: packageManifest.version,
