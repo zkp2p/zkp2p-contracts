@@ -1,8 +1,13 @@
 # Orchestrator V4 Base production release
 
-Status, 2026-10-29: the deploy tooling and `deployments/orchestrator-v4/base.json`
-are ready. Nothing is deployed on Base, and no transaction has been sent or
-proposed. Each step below is its own approval boundary (see
+Status, 2026-10-29:
+
+- The passive seven-contract suite is deployed on Base (see below).
+- The four-call activation batch for Safe nonce 87 has been handed to the
+  signers. It has not executed, so O4 is not registered.
+- The UPV3 writer revoke remains a separate, later transaction.
+
+Each step below is its own approval boundary (see
 `.claude/skills/ship-contracts/SKILL.md`).
 
 ## Deployment (executed 2026-10-29)
@@ -141,9 +146,21 @@ runner does not gate on it, but that owner should be confirmed.
 
 ## Commands
 
-Run every command from a clean checkout of the merged main commit. The deploy
-records `sourceCommit = HEAD`, and later actions require the protected paths to
-be unchanged.
+The deploy recorded `sourceCommit = 526f81d2ea53f2045b821931b21f7b7e8f15a2c4`.
+Every later runner action (`prepare-governance`, `verify`, `verify-source`) and
+every `o4:safe-batches` command checks release provenance:
+
+- `526f81d` must be an ancestor of HEAD, so #362 must land on main as a merge
+  commit, never a squash or a rebase.
+- Every protected release path must be byte-identical to `526f81d`.
+- The checkout needs full Git history; a shallow clone cannot see `526f81d`.
+
+Run these commands from a clean, full checkout of the #362 merge commit, checked
+out detached. A later main commit that touches a protected path, such as
+`contracts/` or `hardhat.config.ts`, fails provenance. That includes re-rendering
+the rollback at a new nonce, so keep the merge commit available for emergencies.
+`o4:safe-batches` also requires the manifest to match the pinned deployment
+(addresses, deploy transactions, nonces, source commit and config hash).
 
 ```sh
 # 0. Read-only preflight (no key)
