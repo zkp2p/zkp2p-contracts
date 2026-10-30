@@ -358,7 +358,7 @@ test('derives a future RC release line from the package version', () => {
 
 test('commits the Orchestrator V4 RC candidate', () => {
   const packageManifest = JSON.parse(fs.readFileSync(packageManifestPath, 'utf8'));
-  assert.equal(packageManifest.version, '0.4.4-rc.11');
+  assert.equal(packageManifest.version, '0.4.4-rc.14');
   assert.deepEqual(
     resolveReleasePolicy({
       release: packageManifest.version,
@@ -388,7 +388,7 @@ test('publish workflow consumes the version-derived channel without RC-only path
   const workflow = fs.readFileSync(releaseWorkflowPath, 'utf8');
 
   assert.match(workflow, /^  LATEST_BASELINE: 0\.4\.3$/m);
-  assert.match(workflow, /^  RC_BASELINE: 0\.4\.4-rc\.1$/m);
+  assert.match(workflow, /^  RC_BASELINE: 0\.4\.4-rc\.6$/m);
   assert.match(workflow, /^\s{2}policy:\s*$/m);
   assert.match(workflow, /node scripts\/npm-release\.mjs resolve "\$PACKAGE_JSON" "\$RELEASE_VERSION"/);
   assert.match(workflow, /DIST_TAG:\s*\$\{\{ needs\.policy\.outputs\.dist_tag \}\}/);
