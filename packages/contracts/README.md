@@ -2,6 +2,21 @@
 
 Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, and utilities.
 
+## Release 0.4.4-rc.14
+
+- First npm RC since `0.4.4-rc.6`. Candidates `rc.7`–`rc.13` were local
+  tarballs only and are not on npm.
+- Package exports are identical to local candidate `0.4.4-rc.13` except Base
+  `INTENT_EXPIRATION_PERIOD` is now `3600` (one hour), matching
+  `ESCROW_V2_INTENT_EXPIRATION_PERIOD`. Both Base escrows have used this expiry since Safe nonce 89
+  executed on 2026-10-30 at block 53,292,327
+  ([transaction](https://basescan.org/tx/0x0adea24a0196d04373009c81bf13af0d7c835bc710a7e8d3741bba6537d5caeb)).
+  Base staging remains `3600`.
+- Includes the Base OrchestratorV4 suite addresses and ABIs recorded on main,
+  including `OrchestratorV4` at `0x74c55679268FAfB493864915aD16A320AB8c40Ba`.
+- Regenerated `baseContracts.ts` with the canonical export pipeline to restore the 7 Base O4 contract exports missing from main; byte-identical to the rc.13 build (`00e9595`).
+- Targets the `rc` tag; `latest` remains at `0.4.3`.
+
 ## Candidate 0.4.4-rc.11
 
 - Adds the Base production `UnifiedPaymentVerifierV4` address
