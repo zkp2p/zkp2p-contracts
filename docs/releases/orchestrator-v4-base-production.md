@@ -1,11 +1,28 @@
 # Orchestrator V4 Base production release
 
-Status, 2026-10-29:
+Status, 2026-11-02:
 
-- The passive seven-contract suite is deployed on Base (see below).
-- The four-call activation batch for Safe nonce 87 has been handed to the
-  signers. It has not executed, so O4 is not registered.
-- The UPV3 writer revoke remains a separate, later transaction.
+- O4 is live on Base. The four-call activation batch executed at Safe nonce 87
+  on 2026-10-30 at 01:27:35 UTC: tx
+  `0x7e0b443786c2f8e4b88b1208ebf0f636ef2cbf7bda02961701063844fefd3650`, block
+  53267154, safeTxHash `0xa09c…59b0` (the MultiSendCallOnly `0xA1da…102B`
+  rendering). The first O4 intent was signaled at 10:09:01 UTC that day
+  (block 53282797).
+- O3 (`0x014025fDE093f8701d86e9f38e2C3a9b779cb5c7`) stays registered and
+  unpaused for older clients. All 13 routes point to UPV4.
+- The rollback rendered for nonce 88 can no longer execute. Nonce 88 was an
+  empty Safe self-call (a rejection) and nonce 89 was the one-hour intent
+  expiry. Render the rollback again at the live nonce before using it (see
+  [Commands](#commands)).
+- Step 5 `verify` is not recorded yet: `deployments/outputs/orchestrator-v4-base.json`
+  still has `verification.active: false`.
+- The UPV3 writer revoke remains a separate, later transaction. UPV3 is still a
+  `NullifierRegistryV2` writer.
+
+Read at Base block 53412057: `OrchestratorRegistry.isOrchestrator` is true for
+O4 and O3, both are unpaused, O4 is owned by the Safe, and its signal and
+settlement policies are the IntentSignalPolicy and DisputeProtectionPolicyV2
+below.
 
 Each step below is its own approval boundary (see
 `.claude/skills/ship-contracts/SKILL.md`).
@@ -18,8 +35,8 @@ The deploy ran from `526f81d2ea53f2045b821931b21f7b7e8f15a2c4`, with CI green
 - **Deployer:** `0x41123d6419C7b8e44157f6F3b0088442116641eC`, nonces 133–145,
   13 confirmed transactions, blocks 53251251–53251289.
 - **Config hash:** `9b3e56c1…4512`.
-- **State:** the suite is passive. O4 is not registered, and no shared registry,
-  route or writer changed.
+- **State at deploy:** the suite was passive. O4 was not registered, and no
+  shared registry, route or writer changed.
 
 | Contract | Address | Deploy tx |
 | --- | --- | --- |

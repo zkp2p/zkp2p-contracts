@@ -3,7 +3,9 @@
 [![Coverage](https://codecov.io/gh/zkp2p/zkp2p-contracts/branch/main/graph/badge.svg?precision=2)](https://codecov.io/gh/zkp2p/zkp2p-contracts)
 
 Smart contracts for the Peer/ZKP2P fiat on/off-ramp. The current Base production settlement path is
-**EscrowV2 → OrchestratorV3 → UnifiedPaymentVerifierV3**.
+**EscrowV2 → OrchestratorV4 → UnifiedPaymentVerifierV4**. OrchestratorV4 was registered on Base on
+30 October 2026 (Safe nonce 87). OrchestratorV3 stays registered for older clients and also settles through
+UnifiedPaymentVerifierV4.
 
 Use the current deployment records and package aliases for integrations. Historical deployments are outside
 this README's supported production inventory. Their presence in an artifact or an executed deployment lane
@@ -16,15 +18,32 @@ does not make them an active integration target.
 | Contract | Role |
 | --- | --- |
 | `EscrowV2` | Holds maker liquidity, deposit configuration and funds locked for intents. |
-| `OrchestratorV3` | Coordinates intent admission, payment verification, fees and settlement. |
-| `UnifiedPaymentVerifierV3` | Verifies payment attestations and enforces payment replay protection. |
+| `OrchestratorV4` | Coordinates intent admission, payment verification, fees and settlement. |
+| `OrchestratorV3` | Previous orchestrator; stays registered and unpaused for older clients. |
+| `UnifiedPaymentVerifierV4` | Verifies payment attestations and enforces payment replay protection. Every payment method routes to it since the 29 October 2026 cutover (Safe nonce 86). |
+| `UnifiedPaymentVerifierV3` | No longer routed. It stays a `NullifierRegistryV2` writer as the UPV4 rollback target until its separately approved revoke. |
 | `MultiAttestationVerifier` | Checks the configured attestation witnesses and signature threshold. |
 
-### Lifecycle, whitelist and dispute protection
+### OrchestratorV4 suite
 
-Use the familiar names below when discussing the production stack. The public package exports those same
-canonical names; deployment artifacts retain the longer method-scoped names. All four are current production
-components, and each pair refers to one deployed contract:
+Deployed on 29 October 2026 and activated with OrchestratorV4's registration on 30 October 2026. The
+runbook is [orchestrator-v4-base-production.md](docs/releases/orchestrator-v4-base-production.md).
+
+| Contract | Role | Base production address |
+| --- | --- | --- |
+| `OrchestratorV4` | Intent lifecycle and fees | `0x74c55679268FAfB493864915aD16A320AB8c40Ba` |
+| `IntentSignalPolicy` | O4 signal policy: deposit whitelist and gating-service signature | `0x572f1Eb9043a7217C998221D6d3BCfb3D69338cC` |
+| `WhitelistPolicyV2` | Per-deposit taker whitelists and groups | `0xF7069D157D1AFb2CbE117e24f4262aE51eeD390c` |
+| `AddressGroupRegistryV4` | Group membership and group arbitrators | `0xDcafc54E4fb47B1d41ADD08dd82142a30ec4706E` |
+| `DisputeProtectionPolicyV2` | O4 settlement policy: settles payouts against the taker's stake or defers them | `0xB49Fa38C6Bb3C8C51ddb13711BB213cDD9DB1799` |
+| `StakeVaultV2` | Holds and locks taker stake and pays dispute claims | `0x4aDE08EC1098D0d8856dd7bbBBc7789794089A97` |
+| `ProtocolViewerV4` | Read helper | `0x685123dB5fE2b88D00ED3764c088d600D9B2b6Fc` |
+
+### OrchestratorV3 lifecycle, whitelist and dispute protection
+
+These components serve OrchestratorV3, which stays registered for older clients. Use the familiar names below
+when discussing them. The public package exports those same canonical names; deployment artifacts retain the
+longer method-scoped names. Each pair refers to one deployed contract:
 
 | Familiar / package name | Deployment artifact name | Base production address |
 | --- | --- | --- |
@@ -38,7 +57,8 @@ At Base block **52974604** (23 October 2026), production OrchestratorV3
 (`0x014025fDE093f8701d86e9f38e2C3a9b779cb5c7`) selected the hook above. The hook selected the listed
 whitelist and dispute policies; the dispute policy selected the listed vault; the vault's controller was
 that same dispute policy. OrchestratorV3 was unpaused and dispute admissions were enabled. All 13 registered
-payment methods routed to UnifiedPaymentVerifierV3. Recheck current wiring before a live change.
+payment methods routed to UnifiedPaymentVerifierV3 then; since the 29 October 2026 cutover they route to
+UnifiedPaymentVerifierV4. Recheck current wiring before a live change.
 
 The whitelist policy configures enforcement and allowed groups per deposit/payment-method tuple. Direct taker
 allowlisting is deposit-wide: an allowlisted taker passes every enabled payment-method tuple for that deposit.
@@ -48,7 +68,11 @@ support dispute verification and replay protection; `IntentGuardian` supports co
 
 ### Intent admission
 
-Production whitelisting uses `WhitelistPolicy` through `IntentLifecycleHookV1`. OrchestratorV3 separately
+OrchestratorV4 delegates admission to `IntentSignalPolicy`, which checks the deposit's `WhitelistPolicyV2`
+whitelist (reverting `TakerNotWhitelisted`) and the gating-service signature. O4 has no relayer gating. The O3
+whitelist settings do not carry over, so deposits private on O3 started public on O4.
+
+On OrchestratorV3, whitelisting uses `WhitelistPolicy` through `IntentLifecycleHookV1`. OrchestratorV3 separately
 checks the gating-service signature configured on each escrow deposit/payment method. Neither path requires
 the old `WhitelistPreIntentHook` or `SignatureGatingPreIntentHook` deployment; those two are outside the current
 production stack.
@@ -74,11 +98,12 @@ Legacy indexed hook fields therefore must not be interpreted as current O3 admis
 ## Settlement flow
 
 1. A maker creates and funds an `EscrowV2` deposit with payment methods, currencies and pricing rules.
-2. A taker signals an intent through `OrchestratorV3`. Registry authorization and the selected lifecycle
-   policy govern admission; the escrow locks the corresponding funds.
+2. A taker signals an intent through `OrchestratorV4` (older clients use `OrchestratorV3`). Registry
+   authorization and the orchestrator's admission policy govern admission; the escrow locks the corresponding funds.
 3. The taker completes the fiat payment and obtains the required attestation.
-4. `UnifiedPaymentVerifierV3` verifies the payment and checks the nullifier history. Successful settlement
-   transfers the locked funds and applies fees and the snapshotted lifecycle callbacks. Referral and manager-fee
+4. `UnifiedPaymentVerifierV4` verifies the payment and checks the nullifier history. Successful settlement
+   transfers the locked funds and applies fees and the settlement policy (O4) or the snapshotted lifecycle
+   callbacks (O3). Referral and manager-fee
    terms are captured at signaling; the protocol fee and its recipient are read from current configuration at fulfillment.
 5. Expired intents are reconciled under the active escrow/orchestrator rules, returning the locked portion
    to available deposit liquidity.
@@ -92,6 +117,8 @@ Legacy indexed hook fields therefore must not be interpreted as current O3 admis
 - `deployments/parameters.ts`: network parameters and governance addresses.
 - `deployments/verifiers/`: payment-method provider configuration.
 - `scripts/deployActive.ts`: supported deployment runner and lane selection.
+- `scripts/deploy-orchestrator-v4.ts`: OrchestratorV4 suite runner (`yarn deploy:orchestrator-v4`), outside
+  `deploy/`. Its inputs are in `deployments/orchestrator-v4/`.
 - `test-foundry/`: deterministic, fuzz and invariant contract tests.
 - `packages/`: published contract package and extraction tooling.
 
@@ -239,7 +266,7 @@ Use this signer for future staging deployments and as the owner of every ownable
 current staging stack. Historical contracts outside that stack do not need to migrate.
 
 At Base block **52976468** (23 October 2026), all **21 ownable contracts** in the supported V3 stack
-and seven passive V4 candidates report the dedicated signer as owner. The remaining eight components have no
+and the seven October 22 V4 candidates (since superseded) report the dedicated signer as owner. The remaining eight components have no
 contract-wide `owner()` interface. The nine outstanding ownership transfers are complete, with successful receipts,
 `OwnershipTransferred` events and owner readbacks; all 20 checked address/boolean configuration getters stayed
 unchanged. The handoff spans [the EscrowV2 transfer](https://basescan.org/tx/0x99c29550534a6db39d7b3dd78b4d2eaf35e4bd2e3de3dee8239d4ed0c656dd68) through
@@ -279,24 +306,29 @@ shown together. Superseded staging deployments are excluded.
 `AddressGroupRegistry`, oracle adapters and viewer do not have a contract-wide owner. FX feed contracts are shared
 with production and are outside this staging ownership handoff.
 
-#### Passive V4 candidates
+#### Staging OrchestratorV4 suite
 
-These seven contracts are deployed but not activated. They remain separate from the supported V3 integration
-targets above; their ownership does not establish rollout readiness.
+The fresh eight-contract suite deployed on 28 October 2026
+([log](docs/releases/orchestrator-v4-staging-2026-10-28.md)) is active. The runner recorded it active at block
+**53201742**, and OrchestratorV4 is registered on the staging `OrchestratorRegistry` next to OrchestratorV3.
+Every staging payment method routes to the staging UnifiedPaymentVerifierV4, and UnifiedPaymentVerifierV3 is no
+longer a staging `NullifierRegistryV2` writer.
 
-| Candidate | Base staging address |
+| Contract | Base staging address |
 | --- | --- |
-| `StakeVaultV2` | [`0xa33dE1C8eD627fF5D6d94ABaC462A86b315cFb4e`](https://basescan.org/address/0xa33dE1C8eD627fF5D6d94ABaC462A86b315cFb4e) |
-| `AddressGroupRegistryV4` | [`0xE138653725e3602d596ae388D2B2FD05ed1148f3`](https://basescan.org/address/0xE138653725e3602d596ae388D2B2FD05ed1148f3) |
-| `WhitelistPolicyV2` | [`0xe034B9C59063DBad5F632c38515e75C24F625503`](https://basescan.org/address/0xe034B9C59063DBad5F632c38515e75C24F625503) |
-| `DisputeProtectionPolicyV2` | [`0x3C536cD642cF0ca989899D392fb2c41Bff7A94b1`](https://basescan.org/address/0x3C536cD642cF0ca989899D392fb2c41Bff7A94b1) |
-| `UnifiedPaymentVerifierV4` | [`0x7b1598b98cAC2930DD8D3174C329416848771748`](https://basescan.org/address/0x7b1598b98cAC2930DD8D3174C329416848771748) |
-| `OrchestratorV4` | [`0x7222027313D6D8D7e9BCdD7d2411a228B998C180`](https://basescan.org/address/0x7222027313D6D8D7e9BCdD7d2411a228B998C180) |
-| `ProtocolViewerV4` | [`0xEC0131D535160f32601BFca3DfA4B8043eefB56a`](https://basescan.org/address/0xEC0131D535160f32601BFca3DfA4B8043eefB56a) |
+| `StakeVaultV2` | [`0xe6314251979b6185c6a1A265de82460EB180821c`](https://basescan.org/address/0xe6314251979b6185c6a1A265de82460EB180821c) |
+| `AddressGroupRegistryV4` | [`0xD80e868d4682EF6760903aF7a00ace2C8D76EF62`](https://basescan.org/address/0xD80e868d4682EF6760903aF7a00ace2C8D76EF62) |
+| `WhitelistPolicyV2` | [`0x226b5Fcb292b7F730562B51fd50a35045b16168e`](https://basescan.org/address/0x226b5Fcb292b7F730562B51fd50a35045b16168e) |
+| `IntentSignalPolicy` | [`0x0cc9A2fEF98fE535ca4aEb5bd708bf17E63e4A80`](https://basescan.org/address/0x0cc9A2fEF98fE535ca4aEb5bd708bf17E63e4A80) |
+| `DisputeProtectionPolicyV2` | [`0x0d5a9162161d195577A3a3458524574bb462ccDc`](https://basescan.org/address/0x0d5a9162161d195577A3a3458524574bb462ccDc) |
+| `UnifiedPaymentVerifierV4` | [`0x7Da43ba0F85cfb64733216C4A2288f80dFfe1EAb`](https://basescan.org/address/0x7Da43ba0F85cfb64733216C4A2288f80dFfe1EAb) |
+| `OrchestratorV4` | [`0xd03674d06FB9d66C7F1dc9c8D45ADd314B604F2c`](https://basescan.org/address/0xd03674d06FB9d66C7F1dc9c8D45ADd314B604F2c) |
+| `ProtocolViewerV4` | [`0xDe4a3DA259549f1e236B05D1158822D03b8f4ABc`](https://basescan.org/address/0xDe4a3DA259549f1e236B05D1158822D03b8f4ABc) |
 
-The V4 orchestrator, verifier, dispute policy and vault are owned by the dedicated signer. The V4 address-group
-registry, whitelist policy and viewer have no contract-wide owner. Deployment and activation remain separate
-release steps; this ownership handoff does not resume the paused rollout.
+The orchestrator, verifier, dispute policy and vault are owned by the dedicated signer, which is also staging
+governance. The address-group registry, whitelist policy, signal policy and viewer have no contract-wide owner.
+The October 22 suite (OrchestratorV4 `0x7222…C180`) is superseded and unregistered; its records end in
+`Historical20261022`.
 
 Read each target's live `owner()` and, for two-step ownership, `pendingOwner()` before administrative calls.
 The current owner retains authority until acceptance. Preserve governance checks in current wrappers/helpers

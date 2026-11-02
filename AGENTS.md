@@ -161,8 +161,9 @@
     `0x81630fb1ab2A7Eab137888b9746b66889f78F091`. All three contracts are Basescan-verified. The lane is immutable
     and pinned in `deployments/immutableDeploymentLanes.ts`.
 - Lane `47` (`deploy/47_deploy_unified_payment_verifier_v4.ts`) records the Base production
-  `UnifiedPaymentVerifierV4`, which ships before OrchestratorV4 and serves the live OrchestratorV3. Runbook:
-  `docs/releases/upv4-base-production-cutover.md`.
+  `UnifiedPaymentVerifierV4`. It shipped before OrchestratorV4 and now serves both the live OrchestratorV4 and
+  OrchestratorV3. Runbook: `docs/releases/upv4-base-production-cutover.md`; the O4 release that followed is
+  `docs/releases/orchestrator-v4-base-production.md`.
   - **Deployment:** UPV4 was deployed outside the lane on 2026-10-28 from main `646898f`:
     - `0x7bE50E6206a9b3AdF36dbEAFac0e45Cc03A72048`, deploy tx `0xa6fa…cf931` at block 53210472;
     - deployer `0x41123d6419C7b8e44157f6F3b0088442116641eC`. The old `BASE_DEPLOY_PRIVATE_KEY` deployer is
@@ -183,7 +184,8 @@
   - **Safe batches:** `yarn write:upv4-safe-batches` renders them from the record and the pins in
     `UPV4_BASE_RELEASE` (`deployments/parameters.ts`):
     - `base_upv4_cutover` (27 calls): adds the UPV4 writer, then removes every route in reverse and re-adds it on
-      UPV4. UPV3 stays a writer, so rollback still works. It is Safe nonce 86, safeTxHash `0xe22b…8c70`.
+      UPV4. UPV3 stays a writer, so rollback still works. It executed at Safe nonce 86 on 2026-10-29 as safeTxHash
+      `0x710a…7057` (the Safe UI's MultiSendCallOnly); the repo's default wrapper hashes it to `0xe22b…8c70`.
     - `base_upv4_upv3_writer_removal` (1 call): prepared, not scheduled.
     - `base_upv4_rollback` (26 calls): routes back to UPV3.
   - **Checks:** `yarn verify:upv4-safe-batches` re-derives all three batches byte for byte and checks the cutover
@@ -193,6 +195,14 @@
     still runs lane 31's frozen readiness checks, accepting only the failure of the final UPV3-only writer check,
     and checks the registry surface against UPV4 and its owner: O3's registry, the PVR, legacy registry and NRV2
     owners, method order, currencies, routes, and no legacy writers.
+- `OrchestratorV4` is not a `deploy/` lane. It is live on Base (`0x74c55679268FAfB493864915aD16A320AB8c40Ba`,
+  registered by Safe nonce 87 on 2026-10-30) and Base staging (`0xd03674d06FB9d66C7F1dc9c8D45ADd314B604F2c`).
+  OrchestratorV3 stays registered and unpaused next to it for older clients.
+  - **Tooling:** runner `scripts/deploy-orchestrator-v4.ts` (`yarn deploy:orchestrator-v4`), inputs
+    `deployments/orchestrator-v4/{base,base_staging}.json`, manifests `deployments/outputs/orchestrator-v4-<network>.json`,
+    Base Safe batches `yarn o4:safe-batches`, runbooks `docs/releases/orchestrator-v4-*.md`.
+  - **Policies:** taker whitelisting lives in `contracts/hooks/IntentSignalPolicy.sol` (`TakerNotWhitelisted`).
+    O4, `IntentSignalPolicy` and `DisputeProtectionPolicyV2` have no relayer logic.
 - `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the
   predecessor of the currently selected stack and feeds the lane-30 wrapper, the package's recognized-predecessor
   identities, and lane-34 tooling; `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS` describes what lane 37 replaces (the
@@ -215,7 +225,7 @@
 ## Architecture Overview (v2.1)
 
 This section describes the V1 stack, whose sources now live in `contracts/archive/`. The current stack is `EscrowV2`,
-`OrchestratorV3`, and `UnifiedPaymentVerifierV3`.
+`OrchestratorV4` (with `OrchestratorV3` still registered for older clients), and `UnifiedPaymentVerifierV4`.
 
 - Core: `Escrow` holds maker deposits and per-deposit config (methods, currencies, min rates, intent limits/expiry); `Orchestrator` manages intents, routes to verifiers, collects protocol/referrer fees; `ProtocolViewer` provides aggregated read views.
 - Registries: `PaymentVerifierRegistry` maps `paymentMethod` → verifier + currencies; `EscrowRegistry` whitelists escrows; `PostIntentHookRegistry` whitelists post‑intent hooks; `NullifierRegistry` records consumed nullifiers. `RelayerRegistry` backs the deployed legacy V1 stack, deployed production `OrchestratorV2`, and current `OrchestratorV3` source and staging wiring, including relayer-gated multi-intent admission.
