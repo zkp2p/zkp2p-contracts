@@ -8,8 +8,11 @@ package artifacts.
 
 Read `AGENTS.md` before acting. Treat deployment status as network-scoped:
 
-- `EscrowV2` remains the shared escrow in the mounted V3 lifecycle lane and
-  `OrchestratorV3` is the current orchestrator source. `OrchestratorV2` is
+- `EscrowV2` remains the shared escrow. `OrchestratorV4` is live on Base
+  (`0x74c55679268FAfB493864915aD16A320AB8c40Ba`, registered by Safe nonce 87 on
+  2026-10-30) and Base staging; `OrchestratorV3` stays registered next to it for
+  older clients. O4 is not a `deploy/` lane (see
+  [Deployment source of truth](#deployment-source-of-truth)). `OrchestratorV2` is
   archived under `contracts/archive/`: it left the Base `OrchestratorRegistry`
   on 2026-08-27 and is still registered on Base staging. Never infer which
   deployment is active from a version number alone.
@@ -54,23 +57,30 @@ clean build, the full suite, or coverage for documentation-only work.
 
 ## Architecture
 
-The V2 flow remains relevant wherever current network state still routes
-through the archived `OrchestratorV2`:
+The current flow on Base and Base staging (`OrchestratorV3` serves older
+clients through the same escrow and verifier):
 
 ```text
 maker -> EscrowV2.createDeposit
-taker -> OrchestratorV2.signalIntent -> EscrowV2 locks funds
-attestation-service -> EIP-712 payment attestation
-OrchestratorV2.fulfillIntent
-  -> PaymentVerifierRegistry resolves the network's configured verifier
+taker -> OrchestratorV4.signalIntent
+  -> IntentSignalPolicy checks the deposit whitelist and gating signature
+  -> EscrowV2 locks funds
+attestation-service -> EIP-712 payment attestation (UPV4 domain)
+OrchestratorV4.fulfillIntent
+  -> PaymentVerifierRegistry resolves the method's verifier (UPV4)
   -> verifier validates the attestation and nullifies the payment
-  -> EscrowV2 releases funds and fees
+  -> EscrowV2 releases funds; O4 pays fees
+  -> DisputeProtectionPolicyV2 may defer the payout to StakeVaultV2
 ```
 
 Important ownership boundaries:
 
 - `EscrowV2` owns deposits, locking, and release.
-- `OrchestratorV2` owns intent lifecycle and fee routing.
+- `OrchestratorV4` owns the V4 intent lifecycle and fees. It delegates
+  admission to its `signalPolicy` (`contracts/hooks/IntentSignalPolicy.sol`,
+  which raises `TakerNotWhitelisted`) and settlement to its `settlementPolicy`
+  (`DisputeProtectionPolicyV2`). Neither O4 nor those policies has relayer logic.
+- `OrchestratorV2` (archived) owned the V2 intent lifecycle and fee routing.
 - `OrchestratorV3` owns the V3 intent lifecycle and snapshots the
   governance-selected `IIntentLifecycleHook` for each intent.
 - `IntentLifecycleHookV1` composes whitelist admission with fail-closed
@@ -130,6 +140,13 @@ The active deployment runner is `scripts/deployActive.ts`, which mounts the
 current `deploy/*.ts` files. Inspect every mounted script, its `skip` behavior,
 network guard, dependencies, and matching tests before a deployment claim.
 
+The OrchestratorV4 suite has its own runner, outside `deploy/`:
+`scripts/deploy-orchestrator-v4.ts` (`yarn deploy:orchestrator-v4 <base|base_staging> <action>`).
+Its inputs are `deployments/orchestrator-v4/{base,base_staging}.json`, it writes
+`deployments/outputs/orchestrator-v4-<network>.json`, and `yarn o4:safe-batches`
+renders the Base Safe batches. Runbooks: `docs/releases/orchestrator-v4-*.md`
+(Base: `orchestrator-v4-base-production.md`).
+
 Current numbered lanes include:
 
 - `00`-`13`: original system and payment-method scripts retained as deployment
@@ -174,9 +191,10 @@ Current numbered lanes include:
   `0x7bE5…2048`. It was deployed on 2026-10-28 from `646898f` by
   `0x4112…41eC`; the old `BASE_DEPLOY_PRIVATE_KEY` deployer is compromised.
   On Base the lane is adopt-and-verify only and never deploys. It writes the
-  cutover (Safe nonce 86), UPV3-writer-removal and rollback batches from the
-  record. It skips `base_staging`, and wires UPV4 fully on local networks. See
-  `docs/releases/upv4-base-production-cutover.md`.
+  cutover (Safe nonce 86, executed 2026-10-29), UPV3-writer-removal and rollback
+  batches from the record. It skips `base_staging`, and wires UPV4 fully on local
+  networks. See `docs/releases/upv4-base-production-cutover.md`; the O4 release
+  that followed is `docs/releases/orchestrator-v4-base-production.md`.
 
 There is no `26` script. Numbered files are identities, not proof that every
 script should execute. A numbered script is immutable after any production

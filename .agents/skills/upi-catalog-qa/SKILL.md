@@ -7,7 +7,8 @@ description: Verify UPI/INR registry registration and published contracts catalo
 
 Resolve Base or Base staging addresses and ABIs from the exact candidate package.
 Using a read-only Base RPC, require `PaymentVerifierRegistry.isPaymentMethod(keccak256("upi"))`,
-`getVerifier` equal to the current packaged UnifiedPaymentVerifierV3, and
+`getVerifier` equal to the current packaged UnifiedPaymentVerifierV4 (every route on both networks moved
+from V3 to V4 in October 2026), and
 `getCurrencies` equal to `[keccak256("INR")]`. Require the current verifier's
 `getPaymentMethods` to contain UPI. Record chain ID, block number, package and source SHA.
 This workflow does not submit governance transactions.

@@ -1,18 +1,23 @@
 # UnifiedPaymentVerifierV4 Base production cutover
 
-Status, 2026-10-28:
+Status, 2026-11-02:
 
 - UPV4 is deployed on Base and owned by the Safe.
-- The cutover Safe transaction (nonce 86) is signed 1 of 2: safeTxHash
-  `0x710ad4142115590996a2e9bc30af493252ad2a0a4a9e00b947d666277c447057`. The second
-  signature and execution are pending.
-- Routes are still on UPV3.
+- The cutover executed at Safe nonce 86 on 2026-10-29 at 13:04:01 UTC: tx
+  `0x2227a95c01f40f33e13b06e414091f3d485ccc9f8cdcdd58abfcb264627f78b6`, block
+  53244847, safeTxHash
+  `0x710ad4142115590996a2e9bc30af493252ad2a0a4a9e00b947d666277c447057`.
+- All 13 routes point to UPV4. NRV2 writers are UPV3 and UPV4; step 5, the UPV3
+  writer revoke, has not executed.
+- OrchestratorV4 was registered next to O3 on 2026-10-30 (Safe nonce 87). See
+  `docs/releases/orchestrator-v4-base-production.md`. While O4 is unpaused, never
+  run this release's rollback (see that runbook's Rollback section).
 
 Each remaining step is its own approval boundary (see
 `.claude/skills/ship-contracts/SKILL.md`).
 
-UPV4 ships to Base production before OrchestratorV4. On Base, O4 stays
-unregistered and UPV4 serves the live OrchestratorV3 through its V2
+UPV4 shipped to Base production before OrchestratorV4 and served OrchestratorV3
+alone until O4 was registered. It serves O3 through its V2
 `getDepositPreIntentHook` probe (`test_OrchestratorV3FulfilsThroughUPV4`). The
 Base V1 orchestrator is unused and plays no part in this release.
 
@@ -118,10 +123,9 @@ Approval: Safe execution.
 
 ### The signed transaction
 
-This is the transaction to execute. It was proposed through the Safe UI's
-Transaction Builder on 2026-10-28 at 18:05:45 UTC. The first confirmation came
-from Safe owner `0xbD020867Cebdad3bf9F31480E4b01e9bbeFf7552`, and it is waiting
-for the second signature:
+This is the transaction that executed (see Status). It was proposed through the
+Safe UI's Transaction Builder on 2026-10-28 at 18:05:45 UTC. The first
+confirmation came from Safe owner `0xbD020867Cebdad3bf9F31480E4b01e9bbeFf7552`:
 
 https://app.safe.global/transactions/tx?safe=base:0x0bC26FF515411396DD588Abd6Ef6846E04470227&id=multisig_0x0bC26FF515411396DD588Abd6Ef6846E04470227_0x710ad4142115590996a2e9bc30af493252ad2a0a4a9e00b947d666277c447057
 
