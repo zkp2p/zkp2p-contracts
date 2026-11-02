@@ -166,7 +166,7 @@ test("base requires the live flag before any write", async () => {
 });
 test("base resolves the committed updater parameter", () => {
   FX_RATE_UPDATER.base = savedUpdater;
-  assert.equal(FX_RATE_UPDATER.base, "0x81630fb1ab2A7Eab137888b9746b66889f78F091");
+  assert.equal(FX_RATE_UPDATER.base, "0xF27F6A0DC1798a582A280Fb87708E7438b9D2D8E");
   assert.equal(lane.resolveUpdater("base", []), FX_RATE_UPDATER.base);
 });
 test("base requires a valid nonzero updater parameter", () => {
