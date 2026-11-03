@@ -11,7 +11,7 @@ import {UnifiedPaymentVerifierV4} from "contracts/unifiedVerifier/UnifiedPayment
 
 /// @notice Opt-in cross-repo smoke; set ATTESTOR_POLICY_SMOKE_ROOT to a checkout with dependencies.
 /// @dev Outside deterministic/, so coverage never runs this FFI test. The attestor must sign settlementData =
-/// abi.encode(disputeWindow): zero for balance payments and 14 days for goods and personal payments.
+/// abi.encode(disputeWindow): zero for a Peer Pay relayer-owned intent and 14 days for every other Venmo payment.
 contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
     function test_ServiceSignedProofSmoke() public {
         string memory attestor = vm.envOr("ATTESTOR_POLICY_SMOKE_ROOT", string(""));
@@ -20,7 +20,7 @@ contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
             return;
         }
         assertEq(block.chainid, 31337);
-        string[4] memory modes = [string("balance"), "personal", "goods", "personal"];
+        string[4] memory modes = [string("relayer"), "personal", "goods", "personal"];
         uint256 paid;
         for (uint256 index; index < modes.length; index++) {
             if (index == 1) _stake(vault, taker, INTENT_AMOUNT);
