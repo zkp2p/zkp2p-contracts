@@ -49,9 +49,10 @@ contract BondedArbitratorTest is BondedArbitratorFixture {
 
     function test_DisputeMovesBondToDepositor() public {
         bytes32 id = _release(bytes32(0));
-        vm.warp(block.timestamp + 3 days);
+        uint64 scannedAt = uint64(block.timestamp + 3 days);
+        vm.warp(scannedAt);
 
-        arbitrator.disputeNonPayment(_scan(id, PAYEE, uint64(block.timestamp)));
+        arbitrator.disputeNonPayment(_scan(id, PAYEE, scannedAt));
 
         assertEq(vault.claimable(depositor), INTENT_AMOUNT);
         assertEq(vault.stakeBalance(treasury), BOND - INTENT_AMOUNT);
@@ -146,11 +147,12 @@ contract BondedArbitratorTest is BondedArbitratorFixture {
         bytes32 id = _release(bytes32(0));
         bytes32[] memory ids = new bytes32[](1);
         ids[0] = id;
-        vm.warp(block.timestamp + WINDOW - 1);
-        vm.expectRevert(abi.encodeWithSelector(IBondedArbitrator.NotMatured.selector, uint64(block.timestamp + 1)));
+        uint64 maturesAt = uint64(block.timestamp) + WINDOW;
+        vm.warp(maturesAt - 1);
+        vm.expectRevert(abi.encodeWithSelector(IBondedArbitrator.NotMatured.selector, maturesAt));
         arbitrator.settle(ids);
 
-        vm.warp(block.timestamp + 1);
+        vm.warp(maturesAt);
         arbitrator.settle(ids);
 
         assertEq(vault.lockedStake(treasury), 0);
