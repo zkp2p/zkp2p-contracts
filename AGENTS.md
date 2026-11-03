@@ -195,6 +195,13 @@
     still runs lane 31's frozen readiness checks, accepting only the failure of the final UPV3-only writer check,
     and checks the registry surface against UPV4 and its owner: O3's registry, the PVR, legacy registry and NRV2
     owners, method order, currencies, routes, and no legacy writers.
+- Lane `48` (`deploy/48_deploy_bonded_arbitrator.ts`) deploys `NonPaymentVerifier`, `BondedArbitrator` and
+  `IntentSignalPolicyV2` on Base staging only (tag-only; `PREPARE_STAGING_BONDED_ARBITRATOR` reads and prints the plan,
+  `EXECUTE_STAGING_BONDED_ARBITRATOR` / `yarn deploy:bonded-arbitrator:base_staging` executes). It authorizes the
+  arbitrator as a `StakeVaultV2` controller and `NullifierRegistryV2` writer, opens 14-day dispute windows for Venmo,
+  Cash App and Wise, approves the staging signer as bond owner, and selects `IntentSignalPolicyV2` on OrchestratorV4,
+  which keeps the current gating service and names `BondedArbitrator` as the default arbitrator. Each step is skipped
+  when already in place, and the lane verifies the final wiring. Base production is out of scope.
 - `OrchestratorV4` is not a `deploy/` lane. It is live on Base (`0x74c55679268FAfB493864915aD16A320AB8c40Ba`,
   registered by Safe nonce 87 on 2026-10-30) and Base staging (`0xd03674d06FB9d66C7F1dc9c8D45ADd314B604F2c`).
   OrchestratorV3 stays registered and unpaused next to it for older clients.
