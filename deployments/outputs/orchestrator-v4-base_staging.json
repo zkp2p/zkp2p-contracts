@@ -3348,7 +3348,7 @@
     }
   },
   "governanceTransactions": [],
-  "executionToolCommit": "fc6ff0e6b482166d52772c2bc701fc477c81e8dd",
+  "executionToolCommit": "277ae35a29f7ecaf50afb7585578da018b6af3b4",
   "stagingPublicPrivateDepositAcceptances": [
     {
       "checkedAtBlock": 53201422,
