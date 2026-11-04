@@ -6,7 +6,7 @@ import { BigNumber, Contract, ContractFactory, VoidSigner, Wallet, constants, pr
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
 import { SourceVerificationError, verifySources } from "./verify-orchestrator-v4-source";
 import { zeroImmutableValues } from "../deployments/canonicalDeployment";
-import { assertReleaseProvenance, releasePaths } from "./orchestrator-v4-provenance";
+import { BONDED_RELEASE_ALLOWANCE, assertReleaseProvenance, releasePaths } from "./orchestrator-v4-provenance";
 
 const ZERO = constants.AddressZero;
 const REQUIRED_REGISTRY_OWNERS = ["OrchestratorRegistry", "PaymentVerifierRegistry", "NullifierRegistryV2", "DisputeNullifierRegistry"] as const;
@@ -30,6 +30,8 @@ export type ReleaseConfig = {
   legacyDrainCheckpoints: Array<{ contract: string; intentCounter: string; indexedBlock: number }>;
   legacyWhitelistCheckpoint: { indexedBlock: number; enabled: Array<{ escrow: string; depositId: string; paymentMethod: string }> };
 };
+/** Staging-only, post-activation: the bonded-release signal policy and the arbitrator it names, pinned by runtime code. */
+export type BondedReleaseAllowance = { signalPolicy: { address: string; runtimeCodeHash: string }; arbitrator: { address: string; runtimeCodeHash: string } };
 type Receipt = { blockNumber: number; blockHash: string; transactionHash: string; gasUsed: string; effectiveGasPrice: string };
 type Transaction = { step: string; hash: string; nonce: number; to: string | null; data: string; value: string; receipt: Receipt | null };
 type NewContract = { address: string; artifact: string; constructorArguments: unknown[]; transactionHash: string; deploymentBlock: number; runtimeCodeHash: string };
@@ -91,6 +93,15 @@ export function validateConfig(value: unknown): asserts value is ReleaseConfig {
   check(privacy && Number.isSafeInteger(privacy.indexedBlock) && privacy.indexedBlock > 0 && Array.isArray(privacy.enabled), "Missing reviewed private-deposit checkpoint");
   for (const row of privacy.enabled) check(utils.isAddress(row.escrow) && typeof row.depositId === "string" && /^\d+$/.test(row.depositId) && bytes32(row.paymentMethod), "Invalid private-deposit checkpoint row");
   check(new Set(privacy.enabled.map((row) => `${row.escrow.toLowerCase()}:${row.depositId}:${row.paymentMethod.toLowerCase()}`)).size === privacy.enabled.length, "Duplicate private-deposit checkpoint row");
+}
+
+export function validateBondedReleaseAllowance(value: unknown): asserts value is BondedReleaseAllowance {
+  check(typeof value === "object" && value !== null, "Bonded-release allowance must be an object");
+  const allowance = value as BondedReleaseAllowance;
+  for (const name of ["signalPolicy", "arbitrator"] as const) {
+    const pin = allowance[name];
+    check(pin && utils.isAddress(pin.address) && !same(pin.address, ZERO) && /^0x[\da-f]{64}$/i.test(pin.runtimeCodeHash), `Invalid bonded-release ${name} pin`);
+  }
 }
 
 async function existing(hre: HardhatRuntimeEnvironment, c: ReleaseConfig, name: string): Promise<Contract> {
@@ -491,9 +502,14 @@ function assertLegacyDrained(c: ReleaseConfig, snapshot: Awaited<ReturnType<type
   }
 }
 
-export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: TransactionJournal, active: boolean): Promise<void> {
+export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: TransactionJournal, active: boolean, bondedRelease?: BondedReleaseAllowance): Promise<void> {
   const m = journal.manifest, c = m.configuration;
-  const snapshot = await inspect(hre, c);
+  check(bondedRelease === undefined || c.environment === "base_staging", "Bonded-release allowance is staging-only");
+  const live = await inspect(hre, c);
+  if (bondedRelease) for (const [name, pin] of Object.entries(bondedRelease))
+    check(same(utils.keccak256(await hre.ethers.provider.getCode(pin.address, live.blockNumber)), pin.runtimeCodeHash), `Bonded-release ${name} bytecode differs from its pin`);
+  // The allowed arbitrator is the only payment nullifier writer outside the suite; every other writer check is unchanged.
+  const snapshot = bondedRelease ? { ...live, nullifierWriters: live.nullifierWriters.filter((writer) => !same(writer, bondedRelease.arbitrator.address)) } : live;
   if (active || c.environment === "base") assertRegistryOwnership(snapshot);
   assertBaseline(c, snapshot, m);
   const contracts = {} as Record<NewName, Contract>;
@@ -506,10 +522,12 @@ export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: Trans
     contracts[name] = new Contract(record.address, artifact.abi, hre.ethers.provider);
   }
   const o = contracts.OrchestratorV4, v = contracts.UnifiedPaymentVerifierV4, p = contracts.DisputeProtectionPolicyV2, vault = contracts.StakeVaultV2, signal = contracts.IntentSignalPolicy;
+  // The bonded-release policy may replace the release policy only with the same gating service and whitelist.
+  const policy = bondedRelease && same(await o.signalPolicy(), bondedRelease.signalPolicy.address) ? signal.attach(bondedRelease.signalPolicy.address) : signal;
   const expectedFields: Array<[Contract, string, string]> = [
-    [o, "signalPolicy", signal.address], [o, "settlementPolicy", p.address],
+    [o, "signalPolicy", policy.address], [o, "settlementPolicy", p.address],
     [o, "escrowRegistry", c.existing.EscrowRegistry.address], [o, "paymentVerifierRegistry", c.existing.PaymentVerifierRegistry.address],
-    [signal, "gatingService", c.gatingService], [signal, "whitelistPolicy", contracts.WhitelistPolicyV2.address],
+    [policy, "gatingService", c.gatingService], [policy, "whitelistPolicy", contracts.WhitelistPolicyV2.address],
     [o, "protocolFeeRecipient", c.protocolFeeRecipient], [vault, "stakeToken", c.stakeToken], [p, "stakeVault", vault.address],
     [p, "disputeVerifier", c.existing.DisputeVerifier.address], [p, "disputeNullifierRegistry", c.existing.DisputeNullifierRegistry.address], [p, "orchestratorRegistry", c.existing.OrchestratorRegistry.address],
     [v, "orchestratorRegistry", c.existing.OrchestratorRegistry.address], [v, "nullifierRegistry", c.existing.NullifierRegistryV2.address], [v, "attestationVerifier", c.existing.MultiAttestationVerifier.address],
@@ -605,10 +623,16 @@ async function main(): Promise<void> {
       manifest.governanceTransactions = await activationTransactions(hre, manifest); journal.save();
       console.log("Unsigned Safe calls recorded; no governance transaction submitted.");
     }
-    if (action === "verify") await verifySuite(hre, journal, true);
+    // Read-only verification alone applies the reviewed staging allowance; deploy and activation stay exact.
+    let bondedRelease: BondedReleaseAllowance | undefined;
+    if (environment === "base_staging") {
+      const allowance: unknown = JSON.parse(readFileSync(resolve(BONDED_RELEASE_ALLOWANCE), "utf8"));
+      validateBondedReleaseAllowance(allowance); bondedRelease = allowance;
+    }
+    if (action === "verify") await verifySuite(hre, journal, true, bondedRelease);
     if (action === "verify-source") {
       const apiKey = process.env.ETHERSCAN_API_KEY; check(apiKey, "ETHERSCAN_API_KEY is unavailable");
-      await verifySuite(hre, journal, manifest.verification.active === true);
+      await verifySuite(hre, journal, manifest.verification.active === true, bondedRelease);
       manifest.verification.sources = await verifySources(hre, manifest, apiKey); journal.save();
     }
     console.log(JSON.stringify({ manifest: journal.path, sourceCommit: manifest.sourceCommit, contracts: manifest.contracts, verification: manifest.verification }, null, 2));

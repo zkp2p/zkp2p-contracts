@@ -226,3 +226,30 @@ manifest still has exactly the original 25 deployment transactions and
 `verification.active=false`. No staging public-deposit acceptance has been
 recorded on the live manifest: that evidence must come from the operator's
 explicit input and fresh discovery during the future activation invocation.
+
+## Bonded-release allowance, 2026-11-04
+
+Lane 48 (contracts #382) made two shared staging changes: O4 selects
+`IntentSignalPolicyV2` `0x45e61ce29615197ce7ab5B4Fc6bB93dD055E8eE0`, and
+`BondedArbitrator` `0x3CC27551f5722b88CbB8f84a17b05b751039F3c3` writes payment
+nullifiers alongside UPV4. Active `verify` rejected both, which blocks the
+attestation staging gate.
+
+`deployments/orchestrator-v4/base_staging.bonded-release.json` pins both
+addresses and their live runtime code hashes. It is an execution path, so any
+edit needs a new `executionToolCommit`. `base_staging.json`, its manifest hash
+and source `0749b75` are unchanged.
+
+Only `base_staging verify` and `verify-source` load the allowance. With it:
+
+- O4 may select the pinned policy only when its bytecode matches the pin and its
+  `gatingService` and `whitelistPolicy` equal those of the release
+  `IntentSignalPolicy`. The pinned bytecode also fixes its default arbitrator.
+- The pinned arbitrator, with matching bytecode, is the only payment nullifier
+  writer allowed besides UPV4. Every other writer, route, ownership, drain and
+  privacy check is unchanged.
+- Both changes are allowed, not required: the original policy and writer set
+  still verify.
+
+Deploy, activation and `base` never read the allowance, and `verifySuite`
+rejects one supplied for `base`.

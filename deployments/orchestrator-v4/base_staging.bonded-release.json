@@ -1,0 +1,10 @@
+{
+  "signalPolicy": {
+    "address": "0x45e61ce29615197ce7ab5B4Fc6bB93dD055E8eE0",
+    "runtimeCodeHash": "0xf9fb8b218da7e21b3b2464e7b4fdc2bd6ee7fd27084d220f10ea18ac648abcd5"
+  },
+  "arbitrator": {
+    "address": "0x3CC27551f5722b88CbB8f84a17b05b751039F3c3",
+    "runtimeCodeHash": "0x4d18e68c35df4db916e3fb429816c9411c06fe7141f11154341e4667c58bdb8f"
+  }
+}
