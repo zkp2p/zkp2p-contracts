@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "environment": "base",
+  "chainId": 8453,
+  "verifier": "0x9Fe920b24e50e6a6362BA71a1BeB502A99c402d5",
+  "safe": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+  "transactionHash": "0x071e79c3329b5f08b364e937ad9adb8a60233c98eebe9f9fb6c65554197f011c",
+  "blockNumber": 53508331,
+  "blockHash": "0x4f512be1dc9a3a7e6e63c1a080c769826492fb96dffe39f3afa43caf428bd13c",
+  "safeNonce": 92,
+  "safeTransactionHash": "0xca26c71508c8337615379df539f7c3bbaf77ee5b2f5aba393721dd78b2591595",
+  "addedWitness": "0x7f814Afbd0Baf3932FA20Cb76b414007B0bADa8C",
+  "witnesses": [
+    "0xDB4Ed7FAF170F0f6493E3adaaCaaFaF47092c754",
+    "0xE078D93bFdd87A8c5C5cCA5905DCbA0Dd7A1F0BD",
+    "0x7f814Afbd0Baf3932FA20Cb76b414007B0bADa8C"
+  ],
+  "threshold": "1"
+}

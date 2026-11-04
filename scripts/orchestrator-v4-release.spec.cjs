@@ -853,3 +853,126 @@ test("unavailable or inconsistent priority fee quotes reject before signing with
     }
   } finally { rmSync(f.directory, { recursive: true, force: true }); }
 });
+
+const { verifyBaseWitnessChange } = require("./orchestrator-v4-governance.ts");
+const { BASE_GOVERNANCE_CHANGES, releasePaths, assertReleaseProvenance } = require("./orchestrator-v4-provenance.ts");
+const { releaseToolCommit } = require("./deploy-orchestrator-v4.ts");
+
+function witnessGovernanceFixture() {
+  const config = JSON.parse(readFileSync("deployments/orchestrator-v4/base.json", "utf8"));
+  const manifest = JSON.parse(readFileSync("deployments/outputs/orchestrator-v4-base.json", "utf8"));
+  const change = JSON.parse(readFileSync(BASE_GOVERNANCE_CHANGES, "utf8"));
+  const snapshot = structuredClone(manifest.baseline);
+  snapshot.blockNumber = change.blockNumber;
+  snapshot.attestation = { witnesses: [...change.witnesses], threshold: change.threshold };
+  const verifier = new utils.Interface(["event WitnessAdded(address indexed witness)"]);
+  const safe = new utils.Interface(["event ExecutionSuccess(bytes32 txHash,uint256 payment)"]);
+  const receipt = {
+    status: 1, transactionHash: change.transactionHash, blockNumber: change.blockNumber, blockHash: change.blockHash,
+    logs: [
+      { address: change.verifier, ...verifier.encodeEventLog(verifier.getEvent("WitnessAdded"), [change.addedWitness]) },
+      { address: change.safe, ...safe.encodeEventLog(safe.getEvent("ExecutionSuccess"), [change.safeTransactionHash, 0]) },
+    ],
+  };
+  const block = { hash: change.blockHash };
+  const provider = {
+    getTransactionReceipt: async (hash) => { assert.equal(hash, change.transactionHash); return receipt; },
+    getBlock: async (height) => { assert.equal(height, change.blockNumber); return block; },
+  };
+  return { config, manifest, change, snapshot, receipt, block, provider };
+}
+
+test("executed Base Support witness add passes without changing the hashed deployment baseline", async () => {
+  const f = witnessGovernanceFixture(), before = JSON.stringify(f.config);
+  const change = await verifyBaseWitnessChange(f.provider, f.config, f.snapshot, f.change);
+  const current = { ...f.config, attestationWitnesses: change.witnesses };
+  assertBaseline(current, f.snapshot, f.manifest);
+  assert.equal(JSON.stringify(f.config), before);
+  assert.equal(hash(f.config), f.manifest.configurationHash);
+  assert.throws(() => assertBaseline(f.config, f.snapshot, f.manifest), /Attestation witnesses or threshold changed/);
+  const old = { ...f.snapshot, attestation: f.manifest.baseline.attestation };
+  // Historical snapshots keep their original baseline; the current governance gate refuses it.
+  assertBaseline(f.config, old, f.manifest);
+  await assert.rejects(verifyBaseWitnessChange(f.provider, f.config, old, f.change), /Live witnesses differ/);
+  for (const [field, mutation, error] of [
+    ["routes", (s) => { s.paymentMethods[0].verifier = other; }, /Unrecognized payment verifier/],
+    ["writers", (s) => { s.nullifierWriters.push(other); }, /Unexpected payment nullifier writer/],
+    ["fees", (s) => { s.predecessor.protocolFee = "123"; }, /fee or intent configuration/],
+    ["wiring", (s) => { s.predecessor.escrowRegistry = other; }, /registry wiring/],
+  ]) {
+    const snapshot = structuredClone(f.snapshot); mutation(snapshot);
+    assert.throws(() => assertBaseline(current, snapshot, f.manifest), error, field);
+  }
+});
+
+for (const [name, mutate, error] of [
+  ["extra unknown witness", (f) => f.snapshot.attestation.witnesses.push(other), /Live witnesses differ/],
+  ["reordered witnesses", (f) => f.snapshot.attestation.witnesses.reverse(), /Live witnesses differ/],
+  ["changed threshold", (f) => { f.snapshot.attestation.threshold = "2"; }, /threshold changed/],
+  ["unexecuted future removal", (f) => { f.snapshot.attestation.witnesses = [f.change.addedWitness, f.config.attestationWitnesses[1]]; }, /Live witnesses differ/],
+  ["old set", (f) => { f.snapshot.attestation.witnesses = f.config.attestationWitnesses; }, /Live witnesses differ/],
+  ["missing record", (f) => { f.change = undefined; }, /record is required/],
+  ["staging environment", (f) => { f.config.environment = "base_staging"; }, /environment mismatch/],
+  ["wrong chain", (f) => { f.change.chainId = 1; }, /environment mismatch/],
+  ["different verifier", (f) => { f.change.verifier = other; }, /target mismatch/],
+  ["different Safe", (f) => { f.change.safe = other; }, /target mismatch/],
+  ["changed owner", (f) => { f.snapshot.contracts.MultiAttestationVerifier.owner = other; }, /owner changed/],
+  ["arbitrary recorded witnesses", (f) => f.change.witnesses.push(other), /exactly the baseline/],
+  ["recorded threshold change", (f) => { f.change.threshold = "2"; }, /cannot change the threshold/],
+  ["future receipt", (f) => { f.snapshot.blockNumber--; }, /block mismatch/],
+  ["wrong Safe nonce", (f) => { f.change.safeNonce++; }, /Safe call or nonce mismatch/],
+  ["wrong Safe call hash", (f) => { f.change.safeTransactionHash = constants.HashZero; }, /Safe call or nonce mismatch/],
+  ["reverted transaction", (f) => { f.receipt.status = 0; }, /receipt mismatch/],
+  ["missing transaction", (f) => { f.provider.getTransactionReceipt = async () => null; }, /receipt mismatch/],
+  ["different transaction", (f) => { f.receipt.transactionHash = constants.HashZero; }, /receipt mismatch/],
+  ["different receipt block", (f) => { f.receipt.blockNumber++; }, /receipt mismatch/],
+  ["different receipt block hash", (f) => { f.receipt.blockHash = constants.HashZero; }, /receipt mismatch/],
+  ["noncanonical receipt", (f) => { f.block.hash = constants.HashZero; }, /not canonical/],
+  ["forged witness emitter", (f) => { f.receipt.logs[0].address = other; }, /exact WitnessAdded/],
+  ["wrong added witness", (f) => { f.receipt.logs[0].topics[1] = utils.hexZeroPad(other, 32); }, /exact WitnessAdded/],
+  ["missing Safe success", (f) => f.receipt.logs.pop(), /exact Safe ExecutionSuccess/],
+  ["forged Safe emitter", (f) => { f.receipt.logs[1].address = other; }, /exact Safe ExecutionSuccess/],
+  ["different successful Safe call", (f) => { f.receipt.logs[1].data = utils.defaultAbiCoder.encode(["bytes32", "uint256"], [constants.HashZero, 0]); }, /exact Safe ExecutionSuccess/],
+]) test(`Base governance witness gate rejects ${name}`, async () => {
+  const f = witnessGovernanceFixture(); mutate(f);
+  await assert.rejects(verifyBaseWitnessChange(f.provider, f.config, f.snapshot, f.change), error);
+});
+
+test("governance tool pin applies only to read-only Base verification", async () => {
+  const f = witnessGovernanceFixture();
+  f.manifest.executionToolCommit = "a".repeat(40);
+  f.manifest.verificationToolCommit = "b".repeat(40);
+  for (const action of ["verify", "verify-source"]) assert.equal(releaseToolCommit(f.manifest, action), "b".repeat(40));
+  for (const action of ["inspect", "deploy", "activate", "prepare-governance", "record-drain"]) assert.equal(releaseToolCommit(f.manifest, action), "a".repeat(40));
+  for (const [environment, active] of [["base_staging", true], ["base", false]]) {
+    const manifest = { ...f.manifest, configuration: { ...f.config, environment } };
+    await assert.rejects(verifySuite(hre, { manifest }, active, f.change), /requires active Base/);
+  }
+  f.manifest.configuration.environment = "base_staging";
+  for (const action of ["verify", "verify-source"]) assert.equal(releaseToolCommit(f.manifest, action), "a".repeat(40));
+});
+
+test("Base governance code and record are bound to the reviewed tool while base.json stays bound to source", () => {
+  const { execFileSync } = require("node:child_process");
+  const directory = mkdtempSync(join(tmpdir(), "o4-base-governance-provenance-")), previous = process.cwd();
+  const git = (...args) => execFileSync("git", args, { cwd: directory, encoding: "utf8", stdio: "pipe" }).trim();
+  const write = (path, value) => { mkdirSync(require("node:path").dirname(join(directory, path)), { recursive: true }); writeFileSync(join(directory, path), value); };
+  const protectedPaths = [BASE_GOVERNANCE_CHANGES, "scripts/orchestrator-v4-governance.ts"];
+  assert.ok(releasePaths("base").deployed.includes("deployments/orchestrator-v4/base.json"));
+  for (const path of protectedPaths) assert.ok(releasePaths("base").execution.includes(path));
+  try {
+    git("init"); git("config", "user.name", "Fixture"); git("config", "user.email", "fixture@example.test");
+    write("deployments/orchestrator-v4/base.json", "immutable"); git("add", "."); git("commit", "-m", "source"); const source = git("rev-parse", "HEAD");
+    for (const path of protectedPaths) write(path, "reviewed");
+    git("add", "."); git("commit", "-m", "tool"); const tool = git("rev-parse", "HEAD"); process.chdir(directory);
+    assert.throws(() => assertReleaseProvenance(source, source, "base"));
+    assertReleaseProvenance(source, tool, "base");
+    for (const path of protectedPaths) {
+      write(path, "changed"); assert.throws(() => assertReleaseProvenance(source, tool, "base"));
+      git("add", "."); git("commit", "-m", "drift"); assert.throws(() => assertReleaseProvenance(source, tool, "base"));
+      git("restore", "--source", tool, path); git("add", "."); git("commit", "-m", "restore");
+    }
+    write("deployments/orchestrator-v4/base.json", "rewritten history"); git("add", "."); git("commit", "-m", "source drift");
+    assert.throws(() => assertReleaseProvenance(source, git("rev-parse", "HEAD"), "base"));
+  } finally { process.chdir(previous); rmSync(directory, { recursive: true, force: true }); }
+});

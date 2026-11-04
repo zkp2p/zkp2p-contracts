@@ -6,7 +6,8 @@ import { BigNumber, Contract, ContractFactory, VoidSigner, Wallet, constants, pr
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
 import { SourceVerificationError, verifySources } from "./verify-orchestrator-v4-source";
 import { zeroImmutableValues } from "../deployments/canonicalDeployment";
-import { assertReleaseProvenance, releasePaths } from "./orchestrator-v4-provenance";
+import { BASE_GOVERNANCE_CHANGES, assertReleaseProvenance, releasePaths } from "./orchestrator-v4-provenance";
+import { verifyBaseWitnessChange } from "./orchestrator-v4-governance";
 import { RETIRED_DEPLOYERS } from "../utils/deployerKeys";
 
 const ZERO = constants.AddressZero;
@@ -47,6 +48,8 @@ type PublicPrivateDepositAcceptance = {
 };
 export type Manifest = {
   version: 1; sourceCommit: string; executionToolCommit?: string; configurationHash: string; configuration: ReleaseConfig;
+  /** Read-only Base governance verification; never authorizes deploy or Safe-batch preparation. */
+  verificationToolCommit?: string;
   baseline: Awaited<ReturnType<typeof inspect>>; transactions: Transaction[]; activationDrainEvidence: DrainEvidence | null;
   contracts: Partial<Record<NewName, NewContract>>; verification: Record<string, unknown>; governanceTransactions: Array<{ step: string; to: string; data: string; value: string }>;
   governancePreparedAt?: { blockNumber: number; blockHash: string; timestamp: number };
@@ -605,12 +608,15 @@ function assertLegacyDrained(c: ReleaseConfig, snapshot: Awaited<ReturnType<type
   }
 }
 
-export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: TransactionJournal, active: boolean): Promise<void> {
+export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: TransactionJournal, active: boolean, baseWitnessChange?: unknown): Promise<void> {
   const m = journal.manifest, c = m.configuration;
+  check(baseWitnessChange === undefined || (c.environment === "base" && active), "Witness governance verification requires active Base");
   assertAcceptanceEnvironment(m);
   const snapshot = await inspect(hre, c);
   if (active || c.environment === "base") assertRegistryOwnership(snapshot);
-  assertBaseline(c, snapshot, m);
+  const witnessChange = baseWitnessChange === undefined ? undefined : await verifyBaseWitnessChange(hre.ethers.provider, c, snapshot, baseWitnessChange);
+  // Preserve the hashed deployment configuration and compare every other field unchanged.
+  assertBaseline(witnessChange ? { ...c, attestationWitnesses: witnessChange.witnesses } : c, snapshot, m);
   const contracts = {} as Record<NewName, Contract>;
   for (const name of Object.keys(NEW_CONTRACTS) as NewName[]) {
     if (c.environment === "base" && name === "UnifiedPaymentVerifierV4") continue;
@@ -652,7 +658,13 @@ export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: Trans
     check(equal(snapshot.disputeWriters, [...c.retainedDisputeWriters, p.address]), "Policy writer missing or predecessor writer changed");
   }
   m.verification = { ...m.verification, verifiedAtBlock: snapshot.blockNumber, active, bytecode: true, constructors: true, wiring: true, newContractOwnership: true, governance: snapshot.requiredOwnershipChanges.length === 0, pendingRegistryOwnership: snapshot.requiredOwnershipChanges, paymentCatalog: true, escrowCompatible: true, predecessorPreserved: true };
+  if (witnessChange) m.verification.witnessGovernance = witnessChange;
   journal.save();
+}
+
+export function releaseToolCommit(manifest: Manifest, action: string): string | undefined {
+  return manifest.configuration.environment === "base" && (action === "verify" || action === "verify-source")
+    ? manifest.verificationToolCommit ?? manifest.executionToolCommit : manifest.executionToolCommit;
 }
 
 async function main(): Promise<void> {
@@ -701,7 +713,7 @@ async function main(): Promise<void> {
     if (existsSync(manifestPath)) {
       manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Manifest;
       check(manifest.version === 1 && manifest.configurationHash === hash(c), "Manifest configuration differs; do not overwrite or start a duplicate release");
-      assertReleaseProvenance(manifest.sourceCommit, manifest.executionToolCommit, environment);
+      assertReleaseProvenance(manifest.sourceCommit, releaseToolCommit(manifest, action), environment);
     } else {
       check(action === "deploy", "No deployment manifest exists; run deploy first");
       const baseline = await inspect(hre, c);
@@ -709,7 +721,7 @@ async function main(): Promise<void> {
       manifest = { version: 1, sourceCommit, configurationHash: hash(c), configuration: c, baseline, transactions: [], activationDrainEvidence: null, contracts: {}, verification: {}, governanceTransactions: [] };
     }
     const journal = new TransactionJournal(action === "verify" ? `${manifestPath}.verification` : manifestPath, manifest, wallet);
-    manifest.verification.executionToolCommit = manifest.executionToolCommit === undefined ? manifest.sourceCommit : manifest.executionToolCommit;
+    manifest.verification.executionToolCommit = releaseToolCommit(manifest, action) ?? manifest.sourceCommit;
     if (action === "deploy") await deploySuite(hre, journal);
     if (action === "record-drain") {
       check(evidencePath, "record-drain requires the post-pause indexer evidence JSON");
@@ -720,10 +732,13 @@ async function main(): Promise<void> {
       await prepareGovernance(hre, journal, baseAcknowledgement);
       console.log("Unsigned Safe calls recorded; no governance transaction submitted.");
     }
-    if (action === "verify") await verifySuite(hre, journal, true);
+    // Mandatory for the active Base read-only gate. Missing evidence never falls back to the old set.
+    const baseWitnessChange = environment === "base" && (action === "verify" || (action === "verify-source" && manifest.verification.active === true))
+      ? JSON.parse(readFileSync(resolve(BASE_GOVERNANCE_CHANGES), "utf8")) : undefined;
+    if (action === "verify") await verifySuite(hre, journal, true, baseWitnessChange);
     if (action === "verify-source") {
       const apiKey = process.env.ETHERSCAN_API_KEY; check(apiKey, "ETHERSCAN_API_KEY is unavailable");
-      await verifySuite(hre, journal, manifest.verification.active === true);
+      await verifySuite(hre, journal, manifest.verification.active === true, baseWitnessChange);
       manifest.verification.sources = await verifySources(hre, manifest, apiKey); journal.save();
     }
     console.log(JSON.stringify({ manifest: journal.path, sourceCommit: manifest.sourceCommit, contracts: manifest.contracts, verification: manifest.verification }, null, 2));

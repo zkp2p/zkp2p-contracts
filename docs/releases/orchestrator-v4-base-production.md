@@ -163,6 +163,10 @@ runner does not gate on it, but that owner should be confirmed.
 
 ## Commands
 
+For read-only verification after the November 4 Support KMS witness addition,
+use the [governance verification record and pin procedure](orchestrator-v4-base-witness-governance.md).
+The original deployment and Safe-batch provenance requirements below remain unchanged.
+
 The deploy recorded `sourceCommit = 526f81d2ea53f2045b821931b21f7b7e8f15a2c4`.
 Every later runner action (`prepare-governance`, `verify`, `verify-source`) and
 every `o4:safe-batches` command checks release provenance:
