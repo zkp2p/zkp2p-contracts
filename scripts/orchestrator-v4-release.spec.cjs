@@ -7,7 +7,7 @@ const { test } = require("node:test");
 const { spawnSync } = require("node:child_process");
 const hre = require("hardhat");
 const { ContractFactory, VoidSigner, Wallet, utils, constants } = require("ethers");
-const { inspect, assertFreshDeploymentPreflight, assertBaseline, validateConfig, TransactionJournal, deploySuite, activate, verifySuite, activationTransactions, DRAIN_QUERY, recordDrainEvidence, assertPrivateDepositsPreserved, validateBondedReleaseAllowance } = require("./deploy-orchestrator-v4.ts");
+const { inspect, assertFreshDeploymentPreflight, assertBaseline, validateConfig, TransactionJournal, deploySuite, activate, verifySuite, activationTransactions, DRAIN_QUERY, recordDrainEvidence, assertPrivateDepositsPreserved, validateStagingAllowance } = require("./deploy-orchestrator-v4.ts");
 
 // Public Hardhat fixture account. Never load a service or production signer in these tests.
 const wallet = Wallet.fromMnemonic("test test test test test test test test test test test junk").connect(hre.ethers.provider);
@@ -432,32 +432,38 @@ test("base refuses public private-deposit acknowledgement and recorded staging e
   } finally { rmSync(f.directory, { recursive: true, force: true }); }
 });
 
-test("staging verification admits only the pinned bonded-release policy and arbitrator; production refuses the allowance", async () => {
+test("staging verification admits only the pinned post-activation changes; production refuses the allowance", async () => {
   const f = await fixture();
   try {
     await deploySuite(hre, f.journal);
     await activate(hre, f.journal);
     const whitelist = f.manifest.contracts.WhitelistPolicyV2.address;
     const o4 = await hre.ethers.getContractAt("OrchestratorV4", f.manifest.contracts.OrchestratorV4.address, wallet);
+    const attestor = f.deployed.MultiAttestationVerifier, witness = Wallet.createRandom().address;
     const deploy = async (name, args = []) => { const contract = await (await hre.ethers.getContractFactory(name, wallet)).deploy(...args); return contract.deployed(); };
     const pin = async (contract) => ({ address: contract.address, runtimeCodeHash: utils.keccak256(await hre.ethers.provider.getCode(contract.address)) });
     // IntentSignalPolicyV2 shares these getters; any contract stands in for the arbitrator's pinned bytecode.
     const bondedPolicy = await deploy("IntentSignalPolicy", [f.config.gatingService, whitelist]);
     const arbitrator = await deploy("AddressGroupRegistry"), otherArbitrator = await deploy("AddressGroupRegistry");
-    const allowance = { signalPolicy: await pin(bondedPolicy), arbitrator: await pin(arbitrator) };
+    const allowance = { signalPolicy: await pin(bondedPolicy), arbitrator: await pin(arbitrator), attestationWitnesses: [witness] };
     const readonly = () => new TransactionJournal(`${f.path}.verification`, JSON.parse(readFileSync(f.path)), new VoidSigner(wallet.address, hre.ethers.provider));
-    for (const value of [null, { ...allowance, arbitrator: undefined }, { ...allowance, signalPolicy: { ...allowance.signalPolicy, address: constants.AddressZero } }, { ...allowance, arbitrator: { ...allowance.arbitrator, runtimeCodeHash: "0x" } }])
-      assert.throws(() => validateBondedReleaseAllowance(value), /bonded-release/i);
+    for (const value of [null, { ...allowance, arbitrator: undefined }, { ...allowance, signalPolicy: { ...allowance.signalPolicy, address: constants.AddressZero } }, { ...allowance, arbitrator: { ...allowance.arbitrator, runtimeCodeHash: "0x" } }, { ...allowance, attestationWitnesses: undefined }, { ...allowance, attestationWitnesses: [witness, witness.toLowerCase()] }])
+      assert.throws(() => validateStagingAllowance(value), /Invalid staging allowance|must be an object/);
     // Allowed, not required: the release suite alone still verifies.
     await verifySuite(hre, readonly(), true, allowance);
     await (await o4.setSignalPolicy(bondedPolicy.address)).wait();
     await (await f.deployed.NullifierRegistryV2.addWritePermission(arbitrator.address)).wait();
-    await assert.rejects(verifySuite(hre, readonly(), true), /Unexpected payment nullifier writer/);
+    await (await attestor.addWitness(witness)).wait();
+    await assert.rejects(verifySuite(hre, readonly(), true), /Unexpected payment nullifier writer|Attestation witnesses or threshold changed/);
     await verifySuite(hre, readonly(), true, allowance);
     assert.equal(JSON.parse(readFileSync(`${f.path}.verification`)).verification.active, true);
     await assert.rejects(verifySuite(hre, readonly(), true, { ...allowance, arbitrator: await pin(otherArbitrator) }), /Unexpected payment nullifier writer/);
-    await assert.rejects(verifySuite(hre, readonly(), true, { ...allowance, arbitrator: { ...allowance.arbitrator, runtimeCodeHash: allowance.signalPolicy.runtimeCodeHash } }), /Bonded-release arbitrator bytecode differs from its pin/);
-    await assert.rejects(verifySuite(hre, readonly(), true, { ...allowance, signalPolicy: { ...allowance.signalPolicy, runtimeCodeHash: allowance.arbitrator.runtimeCodeHash } }), /Bonded-release signalPolicy bytecode differs from its pin/);
+    await assert.rejects(verifySuite(hre, readonly(), true, { ...allowance, attestationWitnesses: [other] }), /Attestation witnesses or threshold changed/);
+    await assert.rejects(verifySuite(hre, readonly(), true, { ...allowance, arbitrator: { ...allowance.arbitrator, runtimeCodeHash: allowance.signalPolicy.runtimeCodeHash } }), /Staging allowance arbitrator bytecode differs from its pin/);
+    await assert.rejects(verifySuite(hre, readonly(), true, { ...allowance, signalPolicy: { ...allowance.signalPolicy, runtimeCodeHash: allowance.arbitrator.runtimeCodeHash } }), /Staging allowance signalPolicy bytecode differs from its pin/);
+    await (await attestor.setRequiredSignatures(2)).wait();
+    await assert.rejects(verifySuite(hre, readonly(), true, allowance), /Attestation witnesses or threshold changed/);
+    await (await attestor.setRequiredSignatures(1)).wait();
     for (const [args, error] of [[[f.config.gatingService, f.deployed.PredecessorWhitelistPolicy.address], /whitelistPolicy mismatch/], [[wallet.address, whitelist], /gatingService mismatch/]]) {
       const policy = await deploy("IntentSignalPolicy", args);
       await (await o4.setSignalPolicy(policy.address)).wait();
@@ -466,11 +472,12 @@ test("staging verification admits only the pinned bonded-release policy and arbi
       await assert.rejects(verifySuite(hre, readonly(), true, allowance), /signalPolicy mismatch/);
     }
     const production = readonly(); production.manifest.configuration.environment = "base";
-    await assert.rejects(verifySuite(hre, production, true, allowance), /Bonded-release allowance is staging-only/);
-    await assert.rejects(verifySuite(hre, production, true), /Unexpected payment nullifier writer/);
-    // Reverting both shared changes leaves a suite that verifies with or without the allowance.
+    await assert.rejects(verifySuite(hre, production, true, allowance), /Staging allowance is staging-only/);
+    await assert.rejects(verifySuite(hre, production, true), /Attestation witnesses or threshold changed/);
+    // Reverting the shared changes leaves a suite that verifies with or without the allowance.
     await (await o4.setSignalPolicy(f.manifest.contracts.IntentSignalPolicy.address)).wait();
     await (await f.deployed.NullifierRegistryV2.removeWritePermission(arbitrator.address)).wait();
+    await (await attestor.removeWitness(witness)).wait();
     await verifySuite(hre, readonly(), true);
     await verifySuite(hre, readonly(), true, allowance);
   } finally { rmSync(f.directory, { recursive: true, force: true }); }
