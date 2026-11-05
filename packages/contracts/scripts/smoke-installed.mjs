@@ -135,13 +135,26 @@ for (const [network, manifestNetwork] of [
     fail(`${network} dispute stack metadata does not pin the inactive vault controller handover`);
   }
   if (
-    manifest.exactAuthorizationSets?.authorizedOrchestrators?.length !== 3 ||
+    manifest.exactAuthorizationSets?.authorizedOrchestrators?.length !== (network === "base" ? 2 : 3) ||
     manifest.exactAuthorizationSets?.authorizedLifecycleHooks?.length !== 1 ||
     manifest.exactAuthorizationSets?.passiveDisputeNullifierWriters?.length !==
       1 ||
     manifest.exactAuthorizationSets?.activeDisputeNullifierWriters?.length !== 1
   ) {
     fail(`${network} dispute stack metadata does not pin exact authorization sets`);
+  }
+  const { contracts } = requireFromInstall(`@zkp2p/contracts-v2/addresses/${network}.json`);
+  const expectedOrchestrators = [
+    contracts.Orchestrator,
+    ...(network === "baseStaging" ? [contracts.OrchestratorV2] : []),
+    contracts.OrchestratorV4,
+  ];
+  if (
+    manifest.expectedRelations?.registeredOrchestrator !== contracts.OrchestratorV4 ||
+    manifest.expectedRelations?.unregisteredOrchestrator !== contracts.OrchestratorV3 ||
+    !isDeepStrictEqual(manifest.exactAuthorizationSets.authorizedOrchestrators, expectedOrchestrators)
+  ) {
+    fail(`${network} must register O4 and exclude retired O3`);
   }
 }
 const sourceAbis = requireFromInstall("@zkp2p/contracts-v2/abis/contracts");

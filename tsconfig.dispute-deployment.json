@@ -46,6 +46,7 @@
     "scripts/verify-dispute-opt-in-safe-batch.ts",
     "scripts/verify-method-scoped-safe-batch.ts",
     "scripts/active-dispute-stack.spec.cjs",
+    "scripts/orchestrator-v3-retirement.spec.cjs",
     "scripts/bootstrapWhitelistPolicy.ts",
     "scripts/test-dispute-lifecycle-deployment.cjs",
     "scripts/test-method-scoped-deployment.cjs",

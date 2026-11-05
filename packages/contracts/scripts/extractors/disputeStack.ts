@@ -439,6 +439,10 @@ export function buildDisputeStackManifest(packageName: "base" | "baseStaging") {
     output.activeDisputeStack,
   ) as Record<string, { address: string }>;
   const runtimeIdentities = createRuntimeIdentities(network, contracts);
+  const currentOrchestrator = readDeployment(network.deploymentDirectory, "OrchestratorV4");
+  if (!contracts.OrchestratorV4 || !sameAddress(contracts.OrchestratorV4.address, currentOrchestrator.address)) {
+    throw new Error(`${network.manifestName}.OrchestratorV4 address does not match deployment evidence`);
+  }
   const addressExpectations = createAddressExpectations(network, contracts);
   const configuredWindows = configuredRiskWindows(network.manifestName);
   const evidenceWindows = EVIDENCE.riskWindowSecondsByPaymentMethod[network.manifestName];
@@ -476,11 +480,13 @@ export function buildDisputeStackManifest(packageName: "base" | "baseStaging") {
     expectedRelations: {
       activeLifecycleHook: runtimeIdentities.IntentLifecycleHookV1.address,
       recognizedPredecessorPolicy: runtimeIdentities.RecognizedPredecessorPolicy.address,
-      registeredOrchestrator: runtimeIdentities.OrchestratorV3.address,
+      registeredOrchestrator: currentOrchestrator.address,
+      unregisteredOrchestrator: runtimeIdentities.OrchestratorV3.address,
       authorizedLifecycleHook: runtimeIdentities.IntentLifecycleHookV1.address,
       disputeNullifierAuthorizedWriter: runtimeIdentities.DisputeProtectionPolicy.address,
       orchestratorEscrowRegistry: addressExpectations.EscrowRegistry,
       orchestratorPaymentVerifierRegistry: addressExpectations.PaymentVerifierRegistry,
+      // Historical O3 relation retained for package compatibility; O4 has no relayer registry.
       orchestratorRelayerRegistry: addressExpectations.RelayerRegistry,
       hookOrchestratorRegistry: runtimeIdentities.OrchestratorRegistry.address,
       hookWhitelistPolicy: runtimeIdentities.WhitelistPolicy.address,
@@ -507,8 +513,8 @@ export function buildDisputeStackManifest(packageName: "base" | "baseStaging") {
       orchestratorAuthorizationFromBlock: deploymentBlockNumber(network, "OrchestratorRegistry"),
       authorizedOrchestrators: [
         runtimeIdentities.Orchestrator.address,
-        runtimeIdentities.OrchestratorV2.address,
-        runtimeIdentities.OrchestratorV3.address,
+        ...(network.manifestName === "base_staging" ? [runtimeIdentities.OrchestratorV2.address] : []),
+        currentOrchestrator.address,
       ],
       lifecycleHookAuthorizationFromBlock: deploymentBlockNumber(
         network,
@@ -591,10 +597,12 @@ export interface DisputeStackManifest<Network extends DisputeStackNetwork = Disp
     activeLifecycleHook: Address;
     recognizedPredecessorPolicy: Address;
     registeredOrchestrator: Address;
+    unregisteredOrchestrator: Address;
     authorizedLifecycleHook: Address;
     disputeNullifierAuthorizedWriter: Address;
     orchestratorEscrowRegistry: Address;
     orchestratorPaymentVerifierRegistry: Address;
+    /** Historical O3 wiring, not a prerequisite on registeredOrchestrator (O4). */
     orchestratorRelayerRegistry: Address;
     hookOrchestratorRegistry: Address;
     hookWhitelistPolicy: Address;
@@ -619,7 +627,7 @@ export interface DisputeStackManifest<Network extends DisputeStackNetwork = Disp
   attestationTrust: { requiredSignatures: '1'; witnesses: readonly Address[] };
   exactAuthorizationSets: {
     orchestratorAuthorizationFromBlock: string;
-    authorizedOrchestrators: readonly [Address, Address, Address];
+    authorizedOrchestrators: Network extends 'base_staging' ? readonly [Address, Address, Address] : readonly [Address, Address];
     lifecycleHookAuthorizationFromBlock: string;
     authorizedLifecycleHooks: readonly [Address];
     passiveDisputeNullifierWriters: readonly [Address];

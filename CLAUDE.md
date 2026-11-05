@@ -10,8 +10,10 @@ Read `AGENTS.md` before acting. Treat deployment status as network-scoped:
 
 - `EscrowV2` remains the shared escrow. `OrchestratorV4` is live on Base
   (`0x74c55679268FAfB493864915aD16A320AB8c40Ba`, registered by Safe nonce 87 on
-  2026-10-30) and Base staging; `OrchestratorV3` stays registered next to it for
-  older clients. O4 is not a `deploy/` lane (see
+  2026-10-30) and Base staging. `OrchestratorV3` is retired as an integration
+  target: staging removed it on 2026-11-05; Base removal is prepared for Safe
+  nonce 94, with execution still pending. Preserve O3 sources, tests, addresses,
+  ABIs, and historical reads until a later major release. O4 is not a `deploy/` lane (see
   [Deployment source of truth](#deployment-source-of-truth)). `OrchestratorV2` is
   archived under `contracts/archive/`: it left the Base `OrchestratorRegistry`
   on 2026-08-27 and is still registered on Base staging. Never infer which
@@ -57,8 +59,8 @@ clean build, the full suite, or coverage for documentation-only work.
 
 ## Architecture
 
-The current flow on Base and Base staging (`OrchestratorV3` serves older
-clients through the same escrow and verifier):
+The current flow on Base and Base staging uses `OrchestratorV4`. Retired O3
+intents and payments remain readable at their historical addresses:
 
 ```text
 maker -> EscrowV2.createDeposit
@@ -81,7 +83,7 @@ Important ownership boundaries:
   which raises `TakerNotWhitelisted`) and settlement to its `settlementPolicy`
   (`DisputeProtectionPolicyV2`). Neither O4 nor those policies has relayer logic.
 - `OrchestratorV2` (archived) owned the V2 intent lifecycle and fee routing.
-- `OrchestratorV3` owns the V3 intent lifecycle and snapshots the
+- Retired `OrchestratorV3` retains V3 intent history and snapshots the
   governance-selected `IIntentLifecycleHook` for each intent.
 - `IntentLifecycleHookV1` composes whitelist admission with fail-closed
   lifecycle callbacks into `DisputeProtectionPolicy`; `StakeVault`, the dispute

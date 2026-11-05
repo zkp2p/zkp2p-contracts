@@ -60,6 +60,7 @@ const networkConfigs = [
 ];
 const sourceAbiArtifacts = {
   IntentGuardian: "artifacts/contracts/IntentGuardian.sol/IntentGuardian.json",
+  // Retired from registration; source and event ABI exports remain public.
   OrchestratorV3: "artifacts/contracts/OrchestratorV3.sol/OrchestratorV3.json",
   NullifierRegistryV2:
     "artifacts/contracts/registries/NullifierRegistryV2.sol/NullifierRegistryV2.json",
@@ -351,14 +352,19 @@ for (const {
     fail(`${name} dispute stack prerequisites differ from trusted evidence`);
   const identities = disputeStack.runtimeIdentities;
   const expectedAddresses = disputeStack.addressExpectations;
+  const currentOrchestrator = JSON.parse(
+    fs.readFileSync(path.join(repoRoot, deploymentDirectory, "OrchestratorV4.json"), "utf8")
+  ).address;
   const expectedRelations = {
     activeLifecycleHook: identities.IntentLifecycleHookV1.address,
     recognizedPredecessorPolicy: identities.RecognizedPredecessorPolicy.address,
-    registeredOrchestrator: identities.OrchestratorV3.address,
+    registeredOrchestrator: currentOrchestrator,
+    unregisteredOrchestrator: identities.OrchestratorV3.address,
     authorizedLifecycleHook: identities.IntentLifecycleHookV1.address,
     disputeNullifierAuthorizedWriter: identities.DisputeProtectionPolicy.address,
     orchestratorEscrowRegistry: expectedAddresses.EscrowRegistry,
     orchestratorPaymentVerifierRegistry: expectedAddresses.PaymentVerifierRegistry,
+    // Historical O3 wiring only. O4 has no relayer registry dependency.
     orchestratorRelayerRegistry: expectedAddresses.RelayerRegistry,
     hookOrchestratorRegistry: identities.OrchestratorRegistry.address,
     hookWhitelistPolicy: identities.WhitelistPolicy.address,
@@ -415,8 +421,8 @@ for (const {
     ).receipt.blockNumber.toString(),
     authorizedOrchestrators: [
       identities.Orchestrator.address,
-      identities.OrchestratorV2.address,
-      identities.OrchestratorV3.address,
+      ...(manifestNetwork === "base_staging" ? [identities.OrchestratorV2.address] : []),
+      currentOrchestrator,
     ],
     lifecycleHookAuthorizationFromBlock: policyDeployment.receipt.blockNumber.toString(),
     authorizedLifecycleHooks: [identities.IntentLifecycleHookV1.address],
