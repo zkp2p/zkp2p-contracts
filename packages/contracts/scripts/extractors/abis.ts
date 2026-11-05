@@ -36,6 +36,7 @@ export const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
   FxRateStore: "contracts/oracles/FxRateStore.sol/FxRateStore.json",
   FxRateFeed: "contracts/oracles/FxRateFeed.sol/FxRateFeed.json",
   IntentGuardian: "contracts/IntentGuardian.sol/IntentGuardian.json",
+  // Registration retirement must not remove historical reads or event decoding.
   OrchestratorV3: "contracts/OrchestratorV3.sol/OrchestratorV3.json",
   NullifierRegistryV2:
     "contracts/registries/NullifierRegistryV2.sol/NullifierRegistryV2.json",

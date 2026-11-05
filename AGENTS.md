@@ -197,7 +197,11 @@
     owners, method order, currencies, routes, and no legacy writers.
 - `OrchestratorV4` is not a `deploy/` lane. It is live on Base (`0x74c55679268FAfB493864915aD16A320AB8c40Ba`,
   registered by Safe nonce 87 on 2026-10-30) and Base staging (`0xd03674d06FB9d66C7F1dc9c8D45ADd314B604F2c`).
-  OrchestratorV3 stays registered and unpaused next to it for older clients.
+  OrchestratorV3 is retired as an integration target. Its Base-staging registration was removed on 2026-11-05
+  (tx `0xadb0b597468f34fa684e21409ee736dcc7779170722ecaacf8032efb052d85cc`, block 53549246). Base removal is
+  prepared for Safe `0x0bC26FF515411396DD588Abd6Ef6846E04470227` nonce 94; execution is pending. O3 sources,
+  tests, deployment records, ABIs, and historical reads remain until a later major release. The next package
+  release expects O4 registered and O3 absent on both networks, so publish only after the Base removal executes.
   - **Tooling:** runner `scripts/deploy-orchestrator-v4.ts` (`yarn deploy:orchestrator-v4`), inputs
     `deployments/orchestrator-v4/{base,base_staging}.json`, manifests `deployments/outputs/orchestrator-v4-<network>.json`,
     Base Safe batches `yarn o4:safe-batches`, runbooks `docs/releases/orchestrator-v4-*.md`.
@@ -225,12 +229,12 @@
 ## Architecture Overview (v2.1)
 
 This section describes the V1 stack, whose sources now live in `contracts/archive/`. The current stack is `EscrowV2`,
-`OrchestratorV4` (with `OrchestratorV3` still registered for older clients), and `UnifiedPaymentVerifierV4`.
+`OrchestratorV4` (O3 is retired, with Base deregistration pending), and `UnifiedPaymentVerifierV4`.
 
 - Core: `Escrow` holds maker deposits and per-deposit config (methods, currencies, min rates, intent limits/expiry); `Orchestrator` manages intents, routes to verifiers, collects protocol/referrer fees; `ProtocolViewer` provides aggregated read views.
-- Registries: `PaymentVerifierRegistry` maps `paymentMethod` → verifier + currencies; `EscrowRegistry` whitelists escrows; `PostIntentHookRegistry` whitelists post‑intent hooks; `NullifierRegistry` records consumed nullifiers. `RelayerRegistry` backs the deployed legacy V1 stack, deployed production `OrchestratorV2`, and current `OrchestratorV3` source and staging wiring, including relayer-gated multi-intent admission.
+- Registries: `PaymentVerifierRegistry` maps `paymentMethod` → verifier + currencies; `EscrowRegistry` whitelists escrows; `PostIntentHookRegistry` whitelists post‑intent hooks; `NullifierRegistry` records consumed nullifiers. `RelayerRegistry` backs the deployed legacy V1 stack, deployed production `OrchestratorV2`, and retained `OrchestratorV3` source and historical wiring, including relayer-gated multi-intent admission.
 - Unified Verifier: `archive/unifiedVerifier/UnifiedPaymentVerifier.sol` validates EIP‑712 attestations, checks provider hashes and timestamp buffers (from `BaseUnifiedPaymentVerifier`), and nullifies payments.
-- Wiring: Deploy registries → deploy `Escrow` → deploy `Orchestrator` with registry addresses → `Escrow.setOrchestrator(...)` → deploy `UnifiedPaymentVerifier` and register it per `paymentMethod` in `PaymentVerifierRegistry` (also set provider hashes/timestamp buffers) → whitelist escrows/hooks as needed. Current `OrchestratorV3` deliberately retains the relayer admission boundary while replacing the V2 deposit-whitelist-hook path with snapshotted, fail-closed lifecycle callbacks; review those differences as designed behavior, not accidental parity drift.
+- Wiring: Deploy registries → deploy `Escrow` → deploy `Orchestrator` with registry addresses → `Escrow.setOrchestrator(...)` → deploy `UnifiedPaymentVerifier` and register it per `paymentMethod` in `PaymentVerifierRegistry` (also set provider hashes/timestamp buffers) → whitelist escrows/hooks as needed. Retained `OrchestratorV3` source deliberately preserves the relayer admission boundary while replacing the V2 deposit-whitelist-hook path with snapshotted, fail-closed lifecycle callbacks; review those differences as designed behavior, not accidental parity drift.
 - Flow: Maker `createDeposit` on `Escrow` → Taker `signalIntent` on `Orchestrator` (escrow locks funds) → `fulfillIntent` calls method verifier → on success, `Orchestrator` unlocks/transfers from `Escrow`, applies fees, runs optional post‑intent hook.
 
 ### Minimal Diagram

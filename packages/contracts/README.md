@@ -2,6 +2,24 @@
 
 Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, and utilities.
 
+## O3 retirement (next release)
+
+Release verification expects O4 registered and O3 unregistered on both networks.
+The exact post-retirement registry sets are V1 + O4 on Base and V1 + O2 + O4 on
+Base staging. Staging removal executed on 2026-11-05; Base Safe nonce 94 must
+execute and its transaction hash must be recorded before publishing this metadata.
+Offline build/verification checks the intended state against repository records;
+it does not attest that the Safe has executed.
+
+The `disputeStack` manifest keeps its historical O3 runtime identities, governance,
+lifecycle, and relayer wiring for compatibility. `expectedRelations.registeredOrchestrator`
+and `prerequisites.orchestratorRegistered` refer to current O4; the additive
+`expectedRelations.unregisteredOrchestrator` identifies retired O3. In particular,
+`activeLifecycleHook`, `orchestratorRelayerRegistry`, and the other lifecycle
+prerequisites describe the retained O3 stack, not O4 policies or admission readiness.
+O4 has no relayer-registry dependency. O3 source/network ABIs, addresses, and event
+decoding remain exported for history, payouts, indexers, and support.
+
 ## Release 0.4.4-rc.14
 
 - First npm RC since `0.4.4-rc.6`. Candidates `rc.7`–`rc.13` were local

@@ -346,6 +346,7 @@ const RISK_WINDOWS_BY_NETWORK = {
 
 const DISPUTE_STACK_BY_NETWORK = {
   base: {
+    currentOrchestrator: "0x74c55679268FAfB493864915aD16A320AB8c40Ba",
     riskWindows: RISK_WINDOWS_BY_NETWORK.base,
     governanceOwner: "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
     orchestratorAuthorizationFromBlock: "42878566",
@@ -434,6 +435,7 @@ const DISPUTE_STACK_BY_NETWORK = {
     },
   },
   baseStaging: {
+    currentOrchestrator: "0xd03674d06FB9d66C7F1dc9c8D45ADd314B604F2c",
     riskWindows: RISK_WINDOWS_BY_NETWORK.baseStaging,
     governanceOwner: "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
     orchestratorAuthorizationFromBlock: "42614859",
@@ -555,7 +557,8 @@ test("package extraction publishes the exact dispute stack manifest without inte
         expected.runtimeIdentities.IntentLifecycleHookV1.address,
       recognizedPredecessorPolicy:
         expected.runtimeIdentities.RecognizedPredecessorPolicy.address,
-      registeredOrchestrator: expected.runtimeIdentities.OrchestratorV3.address,
+      registeredOrchestrator: expected.currentOrchestrator,
+      unregisteredOrchestrator: expected.runtimeIdentities.OrchestratorV3.address,
       authorizedLifecycleHook:
         expected.runtimeIdentities.IntentLifecycleHookV1.address,
       disputeNullifierAuthorizedWriter:
@@ -614,8 +617,8 @@ test("package extraction publishes the exact dispute stack manifest without inte
         expected.orchestratorAuthorizationFromBlock,
       authorizedOrchestrators: [
         expected.runtimeIdentities.Orchestrator.address,
-        expected.runtimeIdentities.OrchestratorV2.address,
-        expected.runtimeIdentities.OrchestratorV3.address,
+        ...(network === "baseStaging" ? [expected.runtimeIdentities.OrchestratorV2.address] : []),
+        expected.currentOrchestrator,
       ],
       lifecycleHookAuthorizationFromBlock: expected.policyDeploymentBlock,
       authorizedLifecycleHooks: [
