@@ -356,15 +356,15 @@ test('derives a future RC release line from the package version', () => {
   );
 });
 
-test('commits the Orchestrator V4 RC candidate', () => {
+test('commits the Orchestrator V4 stable candidate', () => {
   const packageManifest = JSON.parse(fs.readFileSync(packageManifestPath, 'utf8'));
-  assert.equal(packageManifest.version, '0.4.4-rc.14');
+  assert.equal(packageManifest.version, '0.4.4');
   assert.deepEqual(
     resolveReleasePolicy({
       release: packageManifest.version,
       packageVersion: packageManifest.version,
     }),
-    { channel: 'rc', distTag: 'rc', environment: 'npm-publish' },
+    { channel: 'stable', distTag: 'latest', environment: 'npm-publish' },
   );
 });
 
@@ -387,8 +387,8 @@ test('release CLI fixtures do not inherit workflow policy variables', () => {
 test('publish workflow consumes the version-derived channel without RC-only paths', () => {
   const workflow = fs.readFileSync(releaseWorkflowPath, 'utf8');
 
-  assert.match(workflow, /^  LATEST_BASELINE: 0\.4\.3$/m);
-  assert.match(workflow, /^  RC_BASELINE: 0\.4\.4-rc\.6$/m);
+  assert.match(workflow, /^  LATEST_BASELINE: 0\.4\.4-rc\.14$/m);
+  assert.match(workflow, /^  RC_BASELINE: 0\.4\.4-rc\.14$/m);
   assert.match(workflow, /^\s{2}policy:\s*$/m);
   assert.match(workflow, /node scripts\/npm-release\.mjs resolve "\$PACKAGE_JSON" "\$RELEASE_VERSION"/);
   assert.match(workflow, /DIST_TAG:\s*\$\{\{ needs\.policy\.outputs\.dist_tag \}\}/);
@@ -607,6 +607,51 @@ test('resolve uses postconditions as recovery guards', (context) => {
   assert.equal(output.guard_latest, output.verify_latest);
   assert.equal(output.guard_rc, output.verify_rc);
 });
+
+for (const recovery of [false, true]) {
+  test(`resolve promotes stable from RC on latest (recovery=${recovery})`, (context) => {
+    const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'npm-release-stable-'));
+    context.after(() => fs.rmSync(temporaryDirectory, { recursive: true, force: true }));
+    const packageJsonPath = path.join(temporaryDirectory, 'package.json');
+    const outputPath = path.join(temporaryDirectory, 'github-output');
+    fs.writeFileSync(packageJsonPath, JSON.stringify({ name: expectedPackage, version: '0.4.4' }));
+
+    execFileSync(process.execPath, [releaseScript, 'resolve', packageJsonPath, '0.4.4'], {
+      cwd: repoRoot,
+      env: releaseEnvironment({
+        LATEST_BASELINE: '0.4.4-rc.14',
+        RC_BASELINE: '0.4.4-rc.14',
+        RECOVERY_MODE: String(recovery),
+        GITHUB_OUTPUT: outputPath,
+      }),
+    });
+
+    assert.deepEqual(parseGitHubOutput(outputPath), {
+      channel: 'stable',
+      dist_tag: 'latest',
+      environment: 'npm-publish',
+      guard_latest: recovery ? '0.4.4' : '0.4.4-rc.14',
+      guard_rc: '0.4.4-rc.14',
+      verify_latest: '0.4.4',
+      verify_rc: '0.4.4-rc.14',
+    });
+  });
+}
+
+for (const latestBaseline of ['0.4.4-beta.1', '0.4.4-rc.01']) {
+  test(`resolve rejects unsupported latest baseline ${latestBaseline}`, (context) => {
+    const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'npm-release-baseline-'));
+    context.after(() => fs.rmSync(temporaryDirectory, { recursive: true, force: true }));
+    const packageJsonPath = path.join(temporaryDirectory, 'package.json');
+    fs.writeFileSync(packageJsonPath, JSON.stringify({ name: expectedPackage, version: '0.4.4' }));
+
+    assertCliFails(
+      ['resolve', packageJsonPath, '0.4.4'],
+      releaseEnvironment({ LATEST_BASELINE: latestBaseline }),
+      /LATEST_BASELINE must be core SemVer or core SemVer-rc\.N/,
+    );
+  });
+}
 
 test('resolve requires GITHUB_OUTPUT in GitHub Actions', (context) => {
   const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'npm-release-actions-'));

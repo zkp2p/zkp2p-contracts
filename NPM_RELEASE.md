@@ -37,6 +37,8 @@ The validation job reads the environment and deployment-branch policy through Gi
 
 The workflow has no release-line, channel, or dist-tag input. It derives `rc` from a package version ending in `-rc.N` and `latest` from a core SemVer package version, requires `workflow_dispatch`, canonical `main`, the exact repository-controlled annotated tag, and both repository-controlled npm tag baselines. Any other version shape fails closed. Publication runs exactly once with the resolved tag and never uses `npm dist-tag`.
 
+Baselines describe the tags before publication, not the target release. `LATEST_BASELINE` may be core SemVer or `core SemVer-rc.N` when `latest` already points to an RC; this does not change the version-derived publication channel. For stable `0.4.4`, both committed baselines are `0.4.4-rc.14`. Successful publication moves only `latest` to `0.4.4` and leaves `rc` at `0.4.4-rc.14`.
+
 ## Release gates
 
 The package-validation job performs an immutable Yarn install, compiles the contracts once, builds and tests the package, verifies exact Base/Base Staging deployment-output/address/ABI agreement and canonical source ABIs, inspects the `npm pack` digest, and clean-installs/imports the exact tarball. In parallel, the complete Foundry suite runs in a separate job with the same exact-source `out`/`cache_forge` cache used by normal CI. Publication and recovery require both jobs, so the full suite remains a release gate without serializing package construction behind it.

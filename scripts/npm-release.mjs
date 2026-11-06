@@ -17,7 +17,7 @@ import {
 } from './lib/npm-release-policy.mjs';
 
 const [, , command, packageJsonArg, release, tag, extraArg] = process.argv;
-const coreSemverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const latestBaselinePattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-rc\.(0|[1-9]\d*))?$/;
 const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const releasePackage = '@zkp2p/contracts-v2';
 
@@ -205,7 +205,7 @@ if (command === 'resolve') {
     rc: process.env.RC_BASELINE,
   };
   if (!baselines.latest) fail('expected latest baseline is missing');
-  if (!coreSemverPattern.test(baselines.latest)) fail('LATEST_BASELINE must be core SemVer');
+  if (!latestBaselinePattern.test(baselines.latest)) fail('LATEST_BASELINE must be core SemVer or core SemVer-rc.N');
   if (!baselines.rc) fail('expected rc baseline is missing');
   if (!semverPattern.test(baselines.rc)) fail('RC_BASELINE must be valid SemVer');
   const expectations = releaseRegistryExpectations({
