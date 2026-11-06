@@ -255,7 +255,7 @@ jobs:
     needs: [policy, validate, foundry-tests]
     if: inputs.recovery == false
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 22
     env:
       DIST_TAG: ${{ needs.policy.outputs.dist_tag }}
       RELEASE_ENVIRONMENT: ${{ needs.policy.outputs.environment }}
@@ -319,11 +319,11 @@ jobs:
         run: |
           node scripts/npm-release.mjs verify "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG" "$RUNNER_TEMP/npm-pack/pack.json"
           mkdir -p "$RUNNER_TEMP/registry-pack"
-          for attempt in {1..12}; do
+          for attempt in {1..121}; do
             if npm pack "@zkp2p/contracts-v2@$RELEASE_VERSION" --ignore-scripts --json --pack-destination "$RUNNER_TEMP/registry-pack" > "$RUNNER_TEMP/registry-pack.json"; then
               break
             fi
-            test "$attempt" -lt 12
+            test "$attempt" -lt 121
             sleep 5
           done
           node packages/contracts/scripts/verify-release.mjs --pack-json "$RUNNER_TEMP/registry-pack.json" --pack-dir "$RUNNER_TEMP/registry-pack"
@@ -331,11 +331,11 @@ jobs:
             smoke_dir=$(mktemp -d "$RUNNER_TEMP/npm-registry-smoke.XXXXXX")
             cd "$smoke_dir"
             npm init --yes
-            for attempt in {1..12}; do
+            for attempt in {1..121}; do
               if npm install "$spec" --ignore-scripts --no-audit --no-fund; then
                 break
               fi
-              test "$attempt" -lt 12
+              test "$attempt" -lt 121
               sleep 5
             done
             node "$GITHUB_WORKSPACE/packages/contracts/scripts/smoke-installed.mjs" "$RELEASE_VERSION"
@@ -346,7 +346,7 @@ jobs:
     needs: [policy, validate, foundry-tests]
     if: inputs.recovery == true
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 22
     env:
       DIST_TAG: ${{ needs.policy.outputs.dist_tag }}
       RELEASE_ENVIRONMENT: ${{ needs.policy.outputs.environment }}
