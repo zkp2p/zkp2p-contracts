@@ -6,8 +6,8 @@ Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, an
 
 Release verification expects O4 registered and O3 unregistered on both networks.
 The exact post-retirement registry sets are V1 + O4 on Base and V1 + O2 + O4 on
-Base staging. Staging removal executed on 2026-11-05; Base Safe nonce 94 must
-execute and its transaction hash must be recorded before publishing this metadata.
+Base staging. Both removals executed on 2026-11-05; the Base one (Safe nonce 94) is tx
+`0x85b7c40b779350cdeb6890f84d72375588e1bf930f9fdcd8eeea97aa4ea60dfc`.
 Offline build/verification checks the intended state against repository records;
 it does not attest that the Safe has executed.
 

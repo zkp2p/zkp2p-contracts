@@ -26,7 +26,7 @@ no retained test imports it.
 | `Escrow.sol` | `EscrowV2.sol` | V1 escrow. No new work routes through V1. |
 | `Orchestrator.sol` | `OrchestratorV3.sol` | V1 orchestrator, paired with the V1 escrow. |
 | `OrchestratorV2.sol` | `OrchestratorV3.sol` | Removed from the Base `OrchestratorRegistry` on 2026-08-27 (Safe nonce 76). |
-| `../OrchestratorV3.sol` (source retained in place) | `OrchestratorV4.sol` | Removed from Base-staging `OrchestratorRegistry` on 2026-11-05, block 53549246, tx `0xadb0b597468f34fa684e21409ee736dcc7779170722ecaacf8032efb052d85cc`. Base removal is prepared for Safe `0x0bC26FF515411396DD588Abd6Ef6846E04470227` nonce 94; **TODO: production execution tx hash (pending execution)**. |
+| `../OrchestratorV3.sol` (source retained in place) | `OrchestratorV4.sol` | Removed from Base-staging `OrchestratorRegistry` on 2026-11-05, block 53549246, tx `0xadb0b597468f34fa684e21409ee736dcc7779170722ecaacf8032efb052d85cc`. Removed from Base `OrchestratorRegistry` `0xBe9fED15ED7A4B915C03EFcEcb9662739C3382A9` on 2026-11-05 by Safe `0x0bC26FF515411396DD588Abd6Ef6846E04470227` nonce 94, block 53550556, tx `0x85b7c40b779350cdeb6890f84d72375588e1bf930f9fdcd8eeea97aa4ea60dfc`. |
 | `ProtocolViewer.sol`, `interfaces/IProtocolViewer.sol` | `ProtocolViewerV2.sol` | Read helper for the V1 escrow and orchestrator. |
 | `registries/PostIntentHookRegistry.sol`, `interfaces/IPostIntentHookRegistry.sol` | none | Only the V1 escrow and orchestrator read it. |
 | `unifiedVerifier/UnifiedPaymentVerifier.sol`, `unifiedVerifier/BaseUnifiedPaymentVerifier.sol` | `UnifiedPaymentVerifierV3.sol` | Deployed as `UnifiedPaymentVerifier` and `UnifiedPaymentVerifierV2`. The verifier cutover is one-way: no payment method routes to either, and both lost their nullifier write permission. |
@@ -42,7 +42,7 @@ before stating what is active.
 O3 source and tests stay in place for this non-breaking retirement. Its public package
 ABIs, artifacts, addresses, events, and historical intent/payment reads remain available.
 The Base removal batch is `deployments/outputs/safe-batches/base_orchestratorv3_retirement.json`.
-Record the execution hash above before releasing package metadata that expects O3 absent.
+Its execution hash is recorded above, so package metadata that expects O3 absent can be released.
 Do not remove the legacy gating signer: it is shared with the V1 `/v2/verify` path.
 
 ## Not archived, despite a higher-numbered sibling
