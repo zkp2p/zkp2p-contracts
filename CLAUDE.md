@@ -11,8 +11,8 @@ Read `AGENTS.md` before acting. Treat deployment status as network-scoped:
 - `EscrowV2` remains the shared escrow. `OrchestratorV4` is live on Base
   (`0x74c55679268FAfB493864915aD16A320AB8c40Ba`, registered by Safe nonce 87 on
   2026-10-30) and Base staging. `OrchestratorV3` is retired as an integration
-  target: staging removed it on 2026-11-05; Base removal is prepared for Safe
-  nonce 94, with execution still pending. Preserve O3 sources, tests, addresses,
+  target: staging removed it on 2026-11-05; Base removed it the same day
+  (Safe nonce 94, block 53550556). Preserve O3 sources, tests, addresses,
   ABIs, and historical reads until a later major release. O4 is not a `deploy/` lane (see
   [Deployment source of truth](#deployment-source-of-truth)). `OrchestratorV2` is
   archived under `contracts/archive/`: it left the Base `OrchestratorRegistry`

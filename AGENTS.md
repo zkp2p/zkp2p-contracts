@@ -198,10 +198,10 @@
 - `OrchestratorV4` is not a `deploy/` lane. It is live on Base (`0x74c55679268FAfB493864915aD16A320AB8c40Ba`,
   registered by Safe nonce 87 on 2026-10-30) and Base staging (`0xd03674d06FB9d66C7F1dc9c8D45ADd314B604F2c`).
   OrchestratorV3 is retired as an integration target. Its Base-staging registration was removed on 2026-11-05
-  (tx `0xadb0b597468f34fa684e21409ee736dcc7779170722ecaacf8032efb052d85cc`, block 53549246). Base removal is
-  prepared for Safe `0x0bC26FF515411396DD588Abd6Ef6846E04470227` nonce 94; execution is pending. O3 sources,
+  (tx `0xadb0b597468f34fa684e21409ee736dcc7779170722ecaacf8032efb052d85cc`, block 53549246). Base removal executed
+  the same day by Safe `0x0bC26FF515411396DD588Abd6Ef6846E04470227` nonce 94 (tx `0x85b7c40b779350cdeb6890f84d72375588e1bf930f9fdcd8eeea97aa4ea60dfc`, block 53550556). O3 sources,
   tests, deployment records, ABIs, and historical reads remain until a later major release. The next package
-  release expects O4 registered and O3 absent on both networks, so publish only after the Base removal executes.
+  release expects O4 registered and O3 absent on both networks, and the Base removal has executed.
   - **Tooling:** runner `scripts/deploy-orchestrator-v4.ts` (`yarn deploy:orchestrator-v4`), inputs
     `deployments/orchestrator-v4/{base,base_staging}.json`, manifests `deployments/outputs/orchestrator-v4-<network>.json`,
     Base Safe batches `yarn o4:safe-batches`, runbooks `docs/releases/orchestrator-v4-*.md`.

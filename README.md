@@ -5,7 +5,7 @@
 Smart contracts for the Peer/ZKP2P fiat on/off-ramp. The current Base production settlement path is
 **EscrowV2 → OrchestratorV4 → UnifiedPaymentVerifierV4**. OrchestratorV4 was registered on Base on
 30 October 2026 (Safe nonce 87). OrchestratorV3 is retired as an integration target: staging registration
-was removed on 5 November 2026; production removal is prepared for Safe nonce 94 (execution pending).
+and Base production registrations were both removed on 5 November 2026 (Base: Safe nonce 94, tx `0x85b7c40b779350cdeb6890f84d72375588e1bf930f9fdcd8eeea97aa4ea60dfc`).
 Keep its addresses and ABIs for historical intents, payments, payouts, and support lookups.
 
 Use the current deployment records and package aliases for integrations. Historical deployments are outside
@@ -20,7 +20,7 @@ does not make them an active integration target.
 | --- | --- |
 | `EscrowV2` | Holds maker liquidity, deposit configuration and funds locked for intents. |
 | `OrchestratorV4` | Coordinates intent admission, payment verification, fees and settlement. |
-| `OrchestratorV3` | Historical reads only; staging unregistered, Base removal pending Safe nonce 94. See [retirement record](contracts/archive/README.md). |
+| `OrchestratorV3` | Historical reads only; unregistered on Base staging and Base (Safe nonce 94). See [retirement record](contracts/archive/README.md). |
 | `UnifiedPaymentVerifierV4` | Verifies payment attestations and enforces payment replay protection. Every payment method routes to it since the 29 October 2026 cutover (Safe nonce 86). |
 | `UnifiedPaymentVerifierV3` | No longer routed. It stays a `NullifierRegistryV2` writer as the UPV4 rollback target until its separately approved revoke. |
 | `MultiAttestationVerifier` | Checks the configured attestation witnesses and signature threshold. |
