@@ -20,6 +20,17 @@ prerequisites describe the retained O3 stack, not O4 policies or admission readi
 O4 has no relayer-registry dependency. O3 source/network ABIs, addresses, and event
 decoding remain exported for history, payouts, indexers, and support.
 
+## Release 0.4.4
+
+- Promotes the current OrchestratorV4 package exports to stable, including Base
+  and Base staging suite addresses, canonical source ABIs, and one-hour intent expiry.
+- Includes the merged O3 retirement metadata: release verification requires O4
+  registered and O3 unregistered on both networks. Historical O3 ABIs, addresses,
+  and dispute-stack wiring remain available as described above. The executed
+  retirement record is maintained separately in [PR #387](https://github.com/zkp2p/zkp2p-contracts/pull/387).
+- Targets `latest`, moving it from `0.4.4-rc.14` to `0.4.4`; `rc` remains at
+  `0.4.4-rc.14`.
+
 ## Release 0.4.4-rc.14
 
 - First npm RC since `0.4.4-rc.6`. Candidates `rc.7`–`rc.13` were local
@@ -33,7 +44,7 @@ decoding remain exported for history, payouts, indexers, and support.
 - Includes the Base OrchestratorV4 suite addresses and ABIs recorded on main,
   including `OrchestratorV4` at `0x74c55679268FAfB493864915aD16A320AB8c40Ba`.
 - Regenerated `baseContracts.ts` with the canonical export pipeline to restore the 7 Base O4 contract exports missing from main; byte-identical to the rc.13 build (`00e9595`).
-- Targets the `rc` tag; `latest` remains at `0.4.3`.
+- Serves as the pre-0.4.4 baseline for both `latest` and `rc`.
 
 ## Candidate 0.4.4-rc.11
 
