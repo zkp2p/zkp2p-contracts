@@ -326,7 +326,8 @@ try {
 }
 
 let lastReason = 'registry metadata was not available';
-for (let attempt = 1; attempt <= 12; attempt += 1) {
+// One immediate attempt plus 120 five-second waits allows 10 minutes for visibility.
+for (let attempt = 1; attempt <= 121; attempt += 1) {
   try {
     const metadata = await readJson(packageUrl);
     const published = metadata.versions?.[release];
@@ -354,7 +355,7 @@ for (let attempt = 1; attempt <= 12; attempt += 1) {
   } catch (error) {
     lastReason = error.message;
   }
-  if (attempt < 12) await new Promise((resolve) => setTimeout(resolve, 5_000));
+  if (attempt < 121) await new Promise((resolve) => setTimeout(resolve, 5_000));
 }
 
-fail(`post-publish verification timed out: ${lastReason}`);
+fail(`post-publish verification timed out after 10 minutes: ${lastReason}`);

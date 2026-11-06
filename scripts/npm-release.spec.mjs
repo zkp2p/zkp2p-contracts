@@ -117,6 +117,7 @@ async function createVerifyCliFixture(context, rcDistTag, latestDistTag = '0.4.0
   const packageJsonPath = path.join(temporaryDirectory, 'package.json');
   const packJsonPath = path.join(temporaryDirectory, 'pack.json');
   const retryPreloadPath = path.join(temporaryDirectory, 'fast-retry.cjs');
+  const retryDelaysPath = path.join(temporaryDirectory, 'retry-delays.json');
   const metadata = {
     'dist-tags': { latest: latestDistTag, rc: rcDistTag },
     versions: {
@@ -151,8 +152,14 @@ async function createVerifyCliFixture(context, rcDistTag, latestDistTag = '0.4.0
   fs.writeFileSync(packJsonPath, JSON.stringify([validPackResult]));
   fs.writeFileSync(retryPreloadPath, `
 const originalSetTimeout = globalThis.setTimeout;
-globalThis.setTimeout = (callback, delay, ...args) =>
-  originalSetTimeout(callback, delay === 5_000 ? 0 : delay, ...args);
+const retryDelays = [];
+globalThis.setTimeout = (callback, delay, ...args) => {
+  if (delay === 5_000) retryDelays.push(delay);
+  return originalSetTimeout(callback, delay === 5_000 ? 0 : delay, ...args);
+};
+process.on('exit', () => {
+  require('node:fs').writeFileSync(${JSON.stringify(retryDelaysPath)}, JSON.stringify(retryDelays));
+});
 `);
   context.after(async () => {
     await new Promise((resolve, reject) => {
@@ -164,6 +171,7 @@ globalThis.setTimeout = (callback, delay, ...args) =>
     args: ['verify', packageJsonPath, '0.4.0', 'latest', packJsonPath],
     nodeArgs: ['--require', retryPreloadPath],
     packageJsonPath,
+    retryDelaysPath,
   };
 }
 
@@ -495,7 +503,7 @@ test('verify CLI accepts an rc dist-tag matching EXPECTED_RC', async (context) =
   assert.match(result.stdout, /Registry verification passed/);
 });
 
-test('verify CLI rejects an rc dist-tag that moved from EXPECTED_RC', async (context) => {
+test('verify CLI rejects an rc dist-tag that moved from EXPECTED_RC after 10 minutes', async (context) => {
   const fixture = await createVerifyCliFixture(context, '0.4.0-rc.6');
   const env = releaseEnvironment({ EXPECTED_RC: '0.4.0-rc.5' });
   delete env.EXPECTED_LATEST;
@@ -504,6 +512,9 @@ test('verify CLI rejects an rc dist-tag that moved from EXPECTED_RC', async (con
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /rc moved from 0\.4\.0-rc\.5 to 0\.4\.0-rc\.6/);
+  const retryDelays = JSON.parse(fs.readFileSync(fixture.retryDelaysPath, 'utf8'));
+  assert.equal(retryDelays.reduce((total, delay) => total + delay, 0), 600_000);
+  assert.match(result.stderr, /post-publish verification timed out after 10 minutes/);
 });
 
 test('verify CLI leaves the rc dist-tag unchecked when EXPECTED_RC is unset', async (context) => {
