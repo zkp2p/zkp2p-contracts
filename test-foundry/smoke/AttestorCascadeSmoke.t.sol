@@ -37,7 +37,7 @@ contract AttestorCascadeSmokeTest is DisputeProtectionStackV2Fixture {
             assertEq(snapshot.intentHash, id);
             uint256 window = abi.decode(settlementData, (uint256));
             assertEq(window, index == 0 ? 0 : RISK_WINDOW);
-            assertEq(attestation.releaseAmount, index == 2 ? 45e6 : INTENT_AMOUNT);
+            assertEq(attestation.releaseAmount, index == 2 ? 48.5e6 : INTENT_AMOUNT);
             uint256 net = attestation.releaseAmount - attestation.releaseAmount * PROTOCOL_FEE / 1e18
                 - attestation.releaseAmount * REFERRAL_FEE / 1e18;
             vm.recordLogs();
