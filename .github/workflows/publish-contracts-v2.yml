@@ -56,7 +56,7 @@ jobs:
     steps:
       - name: Patch hosted action runtime
         if: runner.environment == 'github-hosted' && runner.os == 'Linux'
-        uses: zkp2p/.github/actions/patch-node24@f9560a725dbcda32544968f34d52382d3af316e5
+        uses: zkp2p/.github/actions/patch-node24@4ef0030bb0aca98a6c4a6378dbf48ad159ff25d4
 
       - name: Checkout policy source
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -90,7 +90,7 @@ jobs:
     steps:
       - name: Patch hosted action runtime
         if: runner.environment == 'github-hosted' && runner.os == 'Linux'
-        uses: zkp2p/.github/actions/patch-node24@f9560a725dbcda32544968f34d52382d3af316e5
+        uses: zkp2p/.github/actions/patch-node24@4ef0030bb0aca98a6c4a6378dbf48ad159ff25d4
 
       - name: Checkout canonical release commit
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -196,7 +196,7 @@ jobs:
     steps:
       - name: Patch hosted action runtime
         if: runner.environment == 'github-hosted' && runner.os == 'Linux'
-        uses: zkp2p/.github/actions/patch-node24@f9560a725dbcda32544968f34d52382d3af316e5
+        uses: zkp2p/.github/actions/patch-node24@4ef0030bb0aca98a6c4a6378dbf48ad159ff25d4
 
       - name: Checkout canonical release commit
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -270,7 +270,7 @@ jobs:
     steps:
       - name: Patch hosted action runtime
         if: runner.environment == 'github-hosted' && runner.os == 'Linux'
-        uses: zkp2p/.github/actions/patch-node24@f9560a725dbcda32544968f34d52382d3af316e5
+        uses: zkp2p/.github/actions/patch-node24@4ef0030bb0aca98a6c4a6378dbf48ad159ff25d4
 
       - name: Checkout release verification code
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -358,7 +358,7 @@ jobs:
     steps:
       - name: Patch hosted action runtime
         if: runner.environment == 'github-hosted' && runner.os == 'Linux'
-        uses: zkp2p/.github/actions/patch-node24@f9560a725dbcda32544968f34d52382d3af316e5
+        uses: zkp2p/.github/actions/patch-node24@4ef0030bb0aca98a6c4a6378dbf48ad159ff25d4
 
       - name: Checkout release verification code
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
