@@ -261,3 +261,12 @@ Only `base_staging verify` and `verify-source` load the allowance. With it:
 
 Deploy, activation and `base` never read the allowance, and `verifySuite`
 rejects one supplied for `base`.
+
+The allowance also names retired staging O3
+`0x2b5E8Ab562e45fA89D73802605E145ED3E3EeF4f` in the required
+`retiredPredecessor.address` field, which must be a valid non-zero address equal
+to the configured `existing.OrchestratorV3.address`. Staging `verify` and
+`verify-source` may accept that O3 as unregistered; it must still be unpaused
+and retain the configured `predecessorHook`. Registration remains required
+without the allowance, including on `base`, and deployment and activation
+checks are unchanged. This allowance change requires a new `executionToolCommit`.

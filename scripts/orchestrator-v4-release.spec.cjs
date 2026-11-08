@@ -432,6 +432,16 @@ test("base refuses public private-deposit acknowledgement and recorded staging e
   } finally { rmSync(f.directory, { recursive: true, force: true }); }
 });
 
+test("staging allowance requires the exact configured retired predecessor", () => {
+  const config = JSON.parse(readFileSync("deployments/orchestrator-v4/base_staging.json"));
+  const allowance = JSON.parse(readFileSync("deployments/orchestrator-v4/base_staging.allowance.json"));
+  assert.deepEqual(allowance.retiredPredecessor, { address: "0x2b5E8Ab562e45fA89D73802605E145ED3E3EeF4f" });
+  assert.doesNotThrow(() => validateStagingAllowance(allowance, config));
+  for (const retiredPredecessor of [undefined, null, {}, { address: "invalid" }, { address: constants.AddressZero }, { address: other }])
+    assert.throws(() => validateStagingAllowance({ ...allowance, retiredPredecessor }, config), /Invalid staging allowance retired predecessor/);
+  assert.throws(() => validateStagingAllowance(allowance, { ...config, existing: { ...config.existing, OrchestratorV3: { ...config.existing.OrchestratorV3, address: other } } }), /Invalid staging allowance retired predecessor/);
+});
+
 test("staging verification admits only the pinned post-activation changes; production refuses the allowance", async () => {
   const f = await fixture();
   try {
@@ -445,10 +455,10 @@ test("staging verification admits only the pinned post-activation changes; produ
     // IntentSignalPolicyV2 shares these getters; any contract stands in for the arbitrator's pinned bytecode.
     const bondedPolicy = await deploy("IntentSignalPolicy", [f.config.gatingService, whitelist]);
     const arbitrator = await deploy("AddressGroupRegistry"), otherArbitrator = await deploy("AddressGroupRegistry");
-    const allowance = { signalPolicy: await pin(bondedPolicy), arbitrator: await pin(arbitrator), attestationWitnesses: [witness] };
+    const allowance = { signalPolicy: await pin(bondedPolicy), arbitrator: await pin(arbitrator), attestationWitnesses: [witness], retiredPredecessor: { address: f.config.existing.OrchestratorV3.address } };
     const readonly = () => new TransactionJournal(`${f.path}.verification`, JSON.parse(readFileSync(f.path)), new VoidSigner(wallet.address, hre.ethers.provider));
     for (const value of [null, { ...allowance, arbitrator: undefined }, { ...allowance, signalPolicy: { ...allowance.signalPolicy, address: constants.AddressZero } }, { ...allowance, arbitrator: { ...allowance.arbitrator, runtimeCodeHash: "0x" } }, { ...allowance, attestationWitnesses: undefined }, { ...allowance, attestationWitnesses: [witness, witness.toLowerCase()] }])
-      assert.throws(() => validateStagingAllowance(value), /Invalid staging allowance|must be an object/);
+      assert.throws(() => validateStagingAllowance(value, f.config), /Invalid staging allowance|must be an object/);
     // Allowed, not required: the release suite alone still verifies.
     await verifySuite(hre, readonly(), true, allowance);
     await (await o4.setSignalPolicy(bondedPolicy.address)).wait();
@@ -478,6 +488,31 @@ test("staging verification admits only the pinned post-activation changes; produ
     await (await o4.setSignalPolicy(f.manifest.contracts.IntentSignalPolicy.address)).wait();
     await (await f.deployed.NullifierRegistryV2.removeWritePermission(arbitrator.address)).wait();
     await (await attestor.removeWitness(witness)).wait();
+    await verifySuite(hre, readonly(), true);
+    await verifySuite(hre, readonly(), true, allowance);
+    const o3 = f.deployed.OrchestratorV3, registry = f.deployed.OrchestratorRegistry;
+    await (await registry.removeOrchestrator(o3.address)).wait();
+    await assert.rejects(verifySuite(hre, readonly(), true), /O3 registration, pause or lifecycle hook changed/);
+    await verifySuite(hre, readonly(), true, allowance);
+    await assert.rejects(verifySuite(hre, readonly(), true, { ...allowance, retiredPredecessor: { address: other } }), /Invalid staging allowance retired predecessor/);
+    const retiredProduction = readonly(); retiredProduction.manifest.configuration.environment = "base";
+    await assert.rejects(verifySuite(hre, retiredProduction, true, allowance), /Staging allowance is staging-only/);
+    await assert.rejects(verifySuite(hre, retiredProduction, true), /O3 registration, pause or lifecycle hook changed/);
+    assert.throws(() => assertFreshDeploymentPreflight(f.config, { ...f.manifest.baseline, predecessor: { ...f.manifest.baseline.predecessor, registered: false } }), /O3 registration, pause or lifecycle hook changed/);
+    const nonce = await wallet.getTransactionCount();
+    await assert.rejects(activate(hre, f.journal), /O3 registration, pause or lifecycle hook changed/);
+    assert.equal(await wallet.getTransactionCount(), nonce);
+    await (await o3.pauseOrchestrator()).wait();
+    await assert.rejects(verifySuite(hre, readonly(), true, allowance), /O3 registration, pause or lifecycle hook changed/);
+    await (await o3.unpauseOrchestrator()).wait();
+    await (await o3.setLifecycleHook(constants.AddressZero)).wait();
+    await assert.rejects(verifySuite(hre, readonly(), true, allowance), /O3 registration, pause or lifecycle hook changed/);
+    await (await o3.setLifecycleHook(f.config.predecessorHook)).wait();
+    await verifySuite(hre, readonly(), true, allowance);
+    await (await registry.removeOrchestrator(o4.address)).wait();
+    await assert.rejects(verifySuite(hre, readonly(), true, allowance), /O4 registration does not match release phase/);
+    await (await registry.addOrchestrator(o4.address)).wait();
+    await (await registry.addOrchestrator(o3.address)).wait();
     await verifySuite(hre, readonly(), true);
     await verifySuite(hre, readonly(), true, allowance);
   } finally { rmSync(f.directory, { recursive: true, force: true }); }

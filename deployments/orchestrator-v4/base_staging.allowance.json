@@ -9,5 +9,8 @@
   },
   "attestationWitnesses": [
     "0xd1309D95068Dab4c7c80E90faa1b27b9D4D73400"
-  ]
+  ],
+  "retiredPredecessor": {
+    "address": "0x2b5E8Ab562e45fA89D73802605E145ED3E3EeF4f"
+  }
 }

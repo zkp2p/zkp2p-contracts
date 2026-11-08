@@ -30,8 +30,8 @@ export type ReleaseConfig = {
   legacyDrainCheckpoints: Array<{ contract: string; intentCounter: string; indexedBlock: number }>;
   legacyWhitelistCheckpoint: { indexedBlock: number; enabled: Array<{ escrow: string; depositId: string; paymentMethod: string }> };
 };
-/** Reviewed staging changes made after activation: the bonded-release signal policy and arbitrator, pinned by runtime code, and added witnesses. */
-export type StagingAllowance = { signalPolicy: { address: string; runtimeCodeHash: string }; arbitrator: { address: string; runtimeCodeHash: string }; attestationWitnesses: string[] };
+/** Reviewed staging changes made after activation: the bonded-release signal policy and arbitrator, added witnesses, and retired predecessor. */
+export type StagingAllowance = { signalPolicy: { address: string; runtimeCodeHash: string }; arbitrator: { address: string; runtimeCodeHash: string }; attestationWitnesses: string[]; retiredPredecessor: { address: string } };
 type Receipt = { blockNumber: number; blockHash: string; transactionHash: string; gasUsed: string; effectiveGasPrice: string };
 type Transaction = { step: string; hash: string; nonce: number; to: string | null; data: string; value: string; receipt: Receipt | null };
 type NewContract = { address: string; artifact: string; constructorArguments: unknown[]; transactionHash: string; deploymentBlock: number; runtimeCodeHash: string };
@@ -95,8 +95,9 @@ export function validateConfig(value: unknown): asserts value is ReleaseConfig {
   check(new Set(privacy.enabled.map((row) => `${row.escrow.toLowerCase()}:${row.depositId}:${row.paymentMethod.toLowerCase()}`)).size === privacy.enabled.length, "Duplicate private-deposit checkpoint row");
 }
 
-export function validateStagingAllowance(value: unknown): asserts value is StagingAllowance {
+export function validateStagingAllowance(value: unknown, c: ReleaseConfig): asserts value is StagingAllowance {
   check(typeof value === "object" && value !== null, "Staging allowance must be an object");
+  check(c.environment === "base_staging", "Staging allowance is staging-only");
   const allowance = value as StagingAllowance;
   for (const name of ["signalPolicy", "arbitrator"] as const) {
     const pin = allowance[name];
@@ -104,6 +105,8 @@ export function validateStagingAllowance(value: unknown): asserts value is Stagi
   }
   const witnesses = allowance.attestationWitnesses;
   check(Array.isArray(witnesses) && witnesses.every((w) => utils.isAddress(w) && !same(w, ZERO)) && new Set(witnesses.map((w) => w.toLowerCase())).size === witnesses.length, "Invalid staging allowance witnesses");
+  const predecessor = allowance.retiredPredecessor;
+  check(predecessor && utils.isAddress(predecessor.address) && !same(predecessor.address, ZERO) && same(predecessor.address, c.existing.OrchestratorV3.address), "Invalid staging allowance retired predecessor");
 }
 
 async function existing(hre: HardhatRuntimeEnvironment, c: ReleaseConfig, name: string): Promise<Contract> {
@@ -506,13 +509,15 @@ function assertLegacyDrained(c: ReleaseConfig, snapshot: Awaited<ReturnType<type
 
 export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: TransactionJournal, active: boolean, allowance?: StagingAllowance): Promise<void> {
   const m = journal.manifest, c = m.configuration;
-  check(allowance === undefined || c.environment === "base_staging", "Staging allowance is staging-only");
+  if (allowance !== undefined) validateStagingAllowance(allowance, c);
   const live = await inspect(hre, c);
   if (allowance) for (const name of ["signalPolicy", "arbitrator"] as const)
     check(same(utils.keccak256(await hre.ethers.provider.getCode(allowance[name].address, live.blockNumber)), allowance[name].runtimeCodeHash), `Staging allowance ${name} bytecode differs from its pin`);
-  // Allowed additions are hidden from the baseline; the configured writers, witnesses and threshold must still match exactly.
+  // Normalize only reviewed staging differences; every other baseline field must still match exactly.
   const snapshot = allowance ? {
     ...live,
+    // The validated predecessor may be unregistered; its pause state and lifecycle hook stay exact.
+    predecessor: { ...live.predecessor, registered: live.predecessor.registered === false ? true : live.predecessor.registered },
     nullifierWriters: live.nullifierWriters.filter((writer) => !same(writer, allowance.arbitrator.address)),
     attestation: { ...live.attestation, witnesses: live.attestation.witnesses.filter((witness: string) => !allowance.attestationWitnesses.some((added) => same(witness, added))) },
   } : live;
@@ -633,7 +638,7 @@ async function main(): Promise<void> {
     let allowance: StagingAllowance | undefined;
     if (environment === "base_staging") {
       const value: unknown = JSON.parse(readFileSync(resolve(STAGING_ALLOWANCE), "utf8"));
-      validateStagingAllowance(value); allowance = value;
+      validateStagingAllowance(value, c); allowance = value;
     }
     if (action === "verify") await verifySuite(hre, journal, true, allowance);
     if (action === "verify-source") {
