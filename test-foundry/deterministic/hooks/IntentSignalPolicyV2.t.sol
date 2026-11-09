@@ -51,6 +51,43 @@ contract IntentSignalPolicyV2Test is OrchestratorV4Fixture {
         _signalRaw(taker, _defaultParams());
     }
 
+    function test_SignatureAdmitsOneIntent() public {
+        IOrchestratorV4.SignalIntentParams memory params = _signedDefaultParams();
+        bytes32 messageHash = _gatingMessageHash(taker, params, params.signatureExpiration);
+        bytes32 id = _intentHash(orchestrator.intentCounter());
+        _signalRaw(taker, params);
+        assertTrue(policyV2.usedMessageHashes(messageHash));
+
+        // Cancelling restores the deposit's liquidity, so only the spent signature stops the replay.
+        vm.prank(taker);
+        orchestrator.cancelIntent(id);
+        vm.expectRevert(abi.encodeWithSelector(IntentSignalPolicyV2.SignatureAlreadyUsed.selector, messageHash));
+        _signalRaw(taker, params);
+    }
+
+    function test_FreshSignatureAdmitsAnotherIntent() public {
+        _signalDefault();
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
+        params.signatureExpiration += 1;
+        _signalCall(taker, params);
+        assertEq(orchestrator.intentCounter(), 2);
+    }
+
+    function test_OtherCallerCannotSpendSignature() public {
+        IOrchestratorV4.SignalIntentParams memory params = _signedDefaultParams();
+        vm.prank(makeAddr("griefer"));
+        vm.expectRevert(IntentSignalPolicyV2.InvalidSignature.selector);
+        policyV2.validateSignalIntent(taker, params);
+
+        _signalRaw(taker, params);
+        assertTrue(policyV2.usedMessageHashes(_gatingMessageHash(taker, params, params.signatureExpiration)));
+    }
+
+    function _signedDefaultParams() internal view returns (IOrchestratorV4.SignalIntentParams memory params) {
+        params = _defaultParams();
+        params.gatingServiceSignature = _gatingSignature(gatingServiceKey, taker, params, params.signatureExpiration);
+    }
+
     function _gateWithNewGroup() internal returns (bytes32 groupId) {
         IAddressGroupRegistry groupRegistry = whitelist.groupRegistry();
         address[] memory members = new address[](1);

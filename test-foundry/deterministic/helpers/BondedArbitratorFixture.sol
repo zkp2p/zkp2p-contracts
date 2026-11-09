@@ -6,6 +6,7 @@ import {BondedArbitrator} from "contracts/BondedArbitrator.sol";
 import {IntentSignalPolicyV2} from "contracts/hooks/IntentSignalPolicyV2.sol";
 import {IBondedArbitrator} from "contracts/interfaces/IBondedArbitrator.sol";
 import {INonPaymentVerifier} from "contracts/interfaces/INonPaymentVerifier.sol";
+import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {NonPaymentVerifier} from "contracts/unifiedVerifier/NonPaymentVerifier.sol";
 
 abstract contract BondedArbitratorFixture is DisputeProtectionStackV2Fixture {
@@ -31,6 +32,12 @@ abstract contract BondedArbitratorFixture is DisputeProtectionStackV2Fixture {
         _stake(vault, treasury, BOND);
         vm.prank(treasury);
         arbitrator.setOperator(operator, 500e6);
+    }
+
+    /// @dev IntentSignalPolicyV2 admits each gating signature once, so each intent signs its own expiration.
+    function _defaultParams() internal view virtual override returns (IOrchestratorV4.SignalIntentParams memory params) {
+        params = super._defaultParams();
+        params.signatureExpiration += orchestrator.intentCounter();
     }
 
     function _release(bytes32 _txIdHash) internal returns (bytes32 id) {

@@ -12,13 +12,14 @@ import { ReferralFeeLib } from "../lib/ReferralFeeLib.sol";
 
 /**
  * @title IntentSignalPolicyV2
- * @notice OrchestratorV4 signal policy. Admits a taker through the deposit's whitelist with the gating service's
- * signature, and names the arbitrator of the group the taker signals through, or the default arbitrator when no
- * group arbitrator applies.
+ * @notice OrchestratorV4 signal policy. Admits a taker through the deposit's whitelist with a single-use gating
+ * service signature, and names the arbitrator of the group the taker signals through, or the default arbitrator when
+ * no group arbitrator applies.
  * @dev IntentSignalPolicy plus a default arbitrator, e.g. BondedArbitrator, so public intents can be released against
- * locked stake. The signature covers the payer commitment, so only the gating service can vouch that the committed
- * payer belongs to the taker. Configuration is immutable; governance changes it by selecting a new policy on the
- * orchestrator.
+ * locked stake, and a record of admitted gating messages, so each signature opens one intent and the gating service's
+ * open-intent caps bound on-chain intents. The signature covers the payer commitment, so only the gating service can
+ * vouch that the committed payer belongs to the taker. Configuration is immutable; governance changes it by selecting
+ * a new policy on the orchestrator.
  */
 contract IntentSignalPolicyV2 is IIntentSignalPolicy {
     using ECDSA for bytes32;
@@ -29,12 +30,15 @@ contract IntentSignalPolicyV2 is IIntentSignalPolicy {
     error TakerNotWhitelisted(address escrow, uint256 depositId, bytes32 paymentMethod, address taker);
     error SignatureExpired(uint256 expiration, uint256 currentTime);
     error InvalidSignature();
+    error SignatureAlreadyUsed(bytes32 messageHash);
 
     /* ============ State Variables ============ */
 
     address public immutable gatingService;                 // Signer whose signature every intent needs
     IWhitelistPolicyV2 public immutable whitelistPolicy;    // Per-deposit taker whitelists and their groups
     address public immutable defaultArbitrator;             // Arbitrator when no group arbitrator applies; zero = none
+
+    mapping(bytes32 => bool) public usedMessageHashes;      // Gating messages that already admitted an intent
 
     /* ============ Constructor ============ */
 
@@ -48,11 +52,11 @@ contract IntentSignalPolicyV2 is IIntentSignalPolicy {
 
     /**
      * @inheritdoc IIntentSignalPolicy
-     * @dev Verifies O3's gating message for the calling orchestrator, with the payer commitment appended.
+     * @dev Verifies O3's gating message for the calling orchestrator, with the payer commitment appended, and spends
+     * it. The message binds the calling orchestrator and the taker, so only that taker's signal can spend it.
      */
     function validateSignalIntent(address _taker, IOrchestratorV4.SignalIntentParams calldata _params)
         external
-        view
         override
         returns (bool takerWhitelisted, address arbitrator)
     {
@@ -87,8 +91,11 @@ contract IntentSignalPolicyV2 is IIntentSignalPolicy {
             _params.payerCommitment
         );
 
-        bytes32 verifierPayload = keccak256(message).toEthSignedMessageHash();
-        if (!gatingService.isValidSignatureNow(verifierPayload, _params.gatingServiceSignature)) {
+        bytes32 messageHash = keccak256(message);
+        if (usedMessageHashes[messageHash]) revert SignatureAlreadyUsed(messageHash);
+        usedMessageHashes[messageHash] = true;
+
+        if (!gatingService.isValidSignatureNow(messageHash.toEthSignedMessageHash(), _params.gatingServiceSignature)) {
             revert InvalidSignature();
         }
     }
