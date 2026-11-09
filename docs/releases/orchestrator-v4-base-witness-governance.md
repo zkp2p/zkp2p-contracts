@@ -23,7 +23,8 @@ The sole accepted current state is the ordered list
   config, all contracts, `hardhat.config.ts`, the source verifier, and
   `deployments/canonicalDeployment.ts`. They must equal deployed source
   `526f81d2ea53f2045b821931b21f7b7e8f15a2c4`, which must remain an ancestor of HEAD.
-  The source paths at the task base `2ee9839` match that deployment.
+  The sole Base documentation exception is the exact path `contracts/archive/README.md`,
+  which records O3 retirement. No other source path is exempt; staging remains exact.
 
 The embedded configuration and baseline in the output manifest describe the
 original two-witness deployment. They are deliberately unchanged. Replacing those
@@ -70,6 +71,29 @@ is accepted only by the original historical baseline API, used for deployment
 fixtures and historical rehearsals. The active Base CLI gate requires the record
 and rejects that old list. Its separate `.verification` receipt records the new
 check without rewriting historical evidence.
+
+## Verification after O3 retirement
+
+The active Base gate also requires O3 `0x014025fDE093f8701d86e9f38e2C3a9b779cb5c7`
+to remain unregistered and O4 `0x74c55679268FAfB493864915aD16A320AB8c40Ba` to remain
+registered. The retirement is pinned to Safe nonce 94, transaction
+`0x85b7c40b779350cdeb6890f84d72375588e1bf930f9fdcd8eeea97aa4ea60dfc`, block
+53550556 (2026-11-05 14:54:19 UTC). Verification checks the canonical successful
+receipt, exact registry removal and Safe success logs, and rejects any further
+registry membership changes through the inspection block. O3 pause, hook, wiring,
+fees and every other baseline check remain exact.
+
+Use the same two-commit pin procedure above. Only the Base manifest's top-level
+`verificationToolCommit` advances; deployment source, configuration, addresses,
+baseline and activation evidence stay byte-identical. The local `.verification`
+receipt records `predecessorPreserved: false` and `predecessorRetirement` with the
+authenticated evidence. Staging and historical execution paths do not receive
+the retirement allowance.
+
+Attestation consumers must pin the recording commit, vendor the updated Base
+manifest and refresh its digest. Any consumer that independently checks protected
+source paths must apply the same exact README exception; a contracts tool pin alone
+cannot bypass a consumer's earlier source check.
 
 ## Other witness pins found
 

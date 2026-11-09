@@ -19,6 +19,10 @@ export function assertReleaseProvenance(sourceCommit: string, executionToolCommi
     execFileSync("git", ["merge-base", "--is-ancestor", commit, "HEAD"], { stdio: "pipe" });
   }
   execFileSync("git", ["diff", "--exit-code", "HEAD", "--", ...paths.deployed, ...paths.execution], { stdio: "pipe" });
-  execFileSync("git", ["diff", "--exit-code", sourceCommit, "HEAD", "--", ...paths.deployed], { stdio: "pipe" });
+  const sourceChanges = execFileSync("git", ["diff", "--name-only", "--no-renames", "-z", sourceCommit, "HEAD", "--", ...paths.deployed], { encoding: "utf8" }).split("\0").filter(Boolean);
+  // Only this Base retirement document may differ. Keep every other path, including
+  // files beneath a directory named README.md, bound to the deployed source.
+  const protectedChanges = sourceChanges.filter((path) => environment !== "base" || path !== "contracts/archive/README.md");
+  if (protectedChanges.length) throw new Error(`Deployment source changed: ${protectedChanges.join(", ")}`);
   execFileSync("git", ["diff", "--exit-code", toolCommit, "HEAD", "--", ...paths.execution], { stdio: "pipe" });
 }

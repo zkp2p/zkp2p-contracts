@@ -7,7 +7,7 @@ import type { HardhatRuntimeEnvironment } from "hardhat/types";
 import { SourceVerificationError, verifySources } from "./verify-orchestrator-v4-source";
 import { zeroImmutableValues } from "../deployments/canonicalDeployment";
 import { BASE_GOVERNANCE_CHANGES, assertReleaseProvenance, releasePaths } from "./orchestrator-v4-provenance";
-import { verifyBaseWitnessChange } from "./orchestrator-v4-governance";
+import { verifyBaseO3Retirement, verifyBaseWitnessChange } from "./orchestrator-v4-governance";
 import { RETIRED_DEPLOYERS } from "../utils/deployerKeys";
 
 const ZERO = constants.AddressZero;
@@ -615,8 +615,10 @@ export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: Trans
   const snapshot = await inspect(hre, c);
   if (active || c.environment === "base") assertRegistryOwnership(snapshot);
   const witnessChange = baseWitnessChange === undefined ? undefined : await verifyBaseWitnessChange(hre.ethers.provider, c, snapshot, baseWitnessChange);
+  const retirement = witnessChange ? await verifyBaseO3Retirement(hre.ethers.provider, c, snapshot, m.contracts.OrchestratorV4?.address ?? "") : undefined;
   // Preserve the hashed deployment configuration and compare every other field unchanged.
-  assertBaseline(witnessChange ? { ...c, attestationWitnesses: witnessChange.witnesses } : c, snapshot, m);
+  const baselineSnapshot = retirement ? { ...snapshot, predecessor: { ...snapshot.predecessor, registered: true } } : snapshot;
+  assertBaseline(witnessChange ? { ...c, attestationWitnesses: witnessChange.witnesses } : c, baselineSnapshot, m);
   const contracts = {} as Record<NewName, Contract>;
   for (const name of Object.keys(NEW_CONTRACTS) as NewName[]) {
     if (c.environment === "base" && name === "UnifiedPaymentVerifierV4") continue;
@@ -657,7 +659,8 @@ export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: Trans
     if (c.environment === "base_staging") check(equal(snapshot.nullifierWriters, [v.address]), "UPV4 must be the only payment nullifier writer");
     check(equal(snapshot.disputeWriters, [...c.retainedDisputeWriters, p.address]), "Policy writer missing or predecessor writer changed");
   }
-  m.verification = { ...m.verification, verifiedAtBlock: snapshot.blockNumber, active, bytecode: true, constructors: true, wiring: true, newContractOwnership: true, governance: snapshot.requiredOwnershipChanges.length === 0, pendingRegistryOwnership: snapshot.requiredOwnershipChanges, paymentCatalog: true, escrowCompatible: true, predecessorPreserved: true };
+  m.verification = { ...m.verification, verifiedAtBlock: snapshot.blockNumber, active, bytecode: true, constructors: true, wiring: true, newContractOwnership: true, governance: snapshot.requiredOwnershipChanges.length === 0, pendingRegistryOwnership: snapshot.requiredOwnershipChanges, paymentCatalog: true, escrowCompatible: true, predecessorPreserved: !retirement };
+  if (retirement) m.verification.predecessorRetirement = retirement;
   if (witnessChange) m.verification.witnessGovernance = witnessChange;
   journal.save();
 }
