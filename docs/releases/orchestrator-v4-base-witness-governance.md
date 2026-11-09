@@ -1,4 +1,4 @@
-# Base O4 verification after the Support KMS witness addition
+# Base O4 verification after witness migration and registry retirements
 
 On 2026-11-04 at 15:26:49 UTC, Base Safe
 `0x0bC26FF515411396DD588Abd6Ef6846E04470227`, nonce 92, executed
@@ -7,10 +7,12 @@ Transaction `0x071e79c3329b5f08b364e937ad9adb8a60233c98eebe9f9fb6c65554197f011c`
 landed at block 53508331. The verifier is
 `0x9Fe920b24e50e6a6362BA71a1BeB502A99c402d5`.
 
-The sole accepted current state is the ordered list
-`[0xDB4Ed7FAF170F0f6493E3adaaCaaFaF47092c754,
-0xE078D93bFdd87A8c5C5cCA5905DCbA0Dd7A1F0BD,
-0x7f814Afbd0Baf3932FA20Cb76b414007B0bADa8C]`, threshold `1`.
+Safe nonce 93 completed the planned KMS witness migration by removing
+`0xDB4Ed7FAF170F0f6493E3adaaCaaFaF47092c754`. The sole accepted current state is
+`[0x7f814Afbd0Baf3932FA20Cb76b414007B0bADa8C,
+0xE078D93bFdd87A8c5C5cCA5905DCbA0Dd7A1F0BD]`, in that order, threshold `1`,
+owned by the same Safe. These exact addresses, order, threshold and owner were
+read from the public Base RPC. The earlier two- and three-witness states fail.
 
 ## Deployment provenance stays immutable
 
@@ -55,22 +57,33 @@ CLI verification must load the record; missing evidence is an error. It is not
 PR #384's optional staging allowance, and does not enable its policy/writer changes.
 
 The checker requires the recorded chain, verifier, Safe, complete ordered list,
-threshold and current verifier owner. The result must be exactly the original
-baseline plus the recorded addition. It checks the successful transaction receipt,
-its exact block and block hash, canonical block identity, and the exact
-`WitnessAdded` and Safe `ExecutionSuccess` logs from their pinned emitters.
-It derives the Safe EIP-712 hash from `addWitness`, nonce 92, the target, CALL
-operation, zero value and zero fee fields. This authenticates the inner Safe call
-even though the outer transaction targets a relayer. The live snapshot is pinned
-to one block by `inspect`; all other baseline, bytecode, constructor, role, route,
-writer, fee and privacy checks remain in place.
+threshold and current verifier owner. The addition record is preserved, with a
+mandatory `removal` record appended. The resulting list is derived by the
+verifier's EnumerableSet swap-and-pop removal, not accepted as an arbitrary list.
+Both successful receipts must match their transaction hash, block number and
+canonical block hash, with exact witness and Safe `ExecutionSuccess` logs.
+For each witness call the checker derives the Safe EIP-712 hash from its method,
+witness, nonce, target, CALL operation, zero value and zero fee fields.
 
-The current three-witness list, extra witnesses, altered order, threshold changes,
-and malformed governance evidence have focused regression coverage. The old list
-is accepted only by the original historical baseline API, used for deployment
-fixtures and historical rehearsals. The active Base CLI gate requires the record
-and rejects that old list. Its separate `.verification` receipt records the new
-check without rewriting historical evidence.
+| Witness event | Safe nonce | Block | Transaction |
+| --- | --- | --- | --- |
+| Add `0x7f814Afbd0Baf3932FA20Cb76b414007B0bADa8C` | 92 | 53508331 | `0x071e79c3329b5f08b364e937ad9adb8a60233c98eebe9f9fb6c65554197f011c` |
+| Remove `0xDB4Ed7FAF170F0f6493E3adaaCaaFaF47092c754` | 93 | 53544480 | `0xad69646909c5e4d3b049e7403bbf8eac8a9810604a2ac615ab323cdb24ec321b` |
+
+Nonce 93's canonical block hash is
+`0xbde61ac7dbc9ba76bfb18aeb7c1847684f787b15b145a4a73ed8388315e6d3be`;
+its Safe transaction hash is
+`0x2145a47ae1b3e6594daf9f3a4e514dcdb31cf594b1c268c62a906bae3403d137`.
+The verifier's complete witness-add/remove, threshold and ownership event stream
+from the addition block through the current inspection head must contain exactly
+the two recorded witness logs. Extra events fail even when the resulting state
+is restored. Scans use contiguous ranges of at most 50,000 blocks and include
+the head. RPC errors fail verification; they do not skip evidence.
+
+The live snapshot is pinned to one block by `inspect`. All other baseline,
+bytecode, constructor, role, route, writer, fee and privacy checks remain in
+place. The separate `.verification` receipt records current governance evidence
+without rewriting the historical deployment manifest.
 
 ## Verification after O3 retirement
 
@@ -78,10 +91,36 @@ The active Base gate also requires O3 `0x014025fDE093f8701d86e9f38e2C3a9b779cb5c
 to remain unregistered and O4 `0x74c55679268FAfB493864915aD16A320AB8c40Ba` to remain
 registered. The retirement is pinned to Safe nonce 94, transaction
 `0x85b7c40b779350cdeb6890f84d72375588e1bf930f9fdcd8eeea97aa4ea60dfc`, block
-53550556 (2026-11-05 14:54:19 UTC). Verification checks the canonical successful
-receipt, exact registry removal and Safe success logs, and rejects any further
-registry membership changes through the inspection block. O3 pause, hook, wiring,
-fees and every other baseline check remain exact.
+53550556 (2026-11-05 14:54:19 UTC). Two subsequent, human-confirmed governance
+transactions are now mandatory history:
+
+| Purpose | Safe nonce | Block | Transaction |
+| --- | --- | --- | --- |
+| Atomic stuck-deposit drain: add O3, then remove O3 in the same transaction | 95 | 54173646 | `0x497b6d78199baebce6c1b1c9adcc4b6c2c8422e348e67c63fb85a93eab9a505c` |
+| Remove legacy orchestrator `0x88888883Ed048FF0a415271B28b2F52d431810D0` after the 2026-11-07 abuse | 96 | 54199685 | `0x825754eb601dd1ffe71a03c918508421ec9a2a15533f4a5ee195c548e40dfe20` |
+
+Nonce 95 has canonical block hash
+`0x35d191318b3f5ed9ba8475660181ab3e4a96f7ccb63d2d51f157b41035cecd81`
+and Safe transaction hash
+`0x27c3e24e1d1c91afa353660e91a26c623a8b497f8a7eee274c0bed05f0580c33`.
+O3's add and remove logs have indices 9 and 100. Its outer transaction targets
+the relayer `0x781388759EacB9892f60D77D9A99c9BE2F7F4ada`; the Safe's own
+success event authenticates execution. O3 was registered only within this
+transaction, not at either block boundary.
+
+Nonce 96 has canonical block hash
+`0xbbc8b569470b4b35c6321719d2ec53b0a535f6b01f6c6519cae4ede1978fe8e3`
+and Safe transaction hash
+`0x5a0edfe3396da88550e2c01223a187b31c776ac6b916794857807423530a9c48`.
+The legacy removal log has index 7. The current legacy registration must be false.
+
+Verification authenticates all three canonical successful receipts, registry
+logs and Safe success logs. The complete registry add/remove event stream from
+the nonce-94 checkpoint through the inspection head must equal exactly these
+four logs: O3 removal, atomic O3 addition/removal, legacy removal. Any other
+member mutation, transaction/block substitution, duplicate, missing event, or
+later add/remove cycle fails. O4 registration remains mandatory. O3 pause, hook,
+wiring, fees and every other baseline check remain exact.
 
 Use the same two-commit pin procedure above. Only the Base manifest's top-level
 `verificationToolCommit` advances; deployment source, configuration, addresses,
@@ -117,37 +156,11 @@ cannot bypass a consumer's earlier source check.
   default containing DB4Ed7 alone, not the current O4 trust source. The canonical
   MultiAttestationVerifier deployment record preserves its constructor arguments.
 
-## Follow-up after removing DB4Ed7
-
-Do not pre-authorize the two-witness state. After an approved Safe transaction
-executes `removeWitness(0xDB4Ed7FAF170F0f6493E3adaaCaaFaF47092c754)`:
-
-1. Record its transaction hash, canonical block/hash, Safe nonce and Safe hash.
-   Preserve the addition record as historical evidence.
-2. Extend the checker to authenticate that exact `removeWitness` Safe call and
-   `WitnessRemoved` log, and its transition from the recorded three-witness state.
-   The only resulting order is `[0x7f814Afbd0Baf3932FA20Cb76b414007B0bADa8C,
-   0xE078D93bFdd87A8c5C5cCA5905DCbA0Dd7A1F0BD]` because EnumerableSet swaps the
-   last entry into DB4Ed7's removed slot. Threshold remains `1`.
-3. Make the removal result mandatory; reject the old three-witness state,
-   different order, extra witnesses, changed threshold and missing/reverted or
-   mismatched removal evidence. Run the O4 release specs and a fresh live check.
-4. Commit the tool/record change, then advance only the output manifest's
-   `verificationToolCommit` in a recording commit. Preserve `base.json`, deployed
-   `sourceCommit`, configuration/hash and baseline. Re-pin downstream evidence.
-
 ## Attestation-service handoff
 
-Read-only inspection of fetched `attestation-service` `origin/main` and
-`origin/kohai/nonpayment-attestation` found **only a staging canonical gate**:
-`deploy/verify-staging-contracts.cjs` hardcodes `base_staging` for the config,
-manifest comparison and command. `deploy/nitro/README.md` documents that staging
-gate. Main pins `69dbf0d`; the nonpayment branch pins PR #384's `a750273`.
-Neither inspected ref has a production O4 gate to repair by changing those fields
-alone. Do not replace the existing staging pin with this Base pin.
-
-For a production gate on another ref, or a separately implemented Base gate,
-apply the README's same exact-checkout protocol to the production environment:
+For peer-infra's **prod** contracts entry and attestation-service's production
+wrapper, use this exact-checkout protocol. This change does not update either
+consumer; no remote repository or service access is needed for the handoff.
 
 - Set that production contracts entry's `verificationToolCommit` to this change's
   **recording commit**, not the implementation commit.
@@ -163,6 +176,12 @@ apply the README's same exact-checkout protocol to the production environment:
   and immutable dependencies. Check byte equality of the vendored Base manifest,
   then run `HARDHAT_CONFIG=hardhat.readonly.config.ts yarn deploy:orchestrator-v4 base verify`.
   The production wrapper must select `base` in every config/manifest/path check.
+  Its independent deployed-source comparison must allow only the exact
+  `contracts/archive/README.md` documentation exception for Base, while preserving
+  all executable-source checks and staging behavior. The wrapper must use a
+  provider-only configuration with empty accounts; for public-RPC runs disable
+  dotenv loading and override Base to `https://base-rpc.publicnode.com` or
+  `https://mainnet.base.org`. No credentials or signing are needed.
   Do not skip deployed-source comparisons against the package's source: if a
   staging-only artifact pin differs on protected Base paths, it needs a compatible
   production provenance entry, not a bypass.

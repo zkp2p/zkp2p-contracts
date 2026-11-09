@@ -863,28 +863,42 @@ function witnessGovernanceFixture() {
   const manifest = JSON.parse(readFileSync("deployments/outputs/orchestrator-v4-base.json", "utf8"));
   const change = JSON.parse(readFileSync(BASE_GOVERNANCE_CHANGES, "utf8"));
   const snapshot = structuredClone(manifest.baseline);
-  snapshot.blockNumber = change.blockNumber;
-  snapshot.attestation = { witnesses: [...change.witnesses], threshold: change.threshold };
-  const verifier = new utils.Interface(["event WitnessAdded(address indexed witness)"]);
+  snapshot.blockNumber = change.removal.blockNumber + 100001;
+  snapshot.attestation = { witnesses: [...change.removal.witnesses], threshold: change.threshold };
+  const verifier = new utils.Interface(["event WitnessAdded(address indexed witness)", "event WitnessRemoved(address indexed witness)", "event RequiredSignaturesUpdated(uint256 previousThreshold,uint256 newThreshold)", "event OwnershipTransferred(address indexed previousOwner,address indexed newOwner)"]);
   const safe = new utils.Interface(["event ExecutionSuccess(bytes32 txHash,uint256 payment)"]);
-  const receipt = {
-    status: 1, transactionHash: change.transactionHash, blockNumber: change.blockNumber, blockHash: change.blockHash,
+  const receiptFor = (record, event, witness, logIndex) => ({
+    status: 1, transactionHash: record.transactionHash, blockNumber: record.blockNumber, blockHash: record.blockHash,
     logs: [
-      { address: change.verifier, ...verifier.encodeEventLog(verifier.getEvent("WitnessAdded"), [change.addedWitness]) },
-      { address: change.safe, ...safe.encodeEventLog(safe.getEvent("ExecutionSuccess"), [change.safeTransactionHash, 0]) },
+      { address: change.verifier, transactionHash: record.transactionHash, blockNumber: record.blockNumber, blockHash: record.blockHash, logIndex, ...verifier.encodeEventLog(verifier.getEvent(event), [witness]) },
+      { address: change.safe, ...safe.encodeEventLog(safe.getEvent("ExecutionSuccess"), [record.safeTransactionHash, 0]) },
     ],
-  };
-  const block = { hash: change.blockHash };
+  });
+  const receipt = receiptFor(change, "WitnessAdded", change.addedWitness, 1);
+  const removalReceipt = receiptFor(change.removal, "WitnessRemoved", change.removal.removedWitness, 724);
+  const block = { hash: change.blockHash }, removalBlock = { hash: change.removal.blockHash };
+  const history = [structuredClone(receipt.logs[0]), structuredClone(removalReceipt.logs[0])], ranges = [];
   const provider = {
-    getTransactionReceipt: async (hash) => { assert.equal(hash, change.transactionHash); return receipt; },
-    getBlock: async (height) => { assert.equal(height, change.blockNumber); return block; },
+    getTransactionReceipt: async (hash) => hash === change.transactionHash ? receipt : hash === change.removal.transactionHash ? removalReceipt : null,
+    getBlock: async (height) => height === change.blockNumber ? block : height === change.removal.blockNumber ? removalBlock : null,
+    getLogs: async (filter) => {
+      assert.equal(filter.address, change.verifier);
+      assert.deepEqual(filter.topics, [["WitnessAdded", "WitnessRemoved", "RequiredSignaturesUpdated", "OwnershipTransferred"].map(event => verifier.getEventTopic(event))]);
+      assert.ok(filter.toBlock - filter.fromBlock < 50000);
+      ranges.push([filter.fromBlock, filter.toBlock]);
+      return history.filter(log => log.blockNumber >= filter.fromBlock && log.blockNumber <= filter.toBlock);
+    },
   };
-  return { config, manifest, change, snapshot, receipt, block, provider };
+  return { config, manifest, change, snapshot, receipt, block, provider, removalReceipt, removalBlock, history, ranges, verifier };
 }
 
-test("executed Base Support witness add passes without changing the hashed deployment baseline", async () => {
+test("executed Base KMS witness migration passes without changing the hashed deployment baseline", async () => {
   const f = witnessGovernanceFixture(), before = JSON.stringify(f.config);
   const change = await verifyBaseWitnessChange(f.provider, f.config, f.snapshot, f.change);
+  assert.deepEqual(change.witnesses, f.change.removal.witnesses);
+  assert.equal(f.ranges[0][0], f.change.blockNumber);
+  assert.equal(f.ranges.at(-1)[1], f.snapshot.blockNumber);
+  for (let i = 1; i < f.ranges.length; i++) assert.equal(f.ranges[i][0], f.ranges[i - 1][1] + 1);
   const current = { ...f.config, attestationWitnesses: change.witnesses };
   assertBaseline(current, f.snapshot, f.manifest);
   assert.equal(JSON.stringify(f.config), before);
@@ -909,7 +923,7 @@ for (const [name, mutate, error] of [
   ["extra unknown witness", (f) => f.snapshot.attestation.witnesses.push(other), /Live witnesses differ/],
   ["reordered witnesses", (f) => f.snapshot.attestation.witnesses.reverse(), /Live witnesses differ/],
   ["changed threshold", (f) => { f.snapshot.attestation.threshold = "2"; }, /threshold changed/],
-  ["unexecuted future removal", (f) => { f.snapshot.attestation.witnesses = [f.change.addedWitness, f.config.attestationWitnesses[1]]; }, /Live witnesses differ/],
+  ["old three-witness set", (f) => { f.snapshot.attestation.witnesses = [...f.change.witnesses]; }, /Live witnesses differ/],
   ["old set", (f) => { f.snapshot.attestation.witnesses = f.config.attestationWitnesses; }, /Live witnesses differ/],
   ["missing record", (f) => { f.change = undefined; }, /record is required/],
   ["staging environment", (f) => { f.config.environment = "base_staging"; }, /environment mismatch/],
@@ -919,8 +933,8 @@ for (const [name, mutate, error] of [
   ["changed owner", (f) => { f.snapshot.contracts.MultiAttestationVerifier.owner = other; }, /owner changed/],
   ["arbitrary recorded witnesses", (f) => f.change.witnesses.push(other), /exactly the baseline/],
   ["recorded threshold change", (f) => { f.change.threshold = "2"; }, /cannot change the threshold/],
-  ["future receipt", (f) => { f.snapshot.blockNumber--; }, /block mismatch/],
-  ["wrong Safe nonce", (f) => { f.change.safeNonce++; }, /Safe call or nonce mismatch/],
+  ["future receipt", (f) => { f.snapshot.blockNumber = f.change.blockNumber - 1; }, /block mismatch/],
+  ["wrong Safe nonce", (f) => { f.change.safeNonce++; }, /nonce/],
   ["wrong Safe call hash", (f) => { f.change.safeTransactionHash = constants.HashZero; }, /Safe call or nonce mismatch/],
   ["reverted transaction", (f) => { f.receipt.status = 0; }, /receipt mismatch/],
   ["missing transaction", (f) => { f.provider.getTransactionReceipt = async () => null; }, /receipt mismatch/],
@@ -934,6 +948,37 @@ for (const [name, mutate, error] of [
   ["forged Safe emitter", (f) => { f.receipt.logs[1].address = other; }, /exact Safe ExecutionSuccess/],
   ["different successful Safe call", (f) => { f.receipt.logs[1].data = utils.defaultAbiCoder.encode(["bytes32", "uint256"], [constants.HashZero, 0]); }, /exact Safe ExecutionSuccess/],
 ]) test(`Base governance witness gate rejects ${name}`, async () => {
+  const f = witnessGovernanceFixture(); mutate(f);
+  await assert.rejects(verifyBaseWitnessChange(f.provider, f.config, f.snapshot, f.change), error);
+});
+
+for (const [name, mutate, error] of [
+  ["missing removal record", f => { delete f.change.removal; }, /removal record/],
+  ["pre-removal snapshot", f => { f.snapshot.blockNumber = f.change.removal.blockNumber - 1; }, /removal block/],
+  ["removal before addition", f => { f.change.removal.blockNumber = f.change.blockNumber; }, /removal block/],
+  ["different removed witness", f => { f.change.removal.removedWitness = other; }, /removed witness/],
+  ["incorrect removal result", f => { f.change.removal.witnesses.reverse(); }, /removal witnesses/],
+  ["removal threshold change", f => { f.change.removal.threshold = "2"; }, /threshold/],
+  ["wrong removal nonce", f => { f.change.removal.safeNonce++; }, /Safe call or nonce/],
+  ["missing removal receipt", f => { const get = f.provider.getTransactionReceipt; f.provider.getTransactionReceipt = h => h === f.change.removal.transactionHash ? null : get(h); }, /receipt mismatch/],
+  ["reverted removal", f => { f.removalReceipt.status = 0; }, /receipt mismatch/],
+  ["wrong removal transaction", f => { f.removalReceipt.transactionHash = constants.HashZero; }, /receipt mismatch/],
+  ["wrong removal block", f => { f.removalReceipt.blockNumber++; }, /receipt mismatch/],
+  ["wrong removal block hash", f => { f.removalReceipt.blockHash = constants.HashZero; }, /receipt mismatch/],
+  ["noncanonical removal", f => { f.removalBlock.hash = constants.HashZero; }, /not canonical/],
+  ["wrong removal emitter", f => { f.removalReceipt.logs[0].address = other; }, /exact WitnessRemoved/],
+  ["wrong removed event witness", f => { f.removalReceipt.logs[0].topics[1] = utils.hexZeroPad(other, 32); }, /exact WitnessRemoved/],
+  ["duplicate removal", f => { f.removalReceipt.logs.push(f.removalReceipt.logs[0]); }, /exact WitnessRemoved/],
+  ["missing removal Safe success", f => { f.removalReceipt.logs.pop(); }, /Safe ExecutionSuccess/],
+  ["wrong removal Safe hash", f => { f.removalReceipt.logs[1].data = utils.defaultAbiCoder.encode(["bytes32", "uint256"], [constants.HashZero, 0]); }, /Safe ExecutionSuccess/],
+  ["missing witness history", f => { f.history.pop(); }, /Unexpected Base witness/],
+  ["history transaction substitution", f => { f.history[1].transactionHash = constants.HashZero; }, /Unexpected Base witness/],
+  ["history block substitution", f => { f.history[1].blockNumber++; }, /Unexpected Base witness/],
+  ["history log substitution", f => { f.history[1].logIndex++; }, /Unexpected Base witness/],
+  ["later add/remove cycle", f => { for (const event of ["WitnessAdded", "WitnessRemoved"]) f.history.push({ ...f.history[1], blockNumber: f.snapshot.blockNumber, ...f.verifier.encodeEventLog(f.verifier.getEvent(event), [other]) }); }, /Unexpected Base witness/],
+  ["later threshold change", f => { f.history.push({ ...f.history[1], blockNumber: f.snapshot.blockNumber, ...f.verifier.encodeEventLog(f.verifier.getEvent("RequiredSignaturesUpdated"), [1, 2]) }); }, /Unexpected Base witness/],
+  ["later ownership change", f => { f.history.push({ ...f.history[1], blockNumber: f.snapshot.blockNumber, ...f.verifier.encodeEventLog(f.verifier.getEvent("OwnershipTransferred"), [f.change.safe, other]) }); }, /Unexpected Base witness/],
+]) test(`Base witness migration rejects ${name}`, async () => {
   const f = witnessGovernanceFixture(); mutate(f);
   await assert.rejects(verifyBaseWitnessChange(f.provider, f.config, f.snapshot, f.change), error);
 });

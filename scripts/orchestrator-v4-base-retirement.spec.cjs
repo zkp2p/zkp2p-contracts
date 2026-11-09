@@ -20,6 +20,32 @@ const retirement = {
   transactionHash: "0x85b7c40b779350cdeb6890f84d72375588e1bf930f9fdcd8eeea97aa4ea60dfc",
   blockNumber: 53550556,
   blockHash: "0xe331521b6087f609d6cb148a186a143fd22693bfd43058295d3473ad55070181",
+  legacyOrchestrator: "0x88888883Ed048FF0a415271B28b2F52d431810D0",
+  followupTransactions: [
+    {
+      transactionHash: "0x497b6d78199baebce6c1b1c9adcc4b6c2c8422e348e67c63fb85a93eab9a505c",
+      blockNumber: 54173646,
+      blockHash: "0x35d191318b3f5ed9ba8475660181ab3e4a96f7ccb63d2d51f157b41035cecd81",
+      safeNonce: 95,
+      safeTransactionHash: "0x27c3e24e1d1c91afa353660e91a26c623a8b497f8a7eee274c0bed05f0580c33",
+      transactionTarget: "0x781388759EacB9892f60D77D9A99c9BE2F7F4ada",
+      events: [
+        { event: "OrchestratorAdded", orchestrator: "0x014025fDE093f8701d86e9f38e2C3a9b779cb5c7", logIndex: 9 },
+        { event: "OrchestratorRemoved", orchestrator: "0x014025fDE093f8701d86e9f38e2C3a9b779cb5c7", logIndex: 100 },
+      ],
+    },
+    {
+      transactionHash: "0x825754eb601dd1ffe71a03c918508421ec9a2a15533f4a5ee195c548e40dfe20",
+      blockNumber: 54199685,
+      blockHash: "0xbbc8b569470b4b35c6321719d2ec53b0a535f6b01f6c6519cae4ede1978fe8e3",
+      safeNonce: 96,
+      safeTransactionHash: "0x5a0edfe3396da88550e2c01223a187b31c776ac6b916794857807423530a9c48",
+      transactionTarget: "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+      events: [
+        { event: "OrchestratorRemoved", orchestrator: "0x88888883Ed048FF0a415271B28b2F52d431810D0", logIndex: 7 },
+      ],
+    },
+  ],
 };
 const registryAbi = new utils.Interface(["function isOrchestrator(address) view returns (bool)", "event OrchestratorRemoved(address indexed orchestrator)", "event OrchestratorAdded(address indexed orchestrator)"]);
 const safeAbi = new utils.Interface(["event ExecutionSuccess(bytes32 txHash,uint256 payment)"]);
@@ -27,18 +53,25 @@ const other = "0x1111111111111111111111111111111111111111";
 function fixture() {
   const manifest = JSON.parse(readFileSync("deployments/outputs/orchestrator-v4-base.json"));
   const config = manifest.configuration, snapshot = structuredClone(manifest.baseline);
-  snapshot.blockNumber = retirement.blockNumber + 100001;
+  snapshot.blockNumber = retirement.followupTransactions.at(-1).blockNumber + 100001;
   snapshot.predecessor.registered = false;
   const removal = { address: retirement.registry, transactionHash: retirement.transactionHash, blockNumber: retirement.blockNumber, blockHash: retirement.blockHash, logIndex: 828, ...registryAbi.encodeEventLog(registryAbi.getEvent("OrchestratorRemoved"), [retirement.address]) };
   const receipt = { status: 1, to: retirement.safe, transactionHash: retirement.transactionHash, blockNumber: retirement.blockNumber, blockHash: retirement.blockHash, logs: [removal, { address: retirement.safe, ...safeAbi.encodeEventLog(safeAbi.getEvent("ExecutionSuccess"), [retirement.safeTransactionHash, 0]) }] };
-  const f = { manifest, config, snapshot, receipt, block: { hash: retirement.blockHash }, logs: [removal], registered: true, o4: retirement.orchestratorV4, ranges: [] };
+  const followupReceipts = retirement.followupTransactions.map(r => ({
+    status: 1, to: r.transactionTarget, transactionHash: r.transactionHash, blockNumber: r.blockNumber, blockHash: r.blockHash,
+    logs: [...r.events.map(e => ({ address: retirement.registry, transactionHash: r.transactionHash, blockNumber: r.blockNumber, blockHash: r.blockHash, logIndex: e.logIndex, ...registryAbi.encodeEventLog(registryAbi.getEvent(e.event), [e.orchestrator]) })),
+      { address: retirement.safe, ...safeAbi.encodeEventLog(safeAbi.getEvent("ExecutionSuccess"), [r.safeTransactionHash, 0]) }],
+  }));
+  const followupBlocks = retirement.followupTransactions.map(r => ({ hash: r.blockHash }));
+  const f = { manifest, config, snapshot, receipt, followupReceipts, followupBlocks, legacyRegistered: false, block: { hash: retirement.blockHash }, logs: [structuredClone(removal), ...followupReceipts.flatMap(r => structuredClone(r.logs.slice(0, -1)))], registered: true, o4: retirement.orchestratorV4, ranges: [] };
   f.provider = {
-    getTransactionReceipt: async (hash) => { assert.equal(hash, retirement.transactionHash); return f.receipt; },
-    getBlock: async (height) => { assert.equal(height, retirement.blockNumber); return f.block; },
+    getTransactionReceipt: async (hash) => hash === retirement.transactionHash ? f.receipt : f.followupReceipts[retirement.followupTransactions.findIndex(r => r.transactionHash === hash)],
+    getBlock: async (height) => height === retirement.blockNumber ? f.block : f.followupBlocks[retirement.followupTransactions.findIndex(r => r.blockNumber === height)],
     call: async (request, blockTag) => {
       assert.equal(request.to, retirement.registry); assert.equal(blockTag, snapshot.blockNumber);
-      assert.equal(registryAbi.decodeFunctionData("isOrchestrator", request.data)[0], retirement.orchestratorV4);
-      return registryAbi.encodeFunctionResult("isOrchestrator", [f.registered]);
+      const address = registryAbi.decodeFunctionData("isOrchestrator", request.data)[0];
+      assert.ok([retirement.orchestratorV4, retirement.legacyOrchestrator].includes(address));
+      return registryAbi.encodeFunctionResult("isOrchestrator", [address === retirement.orchestratorV4 ? f.registered : f.legacyRegistered]);
     },
     getLogs: async (filter) => {
       assert.equal(filter.address, retirement.registry);
@@ -52,10 +85,12 @@ function fixture() {
 }
 const verify = (f) => verifyBaseO3Retirement(f.provider, f.config, f.snapshot, f.o4);
 
-test("Base retirement accepts only the executed O3 removal and preserves the deployment baseline", async () => {
+test("Base retirement accepts only the recorded nonce 94-96 events and preserves the deployment baseline", async () => {
   const f = fixture(), before = JSON.stringify(f.manifest);
   assert.deepEqual(await verify(f), retirement);
-  assert.deepEqual(f.ranges, [[53550556, 53600555], [53600556, 53650555], [53650556, 53650557]]);
+  assert.equal(f.ranges[0][0], retirement.blockNumber);
+  assert.equal(f.ranges.at(-1)[1], f.snapshot.blockNumber);
+  for (let i = 1; i < f.ranges.length; i++) assert.equal(f.ranges[i][0], f.ranges[i - 1][1] + 1);
   assert.equal(JSON.stringify(f.manifest), before);
   assert.throws(() => assertBaseline(f.config, f.snapshot, f.manifest), /O3 registration/);
 });
@@ -90,6 +125,32 @@ for (const [name, mutate, error] of [
   ["another removal in the retirement block", (f) => f.logs.push({ ...f.logs[0], logIndex: 829, ...registryAbi.encodeEventLog(registryAbi.getEvent("OrchestratorRemoved"), [other]) }), /Unexpected Base orchestrator registry/],
   ["O3 re-added then removed", (f) => f.logs.push({ ...f.logs[0], blockNumber: f.snapshot.blockNumber - 1, ...registryAbi.encodeEventLog(registryAbi.getEvent("OrchestratorAdded"), [retirement.address]) }, { ...f.logs[0], blockNumber: f.snapshot.blockNumber }), /Unexpected Base orchestrator registry/],
 ]) test(`Base retirement rejects ${name}`, async () => { const f = fixture(); mutate(f); await assert.rejects(verify(f), error); });
+
+for (const [name, mutate, error] of [
+  ["legacy orchestrator still registered", f => { f.legacyRegistered = true; }, /Legacy orchestrator must remain unregistered/],
+  ["snapshot before the final recorded removal", f => { f.snapshot.blockNumber = retirement.followupTransactions[1].blockNumber - 1; }, /predates/],
+  ["missing atomic addition", f => { f.logs.splice(1, 1); }, /Unexpected Base orchestrator/],
+  ["missing atomic removal", f => { f.logs.splice(2, 1); }, /Unexpected Base orchestrator/],
+  ["atomic events reversed", f => { [f.logs[1], f.logs[2]] = [f.logs[2], f.logs[1]]; }, /Unexpected Base orchestrator/],
+  ["atomic removal in another transaction", f => { f.logs[2].transactionHash = constants.HashZero; }, /Unexpected Base orchestrator/],
+  ["legacy removal in another block", f => { f.logs[3].blockNumber++; }, /Unexpected Base orchestrator/],
+  ["unrecorded removal after final event", f => { f.logs.push({ ...f.logs[3], blockNumber: f.snapshot.blockNumber }); }, /Unexpected Base orchestrator/],
+]) test(`Base retirement rejects ${name}`, async () => { const f = fixture(); mutate(f); await assert.rejects(verify(f), error); });
+
+for (const index of [0, 1]) for (const [name, mutate, error] of [
+  ["missing receipt", (f, i) => { f.followupReceipts[i] = null; }, /receipt mismatch/],
+  ["reverted receipt", (f, i) => { f.followupReceipts[i].status = 0; }, /receipt mismatch/],
+  ["wrong tx", (f, i) => { f.followupReceipts[i].transactionHash = constants.HashZero; }, /receipt mismatch/],
+  ["wrong block", (f, i) => { f.followupReceipts[i].blockNumber++; }, /receipt mismatch/],
+  ["wrong block hash", (f, i) => { f.followupReceipts[i].blockHash = constants.HashZero; }, /receipt mismatch/],
+  ["noncanonical block", (f, i) => { f.followupBlocks[i].hash = constants.HashZero; }, /not canonical/],
+  ["wrong emitter", (f, i) => { f.followupReceipts[i].logs[0].address = other; }, /exact registry events/],
+  ["wrong member", (f, i) => { f.followupReceipts[i].logs[0].topics[1] = utils.hexZeroPad(other, 32); }, /exact registry events/],
+  ["wrong event position", (f, i) => { f.followupReceipts[i].logs[0].logIndex++; }, /exact registry events/],
+  ["duplicate event", (f, i) => { f.followupReceipts[i].logs.push(f.followupReceipts[i].logs[0]); }, /exact registry events/],
+  ["missing Safe success", (f, i) => { f.followupReceipts[i].logs.pop(); }, /exact Safe ExecutionSuccess/],
+  ["wrong Safe hash", (f, i) => { f.followupReceipts[i].logs.at(-1).data = safeAbi.encodeEventLog(safeAbi.getEvent("ExecutionSuccess"), [constants.HashZero, 0]).data; }, /exact Safe ExecutionSuccess/],
+]) test(`Base retirement nonce ${95 + index} rejects ${name}`, async () => { const f = fixture(); mutate(f, index); await assert.rejects(verify(f), error); });
 
 test("Base retirement evidence cannot enable staging or passive verification", async () => {
   const f = fixture();

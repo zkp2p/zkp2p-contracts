@@ -24,7 +24,7 @@ no retained test imports it.
 | Source | Superseded by | Why it is retired |
 | --- | --- | --- |
 | `Escrow.sol` | `EscrowV2.sol` | V1 escrow. No new work routes through V1. |
-| `Orchestrator.sol` | `OrchestratorV3.sol` | V1 orchestrator, paired with the V1 escrow. |
+| `Orchestrator.sol` | `OrchestratorV3.sol` | V1 orchestrator, paired with the V1 escrow. Base registration removed after the 2026-11-07 abuse by Safe nonce 96, block 54199685, tx `0x825754eb601dd1ffe71a03c918508421ec9a2a15533f4a5ee195c548e40dfe20`. |
 | `OrchestratorV2.sol` | `OrchestratorV3.sol` | Removed from the Base `OrchestratorRegistry` on 2026-08-27 (Safe nonce 76). |
 | `../OrchestratorV3.sol` (source retained in place) | `OrchestratorV4.sol` | Removed from Base-staging `OrchestratorRegistry` on 2026-11-05, block 53549246, tx `0xadb0b597468f34fa684e21409ee736dcc7779170722ecaacf8032efb052d85cc`. Removed from Base `OrchestratorRegistry` `0xBe9fED15ED7A4B915C03EFcEcb9662739C3382A9` on 2026-11-05 by Safe `0x0bC26FF515411396DD588Abd6Ef6846E04470227` nonce 94, block 53550556, tx `0x85b7c40b779350cdeb6890f84d72375588e1bf930f9fdcd8eeea97aa4ea60dfc`. |
 | `ProtocolViewer.sol`, `interfaces/IProtocolViewer.sol` | `ProtocolViewerV2.sol` | Read helper for the V1 escrow and orchestrator. |
@@ -33,10 +33,18 @@ no retained test imports it.
 | `external/Uint256ArrayUtils.sol` | none | Imported only by `Escrow.sol`. |
 
 The older rows were checked on Base and Base staging on 2026-10-12; the O3 row
-records the 2026-11-05 retirement. Archiving a source does not retire its
-deployments: the Base V1 escrow still holds maker
-deposits, the V1 orchestrator is still registered, and `OrchestratorV2` is
-still registered on Base staging. Resolve registries and routing on-chain
+records the 2026-11-05 retirement and the Base V1 row records nonce 96.
+O3 was temporarily added and removed within the single atomic stuck-deposit drain
+at Safe nonce 95, block 54173646, tx
+`0x497b6d78199baebce6c1b1c9adcc4b6c2c8422e348e67c63fb85a93eab9a505c`.
+It remains unregistered at block boundaries. Exact receipt, block-hash and Safe
+success evidence for nonces 94-96 is pinned in
+`scripts/orchestrator-v4-governance.ts`; the release gate rejects any other
+registry mutation through the inspection head and requires O4 registered.
+
+Archiving a source does not retire its deployments: the Base V1 escrow still
+holds maker deposits. `OrchestratorV2` was still registered on Base staging at
+the older check. Resolve registries and routing on-chain
 before stating what is active.
 
 O3 source and tests stay in place for this non-breaking retirement. Its public package

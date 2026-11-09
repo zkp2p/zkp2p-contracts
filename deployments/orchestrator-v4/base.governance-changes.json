@@ -15,5 +15,18 @@
     "0xE078D93bFdd87A8c5C5cCA5905DCbA0Dd7A1F0BD",
     "0x7f814Afbd0Baf3932FA20Cb76b414007B0bADa8C"
   ],
-  "threshold": "1"
+  "threshold": "1",
+  "removal": {
+    "transactionHash": "0xad69646909c5e4d3b049e7403bbf8eac8a9810604a2ac615ab323cdb24ec321b",
+    "blockNumber": 53544480,
+    "blockHash": "0xbde61ac7dbc9ba76bfb18aeb7c1847684f787b15b145a4a73ed8388315e6d3be",
+    "safeNonce": 93,
+    "safeTransactionHash": "0x2145a47ae1b3e6594daf9f3a4e514dcdb31cf594b1c268c62a906bae3403d137",
+    "removedWitness": "0xDB4Ed7FAF170F0f6493E3adaaCaaFaF47092c754",
+    "witnesses": [
+      "0x7f814Afbd0Baf3932FA20Cb76b414007B0bADa8C",
+      "0xE078D93bFdd87A8c5C5cCA5905DCbA0Dd7A1F0BD"
+    ],
+    "threshold": "1"
+  }
 }
