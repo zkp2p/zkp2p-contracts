@@ -33,9 +33,9 @@ abstract contract BondedArbitratorFixture is DisputeProtectionStackV2Fixture {
         arbitrator.setOperator(operator, 500e6);
     }
 
-    function _release(bytes32 _txIdHash) internal returns (bytes32 id) {
+    function _release() internal returns (bytes32 id) {
         id = _signal(taker, _defaultParams());
-        IBondedArbitrator.PaymentClaim memory claim = _claim(_txIdHash);
+        IBondedArbitrator.PaymentClaim memory claim = _claim(_paymentId(id));
         vm.prank(operator);
         arbitrator.release(id, INTENT_AMOUNT, claim);
     }

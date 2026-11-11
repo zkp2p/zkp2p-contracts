@@ -91,7 +91,9 @@ Important ownership boundaries:
   the OrchestratorV4 arbitrator of public intents; each release locks its bond
   owner's `StakeVaultV2` stake for the rail's dispute window, and the depositor
   takes the unpaid share when `NonPaymentVerifier` accepts an attestor-signed
-  scan of the seller account.
+  scan of the seller account. Every release requires a non-zero platform
+  transaction id hash and nullifies that payment in `NullifierRegistryV2`;
+  the payer hash is optional.
 - `PaymentVerifierRegistry` owns payment-method-to-verifier routing.
 - `OrchestratorRegistry` and `EscrowRegistry` own allowed callers/systems.
 - `NullifierRegistry` and `NullifierRegistryV2` are distinct replay domains.

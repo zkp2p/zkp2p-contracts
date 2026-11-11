@@ -15,7 +15,7 @@ contract BondedArbitratorFuzz is BondedArbitratorFixture {
         uint256 claimed = releaseAmount + bound(_claimedExtra, 0, 1_000e6);
         uint256 received = bound(_received, 0, claimed - 1);
         bytes32 id = _signal(taker, _defaultParams());
-        IBondedArbitrator.PaymentClaim memory claim = _claim(bytes32(0));
+        IBondedArbitrator.PaymentClaim memory claim = _claim(_paymentId(id));
         claim.amount = claimed;
         vm.prank(operator);
         arbitrator.release(id, releaseAmount, claim);

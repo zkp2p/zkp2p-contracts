@@ -14,8 +14,8 @@ interface IBondedArbitrator {
     struct PaymentClaim {
         uint64 paidAfter;      // The payment was sent at or after this time; no earlier than MAX_LOOKBACK before signal
         uint256 amount;        // Fiat amount the evidence shows, in the deposit token's decimals
-        bytes32 payerHash;     // keccak256 of the normalized payer display name; zero when unknown
-        bytes32 txIdHash;      // Platform payment id, hashed as payment attestations hash it; zero when unknown
+        bytes32 payerHash;     // Optional keccak256 of the normalized payer display name; zero when unknown
+        bytes32 txIdHash;      // Required non-zero platform transaction id hash, hashed as payment attestations hash it
         bytes32 evidenceHash;  // Hash of the off-chain evidence, for audit; zero when none
     }
 
@@ -61,6 +61,7 @@ interface IBondedArbitrator {
     error ArbitrationDisabled(bytes32 paymentMethod);
     error UnsupportedToken(address token);
     error InvalidClaimWindow(uint64 paidAfter, uint256 intentTimestamp);
+    /// @notice The claim's required platform transaction id hash is zero.
     error UnidentifiedPayment();
     error ClaimBelowRelease(uint256 amount, uint256 releaseFiatValue);
     error OperatorCapExceeded(address operator, uint256 locked, uint256 cap);
@@ -80,7 +81,7 @@ interface IBondedArbitrator {
      * the payment method's dispute window ends.
      * @param _intentHash Intent naming this contract as arbitrator.
      * @param _releaseAmount Deposit tokens to release; any rest returns to the deposit.
-     * @param _claim Payment the operator relied on.
+     * @param _claim Payment the operator relied on; txIdHash must be non-zero, payerHash is optional.
      */
     function release(bytes32 _intentHash, uint256 _releaseAmount, PaymentClaim calldata _claim) external;
 

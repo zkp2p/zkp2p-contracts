@@ -16,7 +16,8 @@ import {IStakeVaultV2} from "./interfaces/IStakeVaultV2.sol";
 /**
  * @title BondedArbitrator
  * @notice OrchestratorV4 arbitrator that releases an intent only against locked stake. An operator releases funds
- * to the intent recipient and locks the same amount of its bond owner's StakeVaultV2 stake for the payment method's
+ * to the intent recipient against a required platform transaction id and locks the same amount of its bond owner's
+ * StakeVaultV2 stake for the payment method's
  * dispute window. The depositor takes the share of that stake a signed scan of the seller account shows was never
  * paid: all of it when nothing matching arrived, the shortfall when less arrived. Otherwise the stake unlocks at
  * maturity, or earlier when the depositor confirms the payment.
@@ -115,10 +116,8 @@ contract BondedArbitrator is IBondedArbitrator, Ownable2Step, Pausable, Reentran
         });
         releases[_intentHash] = opened;
 
-        // A named payment backs one intent only, across verified fulfilments and arbitrated releases.
-        if (_claim.txIdHash != bytes32(0)) {
-            nullifierRegistry.addNullifier(keccak256(abi.encodePacked(intent.paymentMethod, _claim.txIdHash)), _intentHash);
-        }
+        // The required transaction id backs one intent only, across verified fulfilments and arbitrated releases.
+        nullifierRegistry.addNullifier(keccak256(abi.encodePacked(intent.paymentMethod, _claim.txIdHash)), _intentHash);
         // The vault rejects a zero amount and the escrow rejects more than the intent holds.
         uint64 maturesAt = uint64(block.timestamp) + window;
         stakeVault.lockStake(bondOwner, _lockId(_intentHash), _releaseAmount, maturesAt);
@@ -270,7 +269,7 @@ contract BondedArbitrator is IBondedArbitrator, Ownable2Step, Pausable, Reentran
 
     /* ============ Internal Functions ============ */
 
-    /// @dev The claim must name the payment and cover what is released at the intent's rate.
+    /// @dev The claim must include a non-zero transaction id hash and cover what is released at the intent's rate.
     function _validateClaim(IOrchestratorV4.Intent memory _intent, uint256 _releaseAmount, PaymentClaim calldata _claim)
         internal
         view
@@ -278,7 +277,7 @@ contract BondedArbitrator is IBondedArbitrator, Ownable2Step, Pausable, Reentran
         if (uint256(_claim.paidAfter) + MAX_LOOKBACK < _intent.timestamp || _claim.paidAfter > block.timestamp) {
             revert InvalidClaimWindow(_claim.paidAfter, _intent.timestamp);
         }
-        if (_claim.payerHash == bytes32(0) && _claim.txIdHash == bytes32(0)) revert UnidentifiedPayment();
+        if (_claim.txIdHash == bytes32(0)) revert UnidentifiedPayment();
         uint256 releaseFiatValue = _releaseAmount * _intent.conversionRate / PRECISE_UNIT;
         if (_claim.amount == 0 || _claim.amount < releaseFiatValue) revert ClaimBelowRelease(_claim.amount, releaseFiatValue);
     }
