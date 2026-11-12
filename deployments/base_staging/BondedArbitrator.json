@@ -1,0 +1,1623 @@
+{
+  "address": "0x3CC27551f5722b88CbB8f84a17b05b751039F3c3",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_owner",
+          "type": "address"
+        },
+        {
+          "internalType": "contract IOrchestratorV4",
+          "name": "_orchestrator",
+          "type": "address"
+        },
+        {
+          "internalType": "contract IStakeVaultV2",
+          "name": "_stakeVault",
+          "type": "address"
+        },
+        {
+          "internalType": "contract INullifierRegistryV2",
+          "name": "_nullifierRegistry",
+          "type": "address"
+        },
+        {
+          "internalType": "contract INonPaymentVerifier",
+          "name": "_nonPaymentVerifier",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "paymentMethod",
+          "type": "bytes32"
+        }
+      ],
+      "name": "ArbitrationDisabled",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "releaseFiatValue",
+          "type": "uint256"
+        }
+      ],
+      "name": "ClaimBelowRelease",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint64",
+          "name": "maturesAt",
+          "type": "uint64"
+        }
+      ],
+      "name": "DisputeWindowClosed",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint64",
+          "name": "paidAfter",
+          "type": "uint64"
+        },
+        {
+          "internalType": "uint256",
+          "name": "intentTimestamp",
+          "type": "uint256"
+        }
+      ],
+      "name": "InvalidClaimWindow",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint64",
+          "name": "window",
+          "type": "uint64"
+        }
+      ],
+      "name": "InvalidDisputeWindow",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        }
+      ],
+      "name": "NotArbitrator",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint64",
+          "name": "maturesAt",
+          "type": "uint64"
+        }
+      ],
+      "name": "NotMatured",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "operator",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "locked",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "cap",
+          "type": "uint256"
+        }
+      ],
+      "name": "OperatorCapExceeded",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "operator",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "bondOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OperatorTaken",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "OwnershipRenunciationDisabled",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "receivedAmount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "claimedAmount",
+          "type": "uint256"
+        }
+      ],
+      "name": "PaymentCovered",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        }
+      ],
+      "name": "ReleaseNotFound",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        }
+      ],
+      "name": "ScanMismatch",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint64",
+          "name": "windowEnd",
+          "type": "uint64"
+        }
+      ],
+      "name": "StaleEvidence",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "caller",
+          "type": "address"
+        }
+      ],
+      "name": "UnauthorizedBondOwner",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "caller",
+          "type": "address"
+        }
+      ],
+      "name": "UnauthorizedDepositor",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "caller",
+          "type": "address"
+        }
+      ],
+      "name": "UnauthorizedOperator",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "paymentId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "UnboundExclusion",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "UnidentifiedPayment",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "token",
+          "type": "address"
+        }
+      ],
+      "name": "UnsupportedToken",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ZeroAddress",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "operator",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "bondOwner",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "maturesAt",
+          "type": "uint64"
+        },
+        {
+          "components": [
+            {
+              "internalType": "address",
+              "name": "operator",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "bondOwner",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "depositor",
+              "type": "address"
+            },
+            {
+              "internalType": "uint64",
+              "name": "releasedAt",
+              "type": "uint64"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "payeeId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "fiatCurrency",
+              "type": "bytes32"
+            },
+            {
+              "components": [
+                {
+                  "internalType": "uint64",
+                  "name": "paidAfter",
+                  "type": "uint64"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "amount",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "payerHash",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "txIdHash",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "evidenceHash",
+                  "type": "bytes32"
+                }
+              ],
+              "internalType": "struct IBondedArbitrator.PaymentClaim",
+              "name": "claim",
+              "type": "tuple"
+            }
+          ],
+          "indexed": false,
+          "internalType": "struct IBondedArbitrator.Release",
+          "name": "release",
+          "type": "tuple"
+        }
+      ],
+      "name": "ArbitratedRelease",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "bondOwner",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "bool",
+          "name": "approved",
+          "type": "bool"
+        }
+      ],
+      "name": "BondOwnerSet",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "paymentMethod",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "window",
+          "type": "uint64"
+        }
+      ],
+      "name": "DisputeWindowSet",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousVerifier",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newVerifier",
+          "type": "address"
+        }
+      ],
+      "name": "NonPaymentVerifierSet",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "bondOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "operator",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "cap",
+          "type": "uint256"
+        }
+      ],
+      "name": "OperatorSet",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnershipTransferStarted",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnershipTransferred",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "account",
+          "type": "address"
+        }
+      ],
+      "name": "Paused",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "bondOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "depositor",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes32",
+          "name": "historyHash",
+          "type": "bytes32"
+        }
+      ],
+      "name": "ReleaseOverturned",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "bondOwner",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "bool",
+          "name": "acknowledgedByDepositor",
+          "type": "bool"
+        }
+      ],
+      "name": "ReleaseSettled",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "account",
+          "type": "address"
+        }
+      ],
+      "name": "Unpaused",
+      "type": "event"
+    },
+    {
+      "inputs": [],
+      "name": "MAX_DISPUTE_WINDOW",
+      "outputs": [
+        {
+          "internalType": "uint64",
+          "name": "",
+          "type": "uint64"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "MAX_LOOKBACK",
+      "outputs": [
+        {
+          "internalType": "uint64",
+          "name": "",
+          "type": "uint64"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "MAX_SCAN_AGE",
+      "outputs": [
+        {
+          "internalType": "uint64",
+          "name": "",
+          "type": "uint64"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "acceptOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_intentHash",
+          "type": "bytes32"
+        }
+      ],
+      "name": "acknowledge",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "bondOwnerOf",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "components": [
+            {
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "dataHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes[]",
+              "name": "signatures",
+              "type": "bytes[]"
+            },
+            {
+              "internalType": "bytes",
+              "name": "data",
+              "type": "bytes"
+            }
+          ],
+          "internalType": "struct INonPaymentVerifier.NonPaymentAttestation",
+          "name": "_attestation",
+          "type": "tuple"
+        }
+      ],
+      "name": "disputeNonPayment",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "name": "disputeWindow",
+      "outputs": [
+        {
+          "internalType": "uint64",
+          "name": "",
+          "type": "uint64"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_intentHash",
+          "type": "bytes32"
+        }
+      ],
+      "name": "getRelease",
+      "outputs": [
+        {
+          "components": [
+            {
+              "internalType": "address",
+              "name": "operator",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "bondOwner",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "depositor",
+              "type": "address"
+            },
+            {
+              "internalType": "uint64",
+              "name": "releasedAt",
+              "type": "uint64"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "payeeId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "fiatCurrency",
+              "type": "bytes32"
+            },
+            {
+              "components": [
+                {
+                  "internalType": "uint64",
+                  "name": "paidAfter",
+                  "type": "uint64"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "amount",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "payerHash",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "txIdHash",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "evidenceHash",
+                  "type": "bytes32"
+                }
+              ],
+              "internalType": "struct IBondedArbitrator.PaymentClaim",
+              "name": "claim",
+              "type": "tuple"
+            }
+          ],
+          "internalType": "struct IBondedArbitrator.Release",
+          "name": "",
+          "type": "tuple"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "isBondOwner",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_intentHash",
+          "type": "bytes32"
+        }
+      ],
+      "name": "lockId",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "nonPaymentVerifier",
+      "outputs": [
+        {
+          "internalType": "contract INonPaymentVerifier",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "nullifierRegistry",
+      "outputs": [
+        {
+          "internalType": "contract INullifierRegistryV2",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "operatorCap",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "operatorLocked",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "orchestrator",
+      "outputs": [
+        {
+          "internalType": "contract IOrchestratorV4",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "owner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "pause",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "paused",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "pendingOwner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_intentHash",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_releaseAmount",
+          "type": "uint256"
+        },
+        {
+          "components": [
+            {
+              "internalType": "uint64",
+              "name": "paidAfter",
+              "type": "uint64"
+            },
+            {
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "payerHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "txIdHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "evidenceHash",
+              "type": "bytes32"
+            }
+          ],
+          "internalType": "struct IBondedArbitrator.PaymentClaim",
+          "name": "_claim",
+          "type": "tuple"
+        }
+      ],
+      "name": "release",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "renounceOwnership",
+      "outputs": [],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_bondOwner",
+          "type": "address"
+        },
+        {
+          "internalType": "bool",
+          "name": "_approved",
+          "type": "bool"
+        }
+      ],
+      "name": "setBondOwner",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_paymentMethod",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint64",
+          "name": "_window",
+          "type": "uint64"
+        }
+      ],
+      "name": "setDisputeWindow",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "contract INonPaymentVerifier",
+          "name": "_verifier",
+          "type": "address"
+        }
+      ],
+      "name": "setNonPaymentVerifier",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_operator",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_cap",
+          "type": "uint256"
+        }
+      ],
+      "name": "setOperator",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32[]",
+          "name": "_intentHashes",
+          "type": "bytes32[]"
+        }
+      ],
+      "name": "settle",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "stakeVault",
+      "outputs": [
+        {
+          "internalType": "contract IStakeVaultV2",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "transferOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "unpause",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "transactionHash": "0x49366483844edcc26dee7d388bdba6103d7d5d33152028ef554dabc9d046dbd1",
+  "receipt": {
+    "to": null,
+    "from": "0x41123d6419C7b8e44157f6F3b0088442116641eC",
+    "contractAddress": "0x3CC27551f5722b88CbB8f84a17b05b751039F3c3",
+    "transactionIndex": 20,
+    "gasUsed": "2368176",
+    "logsBloom": "0x00000000000000000000000000000000000000000000000000800000000000000000000040080000000000000000100000000000000000000000000000000000010000000000000000000000000000000001000000000000000000000000000000000000020000000000000000000800000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000020000000000000000000000000000000000000000000000000000000000000000000",
+    "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "transactionHash": "0x49366483844edcc26dee7d388bdba6103d7d5d33152028ef554dabc9d046dbd1",
+    "logs": [
+      {
+        "transactionIndex": 20,
+        "blockNumber": 53472825,
+        "transactionHash": "0x49366483844edcc26dee7d388bdba6103d7d5d33152028ef554dabc9d046dbd1",
+        "address": "0x3CC27551f5722b88CbB8f84a17b05b751039F3c3",
+        "topics": [
+          "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0",
+          "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "0x00000000000000000000000041123d6419c7b8e44157f6f3b0088442116641ec"
+        ],
+        "data": "0x",
+        "logIndex": 108,
+        "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      {
+        "transactionIndex": 20,
+        "blockNumber": 53472825,
+        "transactionHash": "0x49366483844edcc26dee7d388bdba6103d7d5d33152028ef554dabc9d046dbd1",
+        "address": "0x3CC27551f5722b88CbB8f84a17b05b751039F3c3",
+        "topics": [
+          "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0",
+          "0x00000000000000000000000041123d6419c7b8e44157f6f3b0088442116641ec",
+          "0x00000000000000000000000041123d6419c7b8e44157f6f3b0088442116641ec"
+        ],
+        "data": "0x",
+        "logIndex": 109,
+        "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    ],
+    "blockNumber": 53472825,
+    "cumulativeGasUsed": "5828491",
+    "status": 1,
+    "byzantium": true
+  },
+  "args": [
+    "0x41123d6419C7b8e44157f6F3b0088442116641eC",
+    "0xd03674d06FB9d66C7F1dc9c8D45ADd314B604F2c",
+    "0xe6314251979b6185c6a1A265de82460EB180821c",
+    "0x2eb43d6C7c7Ec4220Aa6B8735BC053824a71778C",
+    "0xb9281bFAFA460E3f68a0b6c4E42e8D3b2030f00a"
+  ],
+  "numDeployments": 1,
+  "solcInputHash": "121d6560fb01b9a4bdc97cef41598643",
+  "metadata": "{\"compiler\":{\"version\":\"0.8.18+commit.87f61d96\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_owner\",\"type\":\"address\"},{\"internalType\":\"contract IOrchestratorV4\",\"name\":\"_orchestrator\",\"type\":\"address\"},{\"internalType\":\"contract IStakeVaultV2\",\"name\":\"_stakeVault\",\"type\":\"address\"},{\"internalType\":\"contract INullifierRegistryV2\",\"name\":\"_nullifierRegistry\",\"type\":\"address\"},{\"internalType\":\"contract INonPaymentVerifier\",\"name\":\"_nonPaymentVerifier\",\"type\":\"address\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"paymentMethod\",\"type\":\"bytes32\"}],\"name\":\"ArbitrationDisabled\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"releaseFiatValue\",\"type\":\"uint256\"}],\"name\":\"ClaimBelowRelease\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"maturesAt\",\"type\":\"uint64\"}],\"name\":\"DisputeWindowClosed\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"paidAfter\",\"type\":\"uint64\"},{\"internalType\":\"uint256\",\"name\":\"intentTimestamp\",\"type\":\"uint256\"}],\"name\":\"InvalidClaimWindow\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"window\",\"type\":\"uint64\"}],\"name\":\"InvalidDisputeWindow\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"}],\"name\":\"NotArbitrator\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"maturesAt\",\"type\":\"uint64\"}],\"name\":\"NotMatured\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"locked\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"cap\",\"type\":\"uint256\"}],\"name\":\"OperatorCapExceeded\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"bondOwner\",\"type\":\"address\"}],\"name\":\"OperatorTaken\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"OwnershipRenunciationDisabled\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"receivedAmount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"claimedAmount\",\"type\":\"uint256\"}],\"name\":\"PaymentCovered\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"}],\"name\":\"ReleaseNotFound\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"}],\"name\":\"ScanMismatch\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"windowEnd\",\"type\":\"uint64\"}],\"name\":\"StaleEvidence\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"caller\",\"type\":\"address\"}],\"name\":\"UnauthorizedBondOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"caller\",\"type\":\"address\"}],\"name\":\"UnauthorizedDepositor\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"caller\",\"type\":\"address\"}],\"name\":\"UnauthorizedOperator\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"paymentId\",\"type\":\"bytes32\"}],\"name\":\"UnboundExclusion\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"UnidentifiedPayment\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"token\",\"type\":\"address\"}],\"name\":\"UnsupportedToken\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroAddress\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"bondOwner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"maturesAt\",\"type\":\"uint64\"},{\"components\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"bondOwner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"depositor\",\"type\":\"address\"},{\"internalType\":\"uint64\",\"name\":\"releasedAt\",\"type\":\"uint64\"},{\"internalType\":\"bytes32\",\"name\":\"paymentMethod\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"payeeId\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"fiatCurrency\",\"type\":\"bytes32\"},{\"components\":[{\"internalType\":\"uint64\",\"name\":\"paidAfter\",\"type\":\"uint64\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"payerHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"txIdHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"evidenceHash\",\"type\":\"bytes32\"}],\"internalType\":\"struct IBondedArbitrator.PaymentClaim\",\"name\":\"claim\",\"type\":\"tuple\"}],\"indexed\":false,\"internalType\":\"struct IBondedArbitrator.Release\",\"name\":\"release\",\"type\":\"tuple\"}],\"name\":\"ArbitratedRelease\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"bondOwner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"bool\",\"name\":\"approved\",\"type\":\"bool\"}],\"name\":\"BondOwnerSet\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"paymentMethod\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"window\",\"type\":\"uint64\"}],\"name\":\"DisputeWindowSet\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousVerifier\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newVerifier\",\"type\":\"address\"}],\"name\":\"NonPaymentVerifierSet\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"bondOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"cap\",\"type\":\"uint256\"}],\"name\":\"OperatorSet\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferStarted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"Paused\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"bondOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"depositor\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"historyHash\",\"type\":\"bytes32\"}],\"name\":\"ReleaseOverturned\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"bondOwner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"bool\",\"name\":\"acknowledgedByDepositor\",\"type\":\"bool\"}],\"name\":\"ReleaseSettled\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"Unpaused\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"MAX_DISPUTE_WINDOW\",\"outputs\":[{\"internalType\":\"uint64\",\"name\":\"\",\"type\":\"uint64\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"MAX_LOOKBACK\",\"outputs\":[{\"internalType\":\"uint64\",\"name\":\"\",\"type\":\"uint64\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"MAX_SCAN_AGE\",\"outputs\":[{\"internalType\":\"uint64\",\"name\":\"\",\"type\":\"uint64\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"acceptOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_intentHash\",\"type\":\"bytes32\"}],\"name\":\"acknowledge\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"bondOwnerOf\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"components\":[{\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"dataHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes[]\",\"name\":\"signatures\",\"type\":\"bytes[]\"},{\"internalType\":\"bytes\",\"name\":\"data\",\"type\":\"bytes\"}],\"internalType\":\"struct INonPaymentVerifier.NonPaymentAttestation\",\"name\":\"_attestation\",\"type\":\"tuple\"}],\"name\":\"disputeNonPayment\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"name\":\"disputeWindow\",\"outputs\":[{\"internalType\":\"uint64\",\"name\":\"\",\"type\":\"uint64\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_intentHash\",\"type\":\"bytes32\"}],\"name\":\"getRelease\",\"outputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"bondOwner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"depositor\",\"type\":\"address\"},{\"internalType\":\"uint64\",\"name\":\"releasedAt\",\"type\":\"uint64\"},{\"internalType\":\"bytes32\",\"name\":\"paymentMethod\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"payeeId\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"fiatCurrency\",\"type\":\"bytes32\"},{\"components\":[{\"internalType\":\"uint64\",\"name\":\"paidAfter\",\"type\":\"uint64\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"payerHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"txIdHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"evidenceHash\",\"type\":\"bytes32\"}],\"internalType\":\"struct IBondedArbitrator.PaymentClaim\",\"name\":\"claim\",\"type\":\"tuple\"}],\"internalType\":\"struct IBondedArbitrator.Release\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"isBondOwner\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_intentHash\",\"type\":\"bytes32\"}],\"name\":\"lockId\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"nonPaymentVerifier\",\"outputs\":[{\"internalType\":\"contract INonPaymentVerifier\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"nullifierRegistry\",\"outputs\":[{\"internalType\":\"contract INullifierRegistryV2\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"operatorCap\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"operatorLocked\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"orchestrator\",\"outputs\":[{\"internalType\":\"contract IOrchestratorV4\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"pause\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"paused\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"pendingOwner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_intentHash\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"_releaseAmount\",\"type\":\"uint256\"},{\"components\":[{\"internalType\":\"uint64\",\"name\":\"paidAfter\",\"type\":\"uint64\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"payerHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"txIdHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"evidenceHash\",\"type\":\"bytes32\"}],\"internalType\":\"struct IBondedArbitrator.PaymentClaim\",\"name\":\"_claim\",\"type\":\"tuple\"}],\"name\":\"release\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_bondOwner\",\"type\":\"address\"},{\"internalType\":\"bool\",\"name\":\"_approved\",\"type\":\"bool\"}],\"name\":\"setBondOwner\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_paymentMethod\",\"type\":\"bytes32\"},{\"internalType\":\"uint64\",\"name\":\"_window\",\"type\":\"uint64\"}],\"name\":\"setDisputeWindow\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"contract INonPaymentVerifier\",\"name\":\"_verifier\",\"type\":\"address\"}],\"name\":\"setNonPaymentVerifier\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_operator\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_cap\",\"type\":\"uint256\"}],\"name\":\"setOperator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"_intentHashes\",\"type\":\"bytes32[]\"}],\"name\":\"settle\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"stakeVault\",\"outputs\":[{\"internalType\":\"contract IStakeVaultV2\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"unpause\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"details\":\"The signal policy names this contract as the intent arbitrator. It exposes only release, so the arbitrator's cancel and extend powers stay unused. Authorize it as a StakeVaultV2 controller and a NullifierRegistryV2 writer.\",\"events\":{\"Paused(address)\":{\"details\":\"Emitted when the pause is triggered by `account`.\"},\"Unpaused(address)\":{\"details\":\"Emitted when the pause is lifted by `account`.\"}},\"kind\":\"dev\",\"methods\":{\"acceptOwnership()\":{\"details\":\"The new owner accepts the ownership transfer.\"},\"acknowledge(bytes32)\":{\"params\":{\"_intentHash\":\"Released intent.\"}},\"disputeNonPayment((bytes32,bytes32,bytes[],bytes))\":{\"details\":\"Anyone may submit: the scan is bound to the deposit's payee and the award always goes to the depositor.\",\"params\":{\"_attestation\":\"Signed scan for the released intent.\"}},\"owner()\":{\"details\":\"Returns the address of the current owner.\"},\"paused()\":{\"details\":\"Returns true if the contract is paused, and false otherwise.\"},\"pendingOwner()\":{\"details\":\"Returns the address of the pending owner.\"},\"release(bytes32,uint256,(uint64,uint256,bytes32,bytes32,bytes32))\":{\"params\":{\"_claim\":\"Payment the operator relied on.\",\"_intentHash\":\"Intent naming this contract as arbitrator.\",\"_releaseAmount\":\"Deposit tokens to release; any rest returns to the deposit.\"}},\"setBondOwner(address,bool)\":{\"params\":{\"_approved\":\"Whether its operators may release.\",\"_bondOwner\":\"Stake owner in StakeVaultV2.\"}},\"setDisputeWindow(bytes32,uint64)\":{\"params\":{\"_paymentMethod\":\"Payment method hash.\",\"_window\":\"Seconds a release's bond stays locked.\"}},\"setNonPaymentVerifier(address)\":{\"params\":{\"_verifier\":\"New NonPaymentVerifier.\"}},\"setOperator(address,uint256)\":{\"details\":\"Revoking stops new releases only. Open releases keep their lock until dispute or maturity.\",\"params\":{\"_cap\":\"Most stake the operator's open releases may hold locked.\",\"_operator\":\"Operator address.\"}},\"settle(bytes32[])\":{\"params\":{\"_intentHashes\":\"Released intents.\"}},\"transferOwnership(address)\":{\"details\":\"Starts the ownership transfer of the contract to a new account. Replaces the pending transfer if there is one. Can only be called by the current owner.\"}},\"title\":\"BondedArbitrator\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{\"acknowledge(bytes32)\":{\"notice\":\"DEPOSITOR ONLY: Confirms the payment arrived and unlocks the bond before maturity.\"},\"bondOwnerOf(address)\":{\"notice\":\"Bond owner that authorized each operator.\"},\"disputeNonPayment((bytes32,bytes32,bytes[],bytes))\":{\"notice\":\"Pays the depositor the unpaid share of the bond shown by a fresh attestor scan of the seller account.\"},\"disputeWindow(bytes32)\":{\"notice\":\"Dispute window per payment method; zero disables arbitrated release on that method.\"},\"getRelease(bytes32)\":{\"notice\":\"Returns an open release; all zero after dispute or settlement.\"},\"isBondOwner(address)\":{\"notice\":\"Stake owners governance allows to back releases.\"},\"lockId(bytes32)\":{\"notice\":\"Returns the StakeVaultV2 lock id that holds a release's bond.\"},\"operatorCap(address)\":{\"notice\":\"Most stake an operator's open releases may hold locked, set by its bond owner.\"},\"operatorLocked(address)\":{\"notice\":\"Stake currently locked by each operator's open releases.\"},\"pause()\":{\"notice\":\"GOVERNANCE ONLY: Stops new releases. Disputes, acknowledgements and settlement stay open.\"},\"release(bytes32,uint256,(uint64,uint256,bytes32,bytes32,bytes32))\":{\"notice\":\"OPERATOR ONLY: Pays the intent recipient now and locks the same amount of the bond owner's stake until the payment method's dispute window ends.\"},\"renounceOwnership()\":{\"notice\":\"Ownership renunciation is disabled so governance keeps the pause and rail switches.\"},\"setBondOwner(address,bool)\":{\"notice\":\"GOVERNANCE ONLY: Approves or removes a stake owner that may back releases.\"},\"setDisputeWindow(bytes32,uint64)\":{\"notice\":\"GOVERNANCE ONLY: Sets a payment method's dispute window; zero disables arbitrated release on it.\"},\"setNonPaymentVerifier(address)\":{\"notice\":\"GOVERNANCE ONLY: Replaces the scan verifier for future disputes.\"},\"setOperator(address,uint256)\":{\"notice\":\"BOND OWNER ONLY: Authorizes an operator to lock the caller's stake up to `_cap`; zero revokes it.\"},\"settle(bytes32[])\":{\"notice\":\"Unlocks the bond of every listed release whose dispute window has ended.\"},\"unpause()\":{\"notice\":\"GOVERNANCE ONLY: Resumes releases.\"}},\"notice\":\"OrchestratorV4 arbitrator that releases an intent only against locked stake. An operator releases funds to the intent recipient and locks the same amount of its bond owner's StakeVaultV2 stake for the payment method's dispute window. The depositor takes the share of that stake a signed scan of the seller account shows was never paid: all of it when nothing matching arrived, the shortfall when less arrived. Otherwise the stake unlocks at maturity, or earlier when the depositor confirms the payment.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"contracts/BondedArbitrator.sol\":\"BondedArbitrator\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[],\"viaIR\":true},\"sources\":{\"@openzeppelin/contracts/access/Ownable.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (access/Ownable.sol)\\n\\npragma solidity ^0.8.0;\\n\\nimport \\\"../utils/Context.sol\\\";\\n\\n/**\\n * @dev Contract module which provides a basic access control mechanism, where\\n * there is an account (an owner) that can be granted exclusive access to\\n * specific functions.\\n *\\n * By default, the owner account will be the one that deploys the contract. This\\n * can later be changed with {transferOwnership}.\\n *\\n * This module is used through inheritance. It will make available the modifier\\n * `onlyOwner`, which can be applied to your functions to restrict their use to\\n * the owner.\\n */\\nabstract contract Ownable is Context {\\n    address private _owner;\\n\\n    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);\\n\\n    /**\\n     * @dev Initializes the contract setting the deployer as the initial owner.\\n     */\\n    constructor() {\\n        _transferOwnership(_msgSender());\\n    }\\n\\n    /**\\n     * @dev Throws if called by any account other than the owner.\\n     */\\n    modifier onlyOwner() {\\n        _checkOwner();\\n        _;\\n    }\\n\\n    /**\\n     * @dev Returns the address of the current owner.\\n     */\\n    function owner() public view virtual returns (address) {\\n        return _owner;\\n    }\\n\\n    /**\\n     * @dev Throws if the sender is not the owner.\\n     */\\n    function _checkOwner() internal view virtual {\\n        require(owner() == _msgSender(), \\\"Ownable: caller is not the owner\\\");\\n    }\\n\\n    /**\\n     * @dev Leaves the contract without owner. It will not be possible to call\\n     * `onlyOwner` functions. Can only be called by the current owner.\\n     *\\n     * NOTE: Renouncing ownership will leave the contract without an owner,\\n     * thereby disabling any functionality that is only available to the owner.\\n     */\\n    function renounceOwnership() public virtual onlyOwner {\\n        _transferOwnership(address(0));\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`).\\n     * Can only be called by the current owner.\\n     */\\n    function transferOwnership(address newOwner) public virtual onlyOwner {\\n        require(newOwner != address(0), \\\"Ownable: new owner is the zero address\\\");\\n        _transferOwnership(newOwner);\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`).\\n     * Internal function without access restriction.\\n     */\\n    function _transferOwnership(address newOwner) internal virtual {\\n        address oldOwner = _owner;\\n        _owner = newOwner;\\n        emit OwnershipTransferred(oldOwner, newOwner);\\n    }\\n}\\n\",\"keccak256\":\"0xba43b97fba0d32eb4254f6a5a297b39a19a247082a02d6e69349e071e2946218\",\"license\":\"MIT\"},\"@openzeppelin/contracts/access/Ownable2Step.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (access/Ownable2Step.sol)\\n\\npragma solidity ^0.8.0;\\n\\nimport \\\"./Ownable.sol\\\";\\n\\n/**\\n * @dev Contract module which provides access control mechanism, where\\n * there is an account (an owner) that can be granted exclusive access to\\n * specific functions.\\n *\\n * By default, the owner account will be the one that deploys the contract. This\\n * can later be changed with {transferOwnership} and {acceptOwnership}.\\n *\\n * This module is used through inheritance. It will make available all functions\\n * from parent (Ownable).\\n */\\nabstract contract Ownable2Step is Ownable {\\n    address private _pendingOwner;\\n\\n    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);\\n\\n    /**\\n     * @dev Returns the address of the pending owner.\\n     */\\n    function pendingOwner() public view virtual returns (address) {\\n        return _pendingOwner;\\n    }\\n\\n    /**\\n     * @dev Starts the ownership transfer of the contract to a new account. Replaces the pending transfer if there is one.\\n     * Can only be called by the current owner.\\n     */\\n    function transferOwnership(address newOwner) public virtual override onlyOwner {\\n        _pendingOwner = newOwner;\\n        emit OwnershipTransferStarted(owner(), newOwner);\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`) and deletes any pending owner.\\n     * Internal function without access restriction.\\n     */\\n    function _transferOwnership(address newOwner) internal virtual override {\\n        delete _pendingOwner;\\n        super._transferOwnership(newOwner);\\n    }\\n\\n    /**\\n     * @dev The new owner accepts the ownership transfer.\\n     */\\n    function acceptOwnership() public virtual {\\n        address sender = _msgSender();\\n        require(pendingOwner() == sender, \\\"Ownable2Step: caller is not the new owner\\\");\\n        _transferOwnership(sender);\\n    }\\n}\\n\",\"keccak256\":\"0xde231558366826d7cb61725af8147965a61c53b77a352cc8c9af38fc5a92ac3c\",\"license\":\"MIT\"},\"@openzeppelin/contracts/security/Pausable.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.7.0) (security/Pausable.sol)\\n\\npragma solidity ^0.8.0;\\n\\nimport \\\"../utils/Context.sol\\\";\\n\\n/**\\n * @dev Contract module which allows children to implement an emergency stop\\n * mechanism that can be triggered by an authorized account.\\n *\\n * This module is used through inheritance. It will make available the\\n * modifiers `whenNotPaused` and `whenPaused`, which can be applied to\\n * the functions of your contract. Note that they will not be pausable by\\n * simply including this module, only once the modifiers are put in place.\\n */\\nabstract contract Pausable is Context {\\n    /**\\n     * @dev Emitted when the pause is triggered by `account`.\\n     */\\n    event Paused(address account);\\n\\n    /**\\n     * @dev Emitted when the pause is lifted by `account`.\\n     */\\n    event Unpaused(address account);\\n\\n    bool private _paused;\\n\\n    /**\\n     * @dev Initializes the contract in unpaused state.\\n     */\\n    constructor() {\\n        _paused = false;\\n    }\\n\\n    /**\\n     * @dev Modifier to make a function callable only when the contract is not paused.\\n     *\\n     * Requirements:\\n     *\\n     * - The contract must not be paused.\\n     */\\n    modifier whenNotPaused() {\\n        _requireNotPaused();\\n        _;\\n    }\\n\\n    /**\\n     * @dev Modifier to make a function callable only when the contract is paused.\\n     *\\n     * Requirements:\\n     *\\n     * - The contract must be paused.\\n     */\\n    modifier whenPaused() {\\n        _requirePaused();\\n        _;\\n    }\\n\\n    /**\\n     * @dev Returns true if the contract is paused, and false otherwise.\\n     */\\n    function paused() public view virtual returns (bool) {\\n        return _paused;\\n    }\\n\\n    /**\\n     * @dev Throws if the contract is paused.\\n     */\\n    function _requireNotPaused() internal view virtual {\\n        require(!paused(), \\\"Pausable: paused\\\");\\n    }\\n\\n    /**\\n     * @dev Throws if the contract is not paused.\\n     */\\n    function _requirePaused() internal view virtual {\\n        require(paused(), \\\"Pausable: not paused\\\");\\n    }\\n\\n    /**\\n     * @dev Triggers stopped state.\\n     *\\n     * Requirements:\\n     *\\n     * - The contract must not be paused.\\n     */\\n    function _pause() internal virtual whenNotPaused {\\n        _paused = true;\\n        emit Paused(_msgSender());\\n    }\\n\\n    /**\\n     * @dev Returns to normal state.\\n     *\\n     * Requirements:\\n     *\\n     * - The contract must be paused.\\n     */\\n    function _unpause() internal virtual whenPaused {\\n        _paused = false;\\n        emit Unpaused(_msgSender());\\n    }\\n}\\n\",\"keccak256\":\"0x0849d93b16c9940beb286a7864ed02724b248b93e0d80ef6355af5ef15c64773\",\"license\":\"MIT\"},\"@openzeppelin/contracts/security/ReentrancyGuard.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (security/ReentrancyGuard.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Contract module that helps prevent reentrant calls to a function.\\n *\\n * Inheriting from `ReentrancyGuard` will make the {nonReentrant} modifier\\n * available, which can be applied to functions to make sure there are no nested\\n * (reentrant) calls to them.\\n *\\n * Note that because there is a single `nonReentrant` guard, functions marked as\\n * `nonReentrant` may not call one another. This can be worked around by making\\n * those functions `private`, and then adding `external` `nonReentrant` entry\\n * points to them.\\n *\\n * TIP: If you would like to learn more about reentrancy and alternative ways\\n * to protect against it, check out our blog post\\n * https://blog.openzeppelin.com/reentrancy-after-istanbul/[Reentrancy After Istanbul].\\n */\\nabstract contract ReentrancyGuard {\\n    // Booleans are more expensive than uint256 or any type that takes up a full\\n    // word because each write operation emits an extra SLOAD to first read the\\n    // slot's contents, replace the bits taken up by the boolean, and then write\\n    // back. This is the compiler's defense against contract upgrades and\\n    // pointer aliasing, and it cannot be disabled.\\n\\n    // The values being non-zero value makes deployment a bit more expensive,\\n    // but in exchange the refund on every call to nonReentrant will be lower in\\n    // amount. Since refunds are capped to a percentage of the total\\n    // transaction's gas, it is best to keep them low in cases like this one, to\\n    // increase the likelihood of the full refund coming into effect.\\n    uint256 private constant _NOT_ENTERED = 1;\\n    uint256 private constant _ENTERED = 2;\\n\\n    uint256 private _status;\\n\\n    constructor() {\\n        _status = _NOT_ENTERED;\\n    }\\n\\n    /**\\n     * @dev Prevents a contract from calling itself, directly or indirectly.\\n     * Calling a `nonReentrant` function from another `nonReentrant`\\n     * function is not supported. It is possible to prevent this from happening\\n     * by making the `nonReentrant` function external, and making it call a\\n     * `private` function that does the actual work.\\n     */\\n    modifier nonReentrant() {\\n        _nonReentrantBefore();\\n        _;\\n        _nonReentrantAfter();\\n    }\\n\\n    function _nonReentrantBefore() private {\\n        // On the first call to nonReentrant, _status will be _NOT_ENTERED\\n        require(_status != _ENTERED, \\\"ReentrancyGuard: reentrant call\\\");\\n\\n        // Any calls to nonReentrant after this point will fail\\n        _status = _ENTERED;\\n    }\\n\\n    function _nonReentrantAfter() private {\\n        // By storing the original value once again, a refund is triggered (see\\n        // https://eips.ethereum.org/EIPS/eip-2200)\\n        _status = _NOT_ENTERED;\\n    }\\n\\n    /**\\n     * @dev Returns true if the reentrancy guard is currently set to \\\"entered\\\", which indicates there is a\\n     * `nonReentrant` function in the call stack.\\n     */\\n    function _reentrancyGuardEntered() internal view returns (bool) {\\n        return _status == _ENTERED;\\n    }\\n}\\n\",\"keccak256\":\"0xa535a5df777d44e945dd24aa43a11e44b024140fc340ad0dfe42acf4002aade1\",\"license\":\"MIT\"},\"@openzeppelin/contracts/token/ERC20/IERC20.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (token/ERC20/IERC20.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Interface of the ERC20 standard as defined in the EIP.\\n */\\ninterface IERC20 {\\n    /**\\n     * @dev Emitted when `value` tokens are moved from one account (`from`) to\\n     * another (`to`).\\n     *\\n     * Note that `value` may be zero.\\n     */\\n    event Transfer(address indexed from, address indexed to, uint256 value);\\n\\n    /**\\n     * @dev Emitted when the allowance of a `spender` for an `owner` is set by\\n     * a call to {approve}. `value` is the new allowance.\\n     */\\n    event Approval(address indexed owner, address indexed spender, uint256 value);\\n\\n    /**\\n     * @dev Returns the amount of tokens in existence.\\n     */\\n    function totalSupply() external view returns (uint256);\\n\\n    /**\\n     * @dev Returns the amount of tokens owned by `account`.\\n     */\\n    function balanceOf(address account) external view returns (uint256);\\n\\n    /**\\n     * @dev Moves `amount` tokens from the caller's account to `to`.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * Emits a {Transfer} event.\\n     */\\n    function transfer(address to, uint256 amount) external returns (bool);\\n\\n    /**\\n     * @dev Returns the remaining number of tokens that `spender` will be\\n     * allowed to spend on behalf of `owner` through {transferFrom}. This is\\n     * zero by default.\\n     *\\n     * This value changes when {approve} or {transferFrom} are called.\\n     */\\n    function allowance(address owner, address spender) external view returns (uint256);\\n\\n    /**\\n     * @dev Sets `amount` as the allowance of `spender` over the caller's tokens.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * IMPORTANT: Beware that changing an allowance with this method brings the risk\\n     * that someone may use both the old and the new allowance by unfortunate\\n     * transaction ordering. One possible solution to mitigate this race\\n     * condition is to first reduce the spender's allowance to 0 and set the\\n     * desired value afterwards:\\n     * https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729\\n     *\\n     * Emits an {Approval} event.\\n     */\\n    function approve(address spender, uint256 amount) external returns (bool);\\n\\n    /**\\n     * @dev Moves `amount` tokens from `from` to `to` using the\\n     * allowance mechanism. `amount` is then deducted from the caller's\\n     * allowance.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * Emits a {Transfer} event.\\n     */\\n    function transferFrom(address from, address to, uint256 amount) external returns (bool);\\n}\\n\",\"keccak256\":\"0x287b55befed2961a7eabd7d7b1b2839cbca8a5b80ef8dcbb25ed3d4c2002c305\",\"license\":\"MIT\"},\"@openzeppelin/contracts/utils/Context.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts v4.4.1 (utils/Context.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Provides information about the current execution context, including the\\n * sender of the transaction and its data. While these are generally available\\n * via msg.sender and msg.data, they should not be accessed in such a direct\\n * manner, since when dealing with meta-transactions the account sending and\\n * paying for execution may not be the actual sender (as far as an application\\n * is concerned).\\n *\\n * This contract is only required for intermediate, library-like contracts.\\n */\\nabstract contract Context {\\n    function _msgSender() internal view virtual returns (address) {\\n        return msg.sender;\\n    }\\n\\n    function _msgData() internal view virtual returns (bytes calldata) {\\n        return msg.data;\\n    }\\n}\\n\",\"keccak256\":\"0xe2e337e6dde9ef6b680e07338c493ebea1b5fd09b43424112868e9cc1706bca7\",\"license\":\"MIT\"},\"contracts/BondedArbitrator.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport {Ownable2Step} from \\\"@openzeppelin/contracts/access/Ownable2Step.sol\\\";\\nimport {Pausable} from \\\"@openzeppelin/contracts/security/Pausable.sol\\\";\\nimport {ReentrancyGuard} from \\\"@openzeppelin/contracts/security/ReentrancyGuard.sol\\\";\\n\\nimport {IBondedArbitrator} from \\\"./interfaces/IBondedArbitrator.sol\\\";\\nimport {IEscrow} from \\\"./interfaces/IEscrow.sol\\\";\\nimport {INonPaymentVerifier} from \\\"./interfaces/INonPaymentVerifier.sol\\\";\\nimport {INullifierRegistryV2} from \\\"./interfaces/INullifierRegistryV2.sol\\\";\\nimport {IOrchestratorV4} from \\\"./interfaces/IOrchestratorV4.sol\\\";\\nimport {IStakeVaultV2} from \\\"./interfaces/IStakeVaultV2.sol\\\";\\n\\n/**\\n * @title BondedArbitrator\\n * @notice OrchestratorV4 arbitrator that releases an intent only against locked stake. An operator releases funds\\n * to the intent recipient and locks the same amount of its bond owner's StakeVaultV2 stake for the payment method's\\n * dispute window. The depositor takes the share of that stake a signed scan of the seller account shows was never\\n * paid: all of it when nothing matching arrived, the shortfall when less arrived. Otherwise the stake unlocks at\\n * maturity, or earlier when the depositor confirms the payment.\\n * @dev The signal policy names this contract as the intent arbitrator. It exposes only release, so the arbitrator's\\n * cancel and extend powers stay unused. Authorize it as a StakeVaultV2 controller and a NullifierRegistryV2 writer.\\n */\\ncontract BondedArbitrator is IBondedArbitrator, Ownable2Step, Pausable, ReentrancyGuard {\\n    /* ============ Constants ============ */\\n\\n    uint256 internal constant PRECISE_UNIT = 1e18;\\n    uint64 public constant MAX_DISPUTE_WINDOW = 90 days;\\n    uint64 public constant MAX_LOOKBACK = 30 days;\\n    uint64 public constant MAX_SCAN_AGE = 1 hours;\\n\\n    /* ============ Immutables ============ */\\n\\n    IOrchestratorV4 public immutable orchestrator;\\n    IStakeVaultV2 public immutable stakeVault;\\n    INullifierRegistryV2 public immutable nullifierRegistry;\\n\\n    /* ============ State Variables ============ */\\n\\n    INonPaymentVerifier public nonPaymentVerifier;\\n\\n    /// @notice Dispute window per payment method; zero disables arbitrated release on that method.\\n    mapping(bytes32 => uint64) public disputeWindow;\\n\\n    /// @notice Stake owners governance allows to back releases.\\n    mapping(address => bool) public isBondOwner;\\n\\n    /// @notice Bond owner that authorized each operator.\\n    mapping(address => address) public bondOwnerOf;\\n\\n    /// @notice Most stake an operator's open releases may hold locked, set by its bond owner.\\n    mapping(address => uint256) public operatorCap;\\n\\n    /// @notice Stake currently locked by each operator's open releases.\\n    mapping(address => uint256) public operatorLocked;\\n\\n    mapping(bytes32 => Release) internal releases;\\n\\n    /* ============ Constructor ============ */\\n\\n    constructor(\\n        address _owner,\\n        IOrchestratorV4 _orchestrator,\\n        IStakeVaultV2 _stakeVault,\\n        INullifierRegistryV2 _nullifierRegistry,\\n        INonPaymentVerifier _nonPaymentVerifier\\n    ) {\\n        if (\\n            _owner == address(0) || address(_orchestrator) == address(0) || address(_stakeVault) == address(0)\\n                || address(_nullifierRegistry) == address(0) || address(_nonPaymentVerifier) == address(0)\\n        ) revert ZeroAddress();\\n        orchestrator = _orchestrator;\\n        stakeVault = _stakeVault;\\n        nullifierRegistry = _nullifierRegistry;\\n        nonPaymentVerifier = _nonPaymentVerifier;\\n        _transferOwnership(_owner);\\n    }\\n\\n    /* ============ Operator Functions ============ */\\n\\n    /// @inheritdoc IBondedArbitrator\\n    function release(bytes32 _intentHash, uint256 _releaseAmount, PaymentClaim calldata _claim)\\n        external\\n        override\\n        whenNotPaused\\n        nonReentrant\\n    {\\n        address bondOwner = bondOwnerOf[msg.sender];\\n        if (bondOwner == address(0) || !isBondOwner[bondOwner]) revert UnauthorizedOperator(msg.sender);\\n\\n        IOrchestratorV4.Intent memory intent = orchestrator.getIntent(_intentHash);\\n        if (intent.arbitrator != address(this)) revert NotArbitrator(_intentHash);\\n        uint64 window = disputeWindow[intent.paymentMethod];\\n        if (window == 0) revert ArbitrationDisabled(intent.paymentMethod);\\n        _validateClaim(intent, _releaseAmount, _claim);\\n\\n        IEscrow.Deposit memory deposit = IEscrow(intent.escrow).getDeposit(intent.depositId);\\n        if (address(deposit.token) != address(stakeVault.stakeToken())) revert UnsupportedToken(address(deposit.token));\\n\\n        uint256 locked = operatorLocked[msg.sender] + _releaseAmount;\\n        if (locked > operatorCap[msg.sender]) revert OperatorCapExceeded(msg.sender, locked, operatorCap[msg.sender]);\\n        operatorLocked[msg.sender] = locked;\\n\\n        Release memory opened = Release({\\n            operator: msg.sender,\\n            bondOwner: bondOwner,\\n            depositor: deposit.depositor,\\n            releasedAt: uint64(block.timestamp),\\n            paymentMethod: intent.paymentMethod,\\n            payeeId: intent.payeeId,\\n            fiatCurrency: intent.fiatCurrency,\\n            claim: _claim\\n        });\\n        releases[_intentHash] = opened;\\n\\n        // A named payment backs one intent only, across verified fulfilments and arbitrated releases.\\n        if (_claim.txIdHash != bytes32(0)) {\\n            nullifierRegistry.addNullifier(keccak256(abi.encodePacked(intent.paymentMethod, _claim.txIdHash)), _intentHash);\\n        }\\n        // The vault rejects a zero amount and the escrow rejects more than the intent holds.\\n        uint64 maturesAt = uint64(block.timestamp) + window;\\n        stakeVault.lockStake(bondOwner, _lockId(_intentHash), _releaseAmount, maturesAt);\\n        orchestrator.releaseFundsToPayer(_intentHash, _releaseAmount);\\n\\n        emit ArbitratedRelease(_intentHash, msg.sender, bondOwner, _releaseAmount, maturesAt, opened);\\n    }\\n\\n    /* ============ Depositor and Permissionless Functions ============ */\\n\\n    /// @inheritdoc IBondedArbitrator\\n    /// @dev Anyone may submit: the scan is bound to the deposit's payee and the award always goes to the depositor.\\n    function disputeNonPayment(INonPaymentVerifier.NonPaymentAttestation calldata _attestation)\\n        external\\n        override\\n        nonReentrant\\n    {\\n        bytes32 intentHash = _attestation.intentHash;\\n        Release memory open = _openRelease(intentHash);\\n\\n        (, uint256 amount, uint64 maturesAt) = stakeVault.locks(_lockId(intentHash));\\n        if (block.timestamp >= maturesAt) revert DisputeWindowClosed(maturesAt);\\n\\n        INonPaymentVerifier.NonPaymentDetails memory scan = nonPaymentVerifier.verifyNonPayment(_attestation);\\n        if (\\n            scan.paymentMethod != open.paymentMethod || scan.payeeId != open.payeeId\\n                || scan.fiatCurrency != open.fiatCurrency || scan.windowStart > open.claim.paidAfter\\n                || scan.windowEnd < open.releasedAt || scan.claimedAmount != open.claim.amount\\n                || scan.payerHash != open.claim.payerHash || scan.txIdHash != open.claim.txIdHash\\n        ) revert ScanMismatch(intentHash);\\n        // The scan must reach the present, so a payment that arrived after release still defeats the dispute.\\n        if (uint256(scan.windowEnd) + MAX_SCAN_AGE < block.timestamp) revert StaleEvidence(scan.windowEnd);\\n        // A skipped payment must already back another intent, such as the same buyer's later verified order.\\n        for (uint256 i = 0; i < scan.excludedPaymentIds.length; i++) {\\n            bytes32 boundTo = nullifierRegistry.intentHashByNullifier(\\n                keccak256(abi.encodePacked(open.paymentMethod, scan.excludedPaymentIds[i]))\\n            );\\n            if (boundTo == bytes32(0) || boundTo == intentHash) revert UnboundExclusion(scan.excludedPaymentIds[i]);\\n        }\\n        // The unpaid share of the release; the vault returns the rest of the lock to the bond owner's free stake.\\n        uint256 owed = scan.receivedAmount >= scan.claimedAmount\\n            ? 0\\n            : amount * (scan.claimedAmount - scan.receivedAmount) / scan.claimedAmount;\\n        if (owed == 0) revert PaymentCovered(scan.receivedAmount, scan.claimedAmount);\\n        _close(intentHash, open.operator, amount);\\n        IStakeVaultV2.Claim[] memory claims = new IStakeVaultV2.Claim[](1);\\n        claims[0] = IStakeVaultV2.Claim({beneficiary: open.depositor, amount: owed});\\n        stakeVault.resolveLock(_lockId(intentHash), claims);\\n\\n        emit ReleaseOverturned(intentHash, open.bondOwner, open.depositor, owed, scan.historyHash);\\n    }\\n\\n    /// @inheritdoc IBondedArbitrator\\n    function acknowledge(bytes32 _intentHash) external override nonReentrant {\\n        Release memory open = _openRelease(_intentHash);\\n        if (msg.sender != open.depositor) revert UnauthorizedDepositor(msg.sender);\\n        _unlock(_intentHash, open, true);\\n    }\\n\\n    /// @inheritdoc IBondedArbitrator\\n    function settle(bytes32[] calldata _intentHashes) external override nonReentrant {\\n        for (uint256 i = 0; i < _intentHashes.length; i++) {\\n            Release memory open = _openRelease(_intentHashes[i]);\\n            (,, uint64 maturesAt) = stakeVault.locks(_lockId(_intentHashes[i]));\\n            if (block.timestamp < maturesAt) revert NotMatured(maturesAt);\\n            _unlock(_intentHashes[i], open, false);\\n        }\\n    }\\n\\n    /* ============ Bond Owner Functions ============ */\\n\\n    /// @inheritdoc IBondedArbitrator\\n    /// @dev Revoking stops new releases only. Open releases keep their lock until dispute or maturity.\\n    function setOperator(address _operator, uint256 _cap) external override {\\n        if (!isBondOwner[msg.sender]) revert UnauthorizedBondOwner(msg.sender);\\n        if (_operator == address(0)) revert ZeroAddress();\\n        address current = bondOwnerOf[_operator];\\n        if (current != address(0) && current != msg.sender) revert OperatorTaken(_operator, current);\\n\\n        if (_cap == 0) {\\n            delete bondOwnerOf[_operator];\\n        } else {\\n            bondOwnerOf[_operator] = msg.sender;\\n        }\\n        operatorCap[_operator] = _cap;\\n        emit OperatorSet(msg.sender, _operator, _cap);\\n    }\\n\\n    /* ============ Governance Functions ============ */\\n\\n    /**\\n     * @notice GOVERNANCE ONLY: Approves or removes a stake owner that may back releases.\\n     * @param _bondOwner Stake owner in StakeVaultV2.\\n     * @param _approved Whether its operators may release.\\n     */\\n    function setBondOwner(address _bondOwner, bool _approved) external onlyOwner {\\n        if (_bondOwner == address(0)) revert ZeroAddress();\\n        isBondOwner[_bondOwner] = _approved;\\n        emit BondOwnerSet(_bondOwner, _approved);\\n    }\\n\\n    /**\\n     * @notice GOVERNANCE ONLY: Sets a payment method's dispute window; zero disables arbitrated release on it.\\n     * @param _paymentMethod Payment method hash.\\n     * @param _window Seconds a release's bond stays locked.\\n     */\\n    function setDisputeWindow(bytes32 _paymentMethod, uint64 _window) external onlyOwner {\\n        if (_window > MAX_DISPUTE_WINDOW) revert InvalidDisputeWindow(_window);\\n        disputeWindow[_paymentMethod] = _window;\\n        emit DisputeWindowSet(_paymentMethod, _window);\\n    }\\n\\n    /**\\n     * @notice GOVERNANCE ONLY: Replaces the scan verifier for future disputes.\\n     * @param _verifier New NonPaymentVerifier.\\n     */\\n    function setNonPaymentVerifier(INonPaymentVerifier _verifier) external onlyOwner {\\n        if (address(_verifier) == address(0)) revert ZeroAddress();\\n        emit NonPaymentVerifierSet(address(nonPaymentVerifier), address(_verifier));\\n        nonPaymentVerifier = _verifier;\\n    }\\n\\n    /// @notice GOVERNANCE ONLY: Stops new releases. Disputes, acknowledgements and settlement stay open.\\n    function pause() external onlyOwner {\\n        _pause();\\n    }\\n\\n    /// @notice GOVERNANCE ONLY: Resumes releases.\\n    function unpause() external onlyOwner {\\n        _unpause();\\n    }\\n\\n    /// @notice Ownership renunciation is disabled so governance keeps the pause and rail switches.\\n    function renounceOwnership() public view override onlyOwner {\\n        revert OwnershipRenunciationDisabled();\\n    }\\n\\n    /* ============ View Functions ============ */\\n\\n    /// @inheritdoc IBondedArbitrator\\n    function getRelease(bytes32 _intentHash) external view override returns (Release memory) {\\n        return releases[_intentHash];\\n    }\\n\\n    /// @inheritdoc IBondedArbitrator\\n    function lockId(bytes32 _intentHash) external view override returns (bytes32) {\\n        return _lockId(_intentHash);\\n    }\\n\\n    /* ============ Internal Functions ============ */\\n\\n    /// @dev The claim must name the payment and cover what is released at the intent's rate.\\n    function _validateClaim(IOrchestratorV4.Intent memory _intent, uint256 _releaseAmount, PaymentClaim calldata _claim)\\n        internal\\n        view\\n    {\\n        if (uint256(_claim.paidAfter) + MAX_LOOKBACK < _intent.timestamp || _claim.paidAfter > block.timestamp) {\\n            revert InvalidClaimWindow(_claim.paidAfter, _intent.timestamp);\\n        }\\n        if (_claim.payerHash == bytes32(0) && _claim.txIdHash == bytes32(0)) revert UnidentifiedPayment();\\n        uint256 releaseFiatValue = _releaseAmount * _intent.conversionRate / PRECISE_UNIT;\\n        if (_claim.amount == 0 || _claim.amount < releaseFiatValue) revert ClaimBelowRelease(_claim.amount, releaseFiatValue);\\n    }\\n\\n    function _openRelease(bytes32 _intentHash) internal view returns (Release memory open) {\\n        open = releases[_intentHash];\\n        if (open.operator == address(0)) revert ReleaseNotFound(_intentHash);\\n    }\\n\\n    function _unlock(bytes32 _intentHash, Release memory _open, bool _acknowledged) internal {\\n        (, uint256 amount,) = stakeVault.locks(_lockId(_intentHash));\\n        _close(_intentHash, _open.operator, amount);\\n        stakeVault.unlockStake(_lockId(_intentHash));\\n        emit ReleaseSettled(_intentHash, _open.bondOwner, _acknowledged);\\n    }\\n\\n    function _close(bytes32 _intentHash, address _operator, uint256 _amount) internal {\\n        delete releases[_intentHash];\\n        operatorLocked[_operator] -= _amount;\\n    }\\n\\n    /// @dev Domain-separated from DisputeProtectionPolicyV2, which locks under the bare intent hash.\\n    function _lockId(bytes32 _intentHash) internal view returns (bytes32) {\\n        return keccak256(abi.encode(address(this), _intentHash));\\n    }\\n}\\n\",\"keccak256\":\"0x8e2301327816ae3429afa7aee8c62215439f0b6f150961c7cef851c372b5ca47\",\"license\":\"MIT\"},\"contracts/interfaces/IBondedArbitrator.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport {INonPaymentVerifier} from \\\"./INonPaymentVerifier.sol\\\";\\n\\n/**\\n * @title IBondedArbitrator\\n * @notice OrchestratorV4 arbitrator that releases an intent only against locked stake and lets the depositor recover\\n * the unpaid share from that stake with an attestor-signed scan of the seller account.\\n */\\ninterface IBondedArbitrator {\\n    /// @notice The payment the operator relied on, committed at release.\\n    struct PaymentClaim {\\n        uint64 paidAfter;      // The payment was sent at or after this time; no earlier than MAX_LOOKBACK before signal\\n        uint256 amount;        // Fiat amount the evidence shows, in the deposit token's decimals\\n        bytes32 payerHash;     // keccak256 of the normalized payer display name; zero when unknown\\n        bytes32 txIdHash;      // Platform payment id, hashed as payment attestations hash it; zero when unknown\\n        bytes32 evidenceHash;  // Hash of the off-chain evidence, for audit; zero when none\\n    }\\n\\n    /// @notice An open release: who backs it, who is owed on a dispute, and what a scan must match.\\n    /// @dev The locked amount and maturity live in the StakeVaultV2 lock.\\n    struct Release {\\n        address operator;\\n        address bondOwner;\\n        address depositor;     // Captured before release; paid on a proven dispute\\n        uint64 releasedAt;\\n        bytes32 paymentMethod;\\n        bytes32 payeeId;\\n        bytes32 fiatCurrency;\\n        PaymentClaim claim;\\n    }\\n\\n    event ArbitratedRelease(\\n        bytes32 indexed intentHash,\\n        address indexed operator,\\n        address indexed bondOwner,\\n        uint256 amount,\\n        uint64 maturesAt,\\n        Release release\\n    );\\n    event ReleaseOverturned(\\n        bytes32 indexed intentHash,\\n        address indexed bondOwner,\\n        address indexed depositor,\\n        uint256 amount,\\n        bytes32 historyHash\\n    );\\n    event ReleaseSettled(bytes32 indexed intentHash, address indexed bondOwner, bool acknowledgedByDepositor);\\n    event OperatorSet(address indexed bondOwner, address indexed operator, uint256 cap);\\n    event BondOwnerSet(address indexed bondOwner, bool approved);\\n    event DisputeWindowSet(bytes32 indexed paymentMethod, uint64 window);\\n    event NonPaymentVerifierSet(address indexed previousVerifier, address indexed newVerifier);\\n\\n    error ZeroAddress();\\n    error UnauthorizedOperator(address caller);\\n    error UnauthorizedBondOwner(address caller);\\n    error OperatorTaken(address operator, address bondOwner);\\n    error NotArbitrator(bytes32 intentHash);\\n    error ArbitrationDisabled(bytes32 paymentMethod);\\n    error UnsupportedToken(address token);\\n    error InvalidClaimWindow(uint64 paidAfter, uint256 intentTimestamp);\\n    error UnidentifiedPayment();\\n    error ClaimBelowRelease(uint256 amount, uint256 releaseFiatValue);\\n    error OperatorCapExceeded(address operator, uint256 locked, uint256 cap);\\n    error ReleaseNotFound(bytes32 intentHash);\\n    error DisputeWindowClosed(uint64 maturesAt);\\n    error ScanMismatch(bytes32 intentHash);\\n    error StaleEvidence(uint64 windowEnd);\\n    error UnboundExclusion(bytes32 paymentId);\\n    error PaymentCovered(uint256 receivedAmount, uint256 claimedAmount);\\n    error NotMatured(uint64 maturesAt);\\n    error UnauthorizedDepositor(address caller);\\n    error InvalidDisputeWindow(uint64 window);\\n    error OwnershipRenunciationDisabled();\\n\\n    /**\\n     * @notice OPERATOR ONLY: Pays the intent recipient now and locks the same amount of the bond owner's stake until\\n     * the payment method's dispute window ends.\\n     * @param _intentHash Intent naming this contract as arbitrator.\\n     * @param _releaseAmount Deposit tokens to release; any rest returns to the deposit.\\n     * @param _claim Payment the operator relied on.\\n     */\\n    function release(bytes32 _intentHash, uint256 _releaseAmount, PaymentClaim calldata _claim) external;\\n\\n    /**\\n     * @notice Pays the depositor the unpaid share of the bond shown by a fresh attestor scan of the seller account.\\n     * @param _attestation Signed scan for the released intent.\\n     */\\n    function disputeNonPayment(INonPaymentVerifier.NonPaymentAttestation calldata _attestation) external;\\n\\n    /**\\n     * @notice DEPOSITOR ONLY: Confirms the payment arrived and unlocks the bond before maturity.\\n     * @param _intentHash Released intent.\\n     */\\n    function acknowledge(bytes32 _intentHash) external;\\n\\n    /**\\n     * @notice Unlocks the bond of every listed release whose dispute window has ended.\\n     * @param _intentHashes Released intents.\\n     */\\n    function settle(bytes32[] calldata _intentHashes) external;\\n\\n    /**\\n     * @notice BOND OWNER ONLY: Authorizes an operator to lock the caller's stake up to `_cap`; zero revokes it.\\n     * @param _operator Operator address.\\n     * @param _cap Most stake the operator's open releases may hold locked.\\n     */\\n    function setOperator(address _operator, uint256 _cap) external;\\n\\n    /// @notice Returns an open release; all zero after dispute or settlement.\\n    function getRelease(bytes32 _intentHash) external view returns (Release memory);\\n\\n    /// @notice Returns the StakeVaultV2 lock id that holds a release's bond.\\n    function lockId(bytes32 _intentHash) external view returns (bytes32);\\n}\\n\",\"keccak256\":\"0x6ba26b88d7ebbc6396dcc61572aebb57ff3a4cb3369784ee08f3cc592dbdba16\",\"license\":\"MIT\"},\"contracts/interfaces/IEscrow.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IERC20 } from \\\"@openzeppelin/contracts/token/ERC20/IERC20.sol\\\";\\nimport { IPostIntentHook } from \\\"./IPostIntentHook.sol\\\";\\n\\ninterface IEscrow {\\n    \\n    /* ============ Structs ============ */\\n\\n    struct Intent {\\n        bytes32 intentHash;                        // Unique identifier for the intent\\n        uint256 amount;                            // Amount locked\\n        uint256 timestamp;                         // When this intent was created\\n        uint256 expiryTime;                        // When this intent expires\\n    }\\n\\n    struct Range {\\n        uint256 min;                                // Minimum value\\n        uint256 max;                                // Maximum value\\n    }\\n\\n    struct Deposit {\\n        address depositor;                          // Address of depositor\\n        address delegate;                           // Address that can manage this deposit (address(0) if no delegate)\\n        IERC20 token;                               // Address of deposit token\\n        Range intentAmountRange;                    // Range of take amount per intent\\n        // Deposit state\\n        bool acceptingIntents;                      // State: True if the deposit is accepting intents, False otherwise\\n        uint256 remainingDeposits;                  // State: Amount of liquidity immediately available to lock\\n        uint256 outstandingIntentAmount;            // State: Amount of outstanding intents (may include expired intents)\\n        // Intent guardian\\n        address intentGuardian;                     // Address that can extend intent expiry times (address(0) if no guardian)\\n        // Retention behavior\\n        bool retainOnEmpty;                         // If true, do not auto-close/sweep when empty; keep config for reuse\\n    }\\n\\n    struct Currency {\\n        bytes32 code;                               // Currency code (keccak256 hash of the currency code)\\n        uint256 minConversionRate;                  // Minimum rate of deposit token to fiat currency (in preciseUnits)\\n    }\\n\\n    struct DepositPaymentMethodData {\\n        address intentGatingService;                // Public key of gating service that will be used to verify intents\\n        bytes32 payeeDetails;                       // Payee details, has to be hash of payee details\\n        bytes data;                                 // Verification Data: Additional data used for payment verification; Can hold attester address\\n                                                    // in case of TLS proofs, domain key hash in case of zkEmail proofs, currency code etc.\\n    }\\n\\n    struct CreateDepositParams {\\n        IERC20 token;                                // The token to be deposited\\n        uint256 amount;                              // The amount of token to deposit\\n        Range intentAmountRange;                     // The max and min take amount for each intent\\n        bytes32[] paymentMethods;                    // The payment methods that deposit supports\\n        DepositPaymentMethodData[] paymentMethodData;// The payment verification data for each payment method that deposit supports\\n        Currency[][] currencies;                     // The currencies for each payment method that deposit supports\\n        address delegate;                            // Optional delegate address that can manage this deposit (address(0) for no delegate)\\n        address intentGuardian;                      // Optional intent guardian address that can extend intent expiry times (address(0) for no guardian)\\n        bool retainOnEmpty;                          // Opt-in: keep deposit and config when empty\\n    }\\n\\n    /* ============ Events ============ */\\n\\n    event DepositReceived(uint256 indexed depositId, address indexed depositor, IERC20 indexed token, uint256 amount, Range intentAmountRange, address delegate, address intentGuardian);\\n\\n    event DepositPaymentMethodAdded(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed payeeDetails, address intentGatingService);\\n    event DepositPaymentMethodActiveUpdated(uint256 indexed depositId, bytes32 indexed paymentMethod, bool active);\\n\\n    event DepositCurrencyAdded(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed currency, uint256 minConversionRate);\\n    event DepositMinConversionRateUpdated(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed currency, uint256 newMinConversionRate);\\n    \\n    event DepositFundsAdded(uint256 indexed depositId, address indexed depositor, uint256 amount);\\n    event DepositWithdrawn(uint256 indexed depositId, address indexed depositor, uint256 amount);\\n    event DepositClosed(uint256 depositId, address depositor);\\n    event DepositAcceptingIntentsUpdated(uint256 indexed depositId, bool acceptingIntents);\\n\\n    event DepositIntentAmountRangeUpdated(uint256 indexed depositId, Range intentAmountRange);\\n    event DepositRetainOnEmptyUpdated(uint256 indexed depositId, bool retainOnEmpty);\\n\\n    event DepositDelegateSet(uint256 indexed depositId, address indexed depositor, address indexed delegate);\\n    event DepositDelegateRemoved(uint256 indexed depositId, address indexed depositor);\\n\\n    event MinDepositAmountSet(uint256 minDepositAmount);\\n\\n    event OrchestratorUpdated(address indexed orchestrator);\\n    event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);\\n\\n    event FundsLocked(uint256 indexed depositId, bytes32 indexed intentHash, uint256 amount, uint256 expiryTime);\\n    event FundsUnlocked(uint256 indexed depositId, bytes32 indexed intentHash, uint256 amount);\\n    event FundsUnlockedAndTransferred(\\n        uint256 indexed depositId, \\n        bytes32 indexed intentHash, \\n        uint256 unlockedAmount, \\n        uint256 transferredAmount, \\n        address to\\n    );\\n    event IntentExpiryExtended(uint256 indexed depositId, bytes32 indexed intentHash, uint256 newExpiryTime);\\n\\n    event DustRecipientUpdated(address indexed dustRecipient);\\n    event DustCollected(uint256 indexed depositId, uint256 dustAmount, address indexed dustRecipient);\\n    event DustThresholdUpdated(uint256 dustThreshold);\\n    event MaxIntentsPerDepositUpdated(uint256 maxIntentsPerDeposit);\\n    event IntentExpirationPeriodUpdated(uint256 intentExpirationPeriod);\\n\\n    /* ============ Standardized Custom Errors ============ */\\n    \\n    // Zero value errors\\n    error ZeroAddress();\\n    error ZeroValue();\\n    error ZeroMinValue();\\n    error ZeroConversionRate();\\n\\n    // Authorization errors\\n    error UnauthorizedCaller(address caller, address authorized);\\n    error UnauthorizedCallerOrDelegate(address caller, address owner, address delegate);\\n    error CannotDelegateToSelf(address depositor);\\n\\n    // Range and amount errors\\n    error InvalidRange(uint256 min, uint256 max);\\n    error AmountBelowMin(uint256 amount, uint256 min);\\n    error AmountAboveMax(uint256 amount, uint256 max);\\n    error AmountExceedsAvailable(uint256 requested, uint256 available);\\n\\n    // Not found errors\\n    error DepositNotFound(uint256 depositId);\\n    error IntentNotFound(bytes32 intentHash);\\n    error PaymentMethodNotActive(uint256 depositId, bytes32 paymentMethod);\\n    error PaymentMethodNotListed(uint256 depositId, bytes32 paymentMethod);\\n    error CurrencyNotFound(bytes32 paymentMethod, bytes32 currency);\\n    error DelegateNotFound(uint256 depositId);\\n\\n    // Already exists errors\\n    error PaymentMethodAlreadyExists(uint256 depositId, bytes32 paymentMethod);\\n    error CurrencyAlreadyExists(bytes32 paymentMethod, bytes32 currency);\\n    error IntentAlreadyExists(uint256 depositId, bytes32 intentHash);\\n\\n    // State errors\\n    error DepositNotAcceptingIntents(uint256 depositId);\\n    error DepositAlreadyInState(uint256 depositId, bool currentState);\\n    error InsufficientDepositLiquidity(uint256 depositId, uint256 available, uint256 required);\\n    error MaxIntentsExceeded(uint256 depositId, uint256 current, uint256 max);\\n\\n    // Validation errors\\n    error EmptyPayeeDetails();\\n    error ArrayLengthMismatch(uint256 length1, uint256 length2);\\n\\n    // Payment method errors\\n    error PaymentMethodNotWhitelisted(bytes32 paymentMethod);\\n    error CurrencyNotSupported(bytes32 paymentMethod, bytes32 currency);\\n\\n    \\n    /* ============ External Functions for Orchestrator ============ */\\n\\n    function lockFunds(uint256 _depositId, bytes32 _intentHash, uint256 _amount) external;\\n    function unlockFunds(uint256 _depositId, bytes32 _intentHash) external;\\n    function unlockAndTransferFunds(uint256 _depositId, bytes32 _intentHash, uint256 _transferAmount, address _to) external;\\n    function extendIntentExpiry(uint256 _depositId, bytes32 _intentHash, uint256 _additionalTime) external;\\n\\n    /* ============ View Functions ============ */\\n\\n    function getDeposit(uint256 _depositId) external view returns (Deposit memory);\\n    function getDepositIntent(uint256 _depositId, bytes32 _intentHash) external view returns (Intent memory);\\n    function getDepositPaymentMethods(uint256 _depositId) external view returns (bytes32[] memory);\\n    function getDepositCurrencies(uint256 _depositId, bytes32 _paymentMethod) external view returns (bytes32[] memory);\\n    function getDepositCurrencyMinRate(uint256 _depositId, bytes32 _paymentMethod, bytes32 _currencyCode) external view returns (uint256);\\n    function getDepositPaymentMethodData(uint256 _depositId, bytes32 _paymentMethod) external view returns (DepositPaymentMethodData memory);\\n    function getDepositPaymentMethodActive(uint256 _depositId, bytes32 _paymentMethod) external view returns (bool);\\n    function getDepositGatingService(uint256 _depositId, bytes32 _paymentMethod) external view returns (address);\\n    function getDepositIntentHashes(uint256 _depositId) external view returns (bytes32[] memory);\\n    function getExpiredIntents(uint256 _depositId) external view returns (bytes32[] memory expiredIntents, uint256 reclaimableAmount);\\n}\\n\",\"keccak256\":\"0x02077e75865a2db8887a3d4b3f4c0c398c0d2589f05506f489fb8189b223d60c\",\"license\":\"MIT\"},\"contracts/interfaces/IIntentSettlementPolicy.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\npragma solidity ^0.8.18;\\n\\n/// @notice Minimal settlement boundary used by OrchestratorV4.\\n/// @dev O4 depends only on these two functions, so settlement rules can change without deploying another\\n/// orchestrator. O4 applies its current policy at settlement.\\ninterface IIntentSettlementPolicy {\\n    struct SettlementContext {\\n        bytes32 intentHash;\\n        address token;\\n        address taker;\\n        address recipient;\\n        address depositor; // Captured before escrow unlock can delete the deposit.\\n        bytes32 paymentMethod;\\n        uint256 releaseAmount;\\n        uint256 netAmount;\\n        bytes settlementData; // Signed by the attestor; opaque to O4\\n    }\\n\\n    /// @notice Selects immediate or deferred settlement for a verified fulfilment by a non-whitelisted taker.\\n    /// @return deferralVault Zero to pay intent.to now; otherwise the vault that receives netAmount.\\n    function settleIntent(SettlementContext calldata context) external returns (address deferralVault);\\n\\n    /// @notice Locks the net payout O4 just transferred to the deferral vault.\\n    /// @dev O4 passes the same context it passed to settleIntent, in the same transaction.\\n    function onDeferredPayoutFunded(SettlementContext calldata context) external;\\n}\\n\",\"keccak256\":\"0xb87ce9e37cd3f3e14800446b860366dbb9aa81bc671520777376ee70f3deb672\",\"license\":\"MIT\"},\"contracts/interfaces/IIntentSignalPolicy.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\npragma solidity ^0.8.18;\\n\\nimport { IOrchestratorV4 } from \\\"./IOrchestratorV4.sol\\\";\\n\\n/// @notice Minimal signal boundary used by OrchestratorV4.\\n/// @dev Governance replaces the policy to change signal rules without deploying another orchestrator.\\ninterface IIntentSignalPolicy {\\n    /// @notice Admits a signal; reverts to reject it before any funds are locked.\\n    /// @dev UPV4 trusts the payer commitment O4 stores, so a policy must reject one it cannot vouch for.\\n    /// @return takerWhitelisted Whether the intent settles without the settlement policy\\n    /// @return arbitrator Address that may release, cancel and extend the intent; zero for none\\n    function validateSignalIntent(address taker, IOrchestratorV4.SignalIntentParams calldata params)\\n        external\\n        returns (bool takerWhitelisted, address arbitrator);\\n}\\n\",\"keccak256\":\"0x9543e6394bfa295825ab98a57abf4121e8a0238b23a813ecf451156a5a4624bf\",\"license\":\"MIT\"},\"contracts/interfaces/INonPaymentVerifier.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title INonPaymentVerifier\\n * @notice Verifies attestor-signed scans of a seller account: how much of a claimed payment actually arrived.\\n */\\ninterface INonPaymentVerifier {\\n    /**\\n     * @param intentHash Released intent the evidence is about.\\n     * @param dataHash Hash of the ABI-encoded `NonPaymentDetails`.\\n     * @param signatures Witness signatures over the verifier's EIP-712 digest.\\n     * @param data ABI-encoded `NonPaymentDetails`.\\n     */\\n    struct NonPaymentAttestation {\\n        bytes32 intentHash;\\n        bytes32 dataHash;\\n        bytes[] signatures;\\n        bytes data;\\n    }\\n\\n    /**\\n     * @notice The scan the attestor ran and the largest incoming payment it found that matches the claim.\\n     * @param paymentMethod Rail of the scanned account.\\n     * @param payeeId Hashed payee id of the scanned account.\\n     * @param fiatCurrency Currency the claim was made in.\\n     * @param windowStart Start of the scanned history, unix seconds.\\n     * @param windowEnd End of the scanned history, unix seconds; the scan time.\\n     * @param claimedAmount Fiat amount the operator claimed arrived, in the deposit token's decimals.\\n     * @param receivedAmount Matching fiat amount that did arrive, same units; zero when nothing matched.\\n     * @param payerHash Claimed payer; zero when the claim named none.\\n     * @param txIdHash Claimed platform payment id; zero when the claim named none.\\n     * @param historyHash Commitment to the normalized rows scanned, kept for audit.\\n     * @param excludedPaymentIds Matching payments the scan skipped because another intent already consumed them.\\n     */\\n    struct NonPaymentDetails {\\n        bytes32 paymentMethod;\\n        bytes32 payeeId;\\n        bytes32 fiatCurrency;\\n        uint64 windowStart;\\n        uint64 windowEnd;\\n        uint256 claimedAmount;\\n        uint256 receivedAmount;\\n        bytes32 payerHash;\\n        bytes32 txIdHash;\\n        bytes32 historyHash;\\n        bytes32[] excludedPaymentIds;\\n    }\\n\\n    event AttestationVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);\\n\\n    error ZeroAddress();\\n    error InvalidContract(address dependency);\\n    error InvalidAttestation();\\n    error AttestationVerificationFailed();\\n    error OwnershipRenunciationDisabled();\\n\\n    /**\\n     * @notice Checks the witness signatures and returns the signed scan.\\n     * @dev View-only and stateless; the caller binds the returned details to its own release record.\\n     */\\n    function verifyNonPayment(NonPaymentAttestation calldata _attestation)\\n        external\\n        view\\n        returns (NonPaymentDetails memory details);\\n}\\n\",\"keccak256\":\"0xa6003bc35f3a3257bfb5ea8d4cd881059b0534b42ab43057b83e063ceed2634e\",\"license\":\"MIT\"},\"contracts/interfaces/INullifierRegistry.sol\":{\"content\":\"//SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\ninterface INullifierRegistry {\\n    function addNullifier(bytes32 _nullifier) external;\\n    function isNullified(bytes32 _nullifier) external view returns(bool);\\n}\\n\",\"keccak256\":\"0x107164bc9a320938b513305878163b7fa884da4cdae58d0c8e81bfbb00c97c5e\",\"license\":\"MIT\"},\"contracts/interfaces/INullifierRegistryV2.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { INullifierRegistry } from \\\"./INullifierRegistry.sol\\\";\\n\\n/**\\n * @title INullifierRegistryV2\\n * @notice Canonically binds each consumed payment nullifier to the intent it fulfilled.\\n */\\ninterface INullifierRegistryV2 {\\n    event NullifierAdded(bytes32 indexed nullifier, bytes32 indexed intentHash, address indexed writer);\\n    event WriterAdded(address indexed writer);\\n    event WriterRemoved(address indexed writer);\\n\\n    error ZeroAddress();\\n    error ZeroNullifier();\\n    error ZeroIntentHash();\\n    error UnauthorizedWriter(address caller);\\n    error WriterAlreadyAuthorized(address writer);\\n    error WriterNotAuthorized(address writer);\\n    error NullifierAlreadyExists(bytes32 nullifier);\\n    error IntentAlreadyBound(bytes32 intentHash, bytes32 nullifier);\\n\\n    function legacyNullifierRegistry() external view returns (INullifierRegistry);\\n    function isNullified(bytes32 _nullifier) external view returns (bool);\\n    function intentHashByNullifier(bytes32 _nullifier) external view returns (bytes32);\\n    function nullifierByIntentHash(bytes32 _intentHash) external view returns (bytes32);\\n    function addNullifier(bytes32 _nullifier, bytes32 _intentHash) external;\\n    function isWriter(address _writer) external view returns (bool);\\n    function getWriters() external view returns (address[] memory);\\n    function addWritePermission(address _writer) external;\\n    function removeWritePermission(address _writer) external;\\n}\\n\",\"keccak256\":\"0xc1041b10ce93c7b93d3cf6cbd4716abf4c4dfca62b9b2c12da777d26dc3d4141\",\"license\":\"MIT\"},\"contracts/interfaces/IOrchestrator.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IERC20 } from \\\"@openzeppelin/contracts/token/ERC20/IERC20.sol\\\";\\nimport { IPostIntentHook } from \\\"./IPostIntentHook.sol\\\";\\n\\ninterface IOrchestrator {\\n    \\n    /* ============ Structs ============ */\\n\\n    struct Intent {\\n        address owner;                              // Address of the intent owner  \\n        address to;                                 // Address to forward funds to (can be same as owner)\\n        address escrow;                             // Address of the escrow contract holding the deposit\\n        uint256 depositId;                          // ID of the deposit the intent is associated with\\n        uint256 amount;                             // Amount of the deposit.token the owner wants to take\\n        uint256 timestamp;                          // Timestamp of the intent\\n        bytes32 paymentMethod;                      // The payment method to be used for the offchain payment\\n        bytes32 fiatCurrency;                       // Currency code that the owner is paying in offchain (keccak256 hash of the currency code)\\n        uint256 conversionRate;                     // Conversion rate of deposit token to fiat currency at the time of intent\\n        bytes32 payeeId;                            // Hashed payee identifier to whom the owner will pay offchain\\n        address referrer;                           // Address of the referrer who brought this intent (if any)\\n        uint256 referrerFee;                        // Fee to be paid to the referrer in preciseUnits (1e16 = 1%)\\n        IPostIntentHook postIntentHook;             // Address of the post-intent hook that will execute any post-intent actions\\n        bytes data;                                 // Additional data to be passed to the post-intent hook contract\\n    }\\n\\n    struct SignalIntentParams {\\n        address escrow;                             // The escrow contract where the deposit is held\\n        uint256 depositId;                          // The ID of the deposit the taker intends to use\\n        uint256 amount;                             // The amount of deposit.token the user wants to take\\n        address to;                                 // Address to forward funds to\\n        bytes32 paymentMethod;                      // The payment method to be used for the offchain payment\\n        bytes32 fiatCurrency;                       // The currency code for offchain payment\\n        uint256 conversionRate;                     // The conversion rate agreed offchain\\n        address referrer;                           // Address of the referrer (address(0) if no referrer)\\n        uint256 referrerFee;                        // Fee to be paid to the referrer\\n        bytes gatingServiceSignature;               // Signature from the deposit's gating service\\n        uint256 signatureExpiration;                // Timestamp when the gating service signature expires\\n        IPostIntentHook postIntentHook;             // Optional post-intent hook (address(0) for no hook)\\n        bytes data;                                 // Additional data for the intent\\n    }\\n\\n    struct FulfillIntentParams {\\n        bytes paymentProof;                         // Payment proof. Can be Groth16 Proof, TLSNotary proof, TLSProxy proof, attestation etc.\\n        bytes32 intentHash;                         // Identifier of intent being fulfilled\\n        bytes verificationData;                     // Additional data for payment verifier\\n        bytes postIntentHookData;                   // Additional data for post intent hook\\n    }\\n\\n    /* ============ Events ============ */\\n\\n    event IntentSignaled(\\n        bytes32 indexed intentHash, \\n        address indexed escrow,\\n        uint256 indexed depositId, \\n        bytes32 paymentMethod, \\n        address owner, \\n        address to, \\n        uint256 amount, \\n        bytes32 fiatCurrency, \\n        uint256 conversionRate, \\n        uint256 timestamp\\n    );\\n\\n    event IntentPruned(\\n        bytes32 indexed intentHash\\n    );\\n\\n    event IntentFulfilled(\\n        bytes32 indexed intentHash,\\n        address indexed fundsTransferredTo,   // Address that funds were transferred to; can be intent.to or postIntentHook address\\n        uint256 amount,\\n        bool isManualRelease\\n    );\\n\\n    event AllowMultipleIntentsUpdated(bool allowMultiple);\\n\\n    event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);\\n    event PostIntentHookRegistryUpdated(address indexed postIntentHookRegistry);\\n    event RelayerRegistryUpdated(address indexed relayerRegistry);\\n    event EscrowRegistryUpdated(address indexed escrowRegistry);\\n\\n    event ProtocolFeeUpdated(uint256 protocolFee);\\n    event ProtocolFeeRecipientUpdated(address indexed protocolFeeRecipient);\\n    event PartialManualReleaseDelayUpdated(uint256 partialManualReleaseDelay);\\n\\n    /* ============ Standardized Custom Errors ============ */\\n    \\n    // Zero value errors\\n    error ZeroAddress();\\n    error ZeroValue();\\n    \\n    // Authorization errors\\n    error UnauthorizedEscrowCaller(address caller);\\n    error UnauthorizedCaller(address caller, address authorized);\\n    \\n    // Not found errors\\n    error IntentNotFound(bytes32 intentHash);\\n    error PaymentMethodDoesNotExist(bytes32 paymentMethod);\\n    error PaymentMethodNotSupported(bytes32 paymentMethod);\\n    error CurrencyNotSupported(bytes32 paymentMethod, bytes32 currency);\\n    \\n    // Whitelist errors\\n    error PaymentMethodNotWhitelisted(bytes32 paymentMethod);\\n    error PostIntentHookNotWhitelisted(address hook);\\n    error EscrowNotWhitelisted(address escrow);\\n    \\n    // Amount and fee errors\\n    error AmountBelowMin(uint256 amount, uint256 min);\\n    error AmountAboveMax(uint256 amount, uint256 max);\\n    error AmountExceedsLimit(uint256 amount, uint256 limit);\\n    error FeeExceedsMaximum(uint256 fee, uint256 maximum);\\n    error RateBelowMinimum(uint256 rate, uint256 minRate);\\n    \\n    // Validation errors\\n    error AccountHasActiveIntent(address account, bytes32 existingIntent);\\n    error InvalidReferrerFeeConfiguration();\\n    error InvalidSignature();\\n    error SignatureExpired(uint256 expiration, uint256 currentTime);\\n    error PartialReleaseNotAllowedYet(uint256 currentTime, uint256 allowedTime);\\n\\n    // Verification errors\\n    error PaymentVerificationFailed();\\n    error HashMismatch(bytes32 expected, bytes32 actual);\\n     \\n    // Transfer errors\\n    error TransferFailed(address recipient, uint256 amount);\\n    error EscrowLockFailed();\\n\\n    /* ============ View Functions ============ */\\n\\n    function getIntent(bytes32 intentHash) external view returns (Intent memory);\\n    function getAccountIntents(address account) external view returns (bytes32[] memory);\\n    \\n    /* ============ External Functions for Users ============ */\\n\\n    function signalIntent(SignalIntentParams calldata params) external;\\n\\n    function cancelIntent(bytes32 intentHash) external;\\n\\n    function fulfillIntent(FulfillIntentParams calldata params) external;\\n\\n    function releaseFundsToPayer(bytes32 intentHash) external;\\n\\n    /* ============ External Functions for Escrow ============ */\\n\\n    function pruneIntents(bytes32[] calldata intentIds) external;\\n}\",\"keccak256\":\"0xcf8db7a4c1481049dbdc2516f47cc0a4ea3a6e71093ee7c637a51294096accbf\",\"license\":\"MIT\"},\"contracts/interfaces/IOrchestratorV4.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IReferralFee } from \\\"./IReferralFee.sol\\\";\\nimport { IIntentSettlementPolicy } from \\\"./IIntentSettlementPolicy.sol\\\";\\nimport { IIntentSignalPolicy } from \\\"./IIntentSignalPolicy.sol\\\";\\n\\n/**\\n * @title IOrchestratorV4\\n * @notice Interface for the V4 orchestrator with deferred settlement.\\n * @dev Intent keeps V3 field order with the intent hooks removed and the hook data replaced by payerCommitment,\\n * then appends takerWhitelisted and arbitrator.\\n */\\ninterface IOrchestratorV4 {\\n\\n    /* ============ Structs ============ */\\n\\n    struct Intent {\\n        address owner;                              // Address of the intent owner\\n        address to;                                 // Address to forward funds to (can be same as owner)\\n        address escrow;                             // Address of the escrow contract holding the deposit\\n        uint256 depositId;                          // ID of the deposit the intent is associated with\\n        uint256 amount;                             // Amount of the deposit.token the owner wants to take\\n        uint256 timestamp;                          // Timestamp of the intent\\n        bytes32 paymentMethod;                      // The payment method to be used for the offchain payment\\n        bytes32 fiatCurrency;                       // Currency code that the owner is paying in offchain (keccak256 hash of the currency code)\\n        uint256 conversionRate;                     // Conversion rate of deposit token to fiat currency at the time of intent\\n        bytes32 payeeId;                            // Hashed payee identifier to whom the owner will pay offchain\\n        IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker\\n        bytes payerCommitment;                      // What the payer commits to, e.g. a salted payer ID hash; empty = none\\n        bool takerWhitelisted;                      // Signal policy admitted the taker as whitelisted; skips the settlement policy\\n        address arbitrator;                         // Arbitrator the signal policy named; can release, cancel or extend; zero = none\\n    }\\n\\n    struct SignalIntentParams {\\n        address escrow;                             // The escrow contract where the deposit is held\\n        uint256 depositId;                          // The ID of the deposit the taker intends to use\\n        uint256 amount;                             // The amount of deposit.token the user wants to take\\n        address to;                                 // Address to forward funds to\\n        bytes32 paymentMethod;                      // The payment method to be used for the offchain payment\\n        bytes32 fiatCurrency;                       // The currency code for offchain payment\\n        uint256 conversionRate;                     // The conversion rate agreed offchain\\n        IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker\\n        bytes gatingServiceSignature;               // Signature from the gating service, checked by the signal policy\\n        uint256 signatureExpiration;                // Timestamp when the gating service signature expires\\n        bytes payerCommitment;                      // Vouched for by the signal policy; UPV4 requires the attestor to sign its hash\\n        bytes32 groupId;                            // Group the taker signals through; the signal policy may name its arbitrator; zero = none\\n    }\\n\\n    struct FulfillIntentParams {\\n        bytes paymentProof;                         // Payment proof. Can be Groth16 Proof, TLSNotary proof, TLSProxy proof, attestation etc.\\n        bytes32 intentHash;                         // Identifier of intent being fulfilled\\n        bytes verificationData;                     // Additional data for payment verifier\\n    }\\n\\n    /* ============ Events ============ */\\n\\n    event IntentPayoutDeferred(bytes32 indexed intentHash, address indexed recipient, address indexed vault, uint256 amount);\\n\\n    /// @dev groupId is the value the taker passed in SignalIntentParams; the signal policy ignores it when the\\n    /// deposit's whitelist is off. arbitrator is the arbitrator stored on the intent, zero when none.\\n    event IntentSignaled(\\n        bytes32 indexed intentHash,\\n        address indexed escrow,\\n        uint256 indexed depositId,\\n        bytes32 paymentMethod,\\n        address owner,\\n        address to,\\n        uint256 amount,\\n        bytes32 fiatCurrency,\\n        uint256 conversionRate,\\n        uint256 timestamp,\\n        bytes32 groupId,\\n        address arbitrator\\n    );\\n\\n    event IntentPruned(\\n        bytes32 indexed intentHash\\n    );\\n\\n    event IntentFulfilled(\\n        bytes32 indexed intentHash,\\n        address indexed fundsTransferredTo,\\n        uint256 amount,\\n        address releasedBy                          // Depositor or arbitrator for a manual release; zero for a verified payment\\n    );\\n\\n    event IntentReferralFeeDistributed(\\n        bytes32 indexed intentHash,\\n        address indexed feeRecipient,\\n        uint256 feeAmount\\n    );\\n    event IntentManagerFeeSnapshotted(bytes32 indexed intentHash, address indexed feeRecipient, uint256 fee);\\n    event SettlementPolicyUpdated(address indexed previousPolicy, address indexed newPolicy);\\n    event SignalPolicyUpdated(address indexed previousPolicy, address indexed newPolicy);\\n\\n    event EscrowRegistryUpdated(address indexed escrowRegistry);\\n\\n    event ProtocolFeeUpdated(uint256 protocolFee);\\n    event ProtocolFeeRecipientUpdated(address indexed protocolFeeRecipient);\\n\\n    /* ============ Standardized Custom Errors ============ */\\n\\n    // Zero value errors\\n    error ZeroAddress();\\n\\n    // Authorization errors\\n    error UnauthorizedCaller(address caller, address authorized);\\n\\n    // Not found errors\\n    error IntentNotFound(bytes32 intentHash);\\n    error PaymentMethodDoesNotExist(bytes32 paymentMethod);\\n    error PaymentMethodNotSupported(bytes32 paymentMethod);\\n    error CurrencyNotSupported(bytes32 paymentMethod, bytes32 currency);\\n\\n    // Whitelist errors\\n    error EscrowNotWhitelisted(address escrow);\\n\\n    // Amount and fee errors\\n    error FeeExceedsMaximum(uint256 fee, uint256 maximum);\\n    error RateBelowMinimum(uint256 rate, uint256 minRate);\\n    error PartialReleaseRequiresArbitrator(uint256 releaseAmount, uint256 intentAmount);\\n\\n    // Verification errors\\n    error PaymentVerificationFailed();\\n    error HashMismatch(bytes32 expected, bytes32 actual);\\n\\n    /* ============ View Functions ============ */\\n\\n    function getIntent(bytes32 intentHash) external view returns (Intent memory);\\n    function getAccountIntents(address account) external view returns (bytes32[] memory);\\n    function settlementPolicy() external view returns (IIntentSettlementPolicy);\\n    function signalPolicy() external view returns (IIntentSignalPolicy);\\n\\n    /* ============ External Functions for Users ============ */\\n\\n    /// @notice Signals an intent and locks its escrow funds; a set signal policy must accept it.\\n    function signalIntent(SignalIntentParams calldata params) external;\\n\\n    /// @notice Sets the signal policy that validates every later signal; zero disables signal checks.\\n    function setSignalPolicy(IIntentSignalPolicy policy) external;\\n\\n    /// @notice Sets the settlement policy applied to every later settlement; zero disables protection.\\n    function setSettlementPolicy(IIntentSettlementPolicy policy) external;\\n\\n    /// @notice Cancels an intent as its owner or arbitrator and unlocks its funds.\\n    function cancelIntent(bytes32 intentHash) external;\\n\\n    /// @notice Verifies payment and settles immediately or defers the net payout.\\n    /// @dev Forwards the signed settlement data to the current settlement policy.\\n    function fulfillIntent(FulfillIntentParams calldata params) external;\\n\\n    /// @notice Manually settles an intent: in full as its depositor, or any part as its arbitrator.\\n    function releaseFundsToPayer(bytes32 intentHash, uint256 releaseAmount) external;\\n\\n    /// @notice Extends an intent's expiry for free as its arbitrator; the escrow must let this orchestrator extend.\\n    function extendIntent(bytes32 intentHash, uint256 additionalTime) external;\\n\\n    /* ============ External Functions for Escrow ============ */\\n\\n    /// @notice Prunes intents belonging to the calling escrow.\\n    function pruneIntents(bytes32[] calldata intentIds) external;\\n\\n    /* ============ External Functions for Anyone ============ */\\n\\n    /// @notice Prunes intents no longer present on their escrow.\\n    function cleanupOrphanedIntents(bytes32[] calldata intentHashes) external;\\n}\\n\",\"keccak256\":\"0x19b39307805f019e4bd38a08b7bc8456f4c861ae4ddad81b568f22ff58349f4d\",\"license\":\"MIT\"},\"contracts/interfaces/IPostIntentHook.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IOrchestrator } from \\\"./IOrchestrator.sol\\\";\\n\\n/**\\n * @title IPostIntentHook\\n * @notice Interface for post-intent hooks\\n */\\ninterface IPostIntentHook {\\n\\n    /**\\n     * @notice Post-intent hook\\n     * @param _intent The intent data structure containing all intent information\\n     * @param _fulfillIntentData The data passed to fulfillIntent\\n     */\\n    function execute(\\n        IOrchestrator.Intent memory _intent,\\n        uint256 _amountNetFees,\\n        bytes calldata _fulfillIntentData\\n    ) external;\\n}\\n\",\"keccak256\":\"0x72ae0d60c98f89eb2363f455445466c1dfaddfb338a63d65d3eb8469cbd9484d\",\"license\":\"MIT\"},\"contracts/interfaces/IReferralFee.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\ninterface IReferralFee {\\n    struct ReferralFee {\\n        address recipient;\\n        uint256 fee;\\n    }\\n\\n    error ReferralFeeExceedsMaximum(uint256 totalFee, uint256 maximum);\\n    error ReferralFeeCountExceedsMaximum(uint256 count, uint256 maximum);\\n    error DuplicateReferralFeeRecipient(address recipient);\\n    error InvalidReferralFeeConfiguration();\\n}\\n\",\"keccak256\":\"0x117db0f8a3b705230a4139323f80dc534470d2c1a3a08364750ad0f9039ed1a5\",\"license\":\"MIT\"},\"contracts/interfaces/IStakeVaultV2.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport {IERC20} from \\\"@openzeppelin/contracts/token/ERC20/IERC20.sol\\\";\\n\\n/**\\n * @title IStakeVaultV2\\n * @notice Stake custody, delegation, controller locks and dispute claims. Canonical USDC only.\\n */\\ninterface IStakeVaultV2 {\\n    struct StakeLock {\\n        address stakeOwner;\\n        uint256 amount;\\n        uint64 maturesAt;\\n    }\\n\\n    struct Claim {\\n        address beneficiary;\\n        uint256 amount;\\n    }\\n\\n    error ZeroAddress();\\n    error ZeroAmount();\\n    error ZeroLockId();\\n    error UnauthorizedController(address caller);\\n    error UnauthorizedLockController(bytes32 lockId, address caller, address controller);\\n    error InvalidTaker(address taker);\\n    error UnauthorizedStakeOwner(address taker, address stakeOwner);\\n    error InvalidMaturity(uint64 maturity, uint64 currentTime);\\n    error LockAlreadyExists(bytes32 lockId);\\n    error LockNotFound(bytes32 lockId);\\n    error InsufficientFreeStake(address stakeOwner, uint256 available, uint256 required);\\n    error InsufficientUnaccountedTokens(uint256 available, uint256 required);\\n    error InvalidClaim(address beneficiary, uint256 amount);\\n    error ClaimsExceedLock(uint256 lockAmount, uint256 claimsAmount);\\n    error OwnershipRenunciationDisabled();\\n\\n    event StakeDeposited(address indexed stakeOwner, uint256 amount, uint256 newStakeBalance);\\n    event StakeWithdrawn(address indexed stakeOwner, address indexed to, uint256 amount, uint256 newStakeBalance);\\n    event TakerAuthorizationUpdated(address indexed stakeOwner, address indexed taker, bool authorized);\\n    event StakeOwnerSelected(address indexed taker, address indexed previousStakeOwner, address indexed newStakeOwner);\\n    event StakeLocked(\\n        bytes32 indexed lockId, address indexed stakeOwner, uint256 amount, uint64 maturesAt, uint256 totalLockedStake\\n    );\\n    event LockFunded(bytes32 indexed lockId, address indexed stakeOwner, uint256 amount, uint256 newStakeBalance);\\n    event StakeUnlocked(bytes32 indexed lockId, address indexed stakeOwner, uint256 amount, uint256 totalLockedStake);\\n    event StakeLockResolved(\\n        bytes32 indexed lockId,\\n        address indexed stakeOwner,\\n        uint256 lockAmount,\\n        uint256 unlockedAmount,\\n        uint256 claimedAmount,\\n        uint256 totalLockedStake\\n    );\\n    event ClaimCreated(\\n        bytes32 indexed lockId, address indexed beneficiary, uint256 amount, uint256 newClaimableBalance\\n    );\\n    event ClaimWithdrawn(address indexed beneficiary, uint256 amount);\\n\\n    event ControllerUpdated(address indexed controller, bool authorized);\\n\\n    function depositStake(uint256 _amount) external;\\n    function withdrawStake(uint256 _amount) external;\\n    function withdrawStakeTo(address _to, uint256 _amount) external;\\n    function claim() external;\\n\\n    function setTakerAuthorization(address _taker, bool _authorized) external;\\n    function selectStakeOwner(address _stakeOwner) external;\\n    function clearStakeOwner() external;\\n\\n    function lockStake(address _stakeOwner, bytes32 _lockId, uint256 _amount, uint64 _maturesAt) external;\\n    function fundLock(address _stakeOwner, bytes32 _lockId, uint256 _amount, uint64 _maturesAt) external;\\n    function unlockStake(bytes32 _lockId) external;\\n    function payOutLock(bytes32 _lockId) external;\\n    function resolveLock(bytes32 _lockId, Claim[] calldata _claims) external;\\n\\n    /// @notice Immediately changes controller authorization; de-authorize only after its locks drain.\\n    function setController(address _controller, bool _authorized) external;\\n\\n    function stakeToken() external view returns (IERC20);\\n    function isController(address _controller) external view returns (bool);\\n    function lockController(bytes32 _lockId) external view returns (address);\\n    function stakeBalance(address _stakeOwner) external view returns (uint256);\\n    function lockedStake(address _stakeOwner) external view returns (uint256);\\n    function claimable(address _beneficiary) external view returns (uint256);\\n    function totalStaked() external view returns (uint256);\\n    function totalClaimable() external view returns (uint256);\\n    function locks(bytes32 _lockId) external view returns (address stakeOwner, uint256 amount, uint64 maturesAt);\\n    function selectedStakeOwner(address _taker) external view returns (address);\\n    function authorizedTakers(address _stakeOwner, address _taker) external view returns (bool);\\n    function stakeOwnerOf(address _taker) external view returns (address);\\n\\n    /**\\n     * @notice Returns a taker's live selected stake owner and that owner's aggregate balances.\\n     * @param _taker Taker whose effective stake owner and balances are queried.\\n     */\\n    function getTakerState(address _taker)\\n        external\\n        view\\n        returns (address stakeOwner, uint256 totalStake, uint256 lockedStakeAmount, uint256 freeStakeAmount);\\n    function freeStake(address _stakeOwner) external view returns (uint256);\\n    function totalAccounted() external view returns (uint256);\\n    function unaccountedBalance() external view returns (uint256);\\n}\\n\",\"keccak256\":\"0xdc178b8ad1955a86cff667741fe5d96eeb48aa0ce4aaba390e2a3045d8fea43c\",\"license\":\"MIT\"}},\"version\":1}",
+  "bytecode": "0x60e034620001c257601f62002a9938819003918201601f19168301916001600160401b03831184841017620001c75780849260a094604052833981010312620001c25780516001600160a01b03808216808303620001c257602084015193828516808603620001c257604082015191848316808403620001c25760608201519486861692838703620001c25760800151968716809703620001c257620000a533620001dd565b6001805460ff60a01b1916815560025515928315620001b8575b508215620001ae575b508115620001a4575b5080156200019b575b6200018957620001039460805260a05260c05260018060a01b03196003541617600355620001dd565b60405161286d90816200022c82396080518181816105f40152818161175c01528181611b7b0152611bd0015260a05181818161027301528181610ace01528181610c9701528181611031015281816110ad015281816116970152818161189d01528181611ad70152611b42015260c0518181816105af01528181610e5c0152611cad0152f35b60405163d92e233d60e01b8152600490fd5b508215620000da565b90501538620000d1565b15915038620000c8565b15925038620000bf565b600080fd5b634e487b7160e01b600052604160045260246000fd5b60018060a01b031990816001541660015560005460018060a01b038092168093821617600055167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0600080a356fe608080604052600436101561001357600080fd5b600090813560e01c9081630a7dfa39146122b6575080630d43ea0c1461227a57806311eed02c1461224157806312253086146116ef57806329e600f8146116c65780632d788333146116815780632dae1d861461165a5780633594ef771461163d5780633e654d24146115cb5780633f4ba83a1461152e5780634d5ef5e114610c225780635c975abb14610bfc5780636e5a819414610a8e5780637091468b146109ed578063715018a6146109c2578063748d8ecd14610983578063777541361461086957806379ba5097146107ac5780637f698e92146106cb57806380cbc6fa146106ad5780638456cb591461064a5780638da5cb5b14610623578063b74795d9146105de578063b870676c14610599578063c793df5314610501578063d5a59e52146104c8578063e30c39781461049f578063e7f921a21461020d578063f2fde38b146101a05763fa450a651461016b57600080fd5b3461019d57602036600319011261019d576001600160401b036040602092600435815260048452205416604051908152f35b80fd5b503461019d57602036600319011261019d576101ba6122d3565b6101c2612379565b600180546001600160a01b0319166001600160a01b0392831690811790915582549091167f38d16b8cac22d99fc7c124b9cd0de2d3fa1faef420bfe791d8c362d765e227008380a380f35b503461019d5760208060031936011261049b576004356001600160401b03808211610497573660238301121561049757816004013581811161049357602493848401938536918460051b01011161048f576102699491946124f1565b6001600160a01b037f0000000000000000000000000000000000000000000000000000000000000000811692875b8781106102a75788600160025580f35b6102bb6102b5828a8a61263a565b356126c5565b6102cf6102c9838b8b61263a565b35612814565b60405163ed5e843760e01b9182825260048201528b606091828188818d5afa908115610484578b9291610464575b501680421061044d5750610312848c8c61263a565b359060009261032083612814565b6040519182526004820152818188818d5afa918215610442579061035292918592610412575b505087855116836127a6565b61035b81612814565b883b1561040e576040519063722081d160e11b8252600482015282818781838d5af1801561040357876103c996959493928a926103ce575b50817feac6d9697ee75dedfb26400fc1249025755968a8ffadfb31e0bad3ad99b1855193949501511693604051908152a36125d4565b610297565b7feac6d9697ee75dedfb26400fc1249025755968a8ffadfb31e0bad3ad99b1855193946103fb8492612423565b949350610393565b6040513d85823e3d90fd5b8280fd5b6104319250803d1061043b575b6104298183612451565b810190612559565b5090503880610346565b503d61041f565b6040513d86823e3d90fd5b85906040519063302f66d760e11b82526004820152fd5b61047b9150833d851161043b576104298183612451565b915050386102fd565b6040513d84823e3d90fd5b8580fd5b8480fd5b8380fd5b5080fd5b503461019d578060031936011261019d576001546040516001600160a01b039091168152602090f35b503461019d57602036600319011261019d576020906040906001600160a01b036104f06122d3565b168152600783522054604051908152f35b503461019d57604036600319011261019d5761051b6122d3565b6024359081151580920361040e57610531612379565b6001600160a01b03169081156105875760207fdf660835e7c515ab8e4fea707aef23b901d5e4ba4d7ebf80e239860236912ce491838552600582526040852060ff1981541660ff8316179055604051908152a280f35b60405163d92e233d60e01b8152600490fd5b503461019d578060031936011261019d576040517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b503461019d578060031936011261019d576040517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b503461019d578060031936011261019d57546040516001600160a01b039091168152602090f35b503461019d578060031936011261019d57610663612379565b61066b6124aa565b6001805460ff60a01b1916600160a01b1790556040513381527f62e78cea01bee320cd4e420270b5ea74000d11b0c9f74754ebdbfc544b05a25890602090a180f35b503461019d578060031936011261019d5760206040516276a7008152f35b503461019d57602036600319011261019d576040610180916106eb61264a565b50600435815260096020522060405190610704826123ec565b600a60018060a01b0391828154168452826001820154166020850152600281015492831660408501526001600160401b03809360a01c16606085015260038101546080850152600481015460a0850152600581015460c08501526040519261076b84612408565b60068201541683526007810154602084015260088101546040840152600981015460608401520154608082015260e08201526107aa60405180926122e9565bf35b503461019d578060031936011261019d576001546001600160a01b033381831603610812576001600160a01b031991821660015582543392811683178455167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08380a380f35b60405162461bcd60e51b815260206004820152602960248201527f4f776e61626c6532537465703a2063616c6c6572206973206e6f7420746865206044820152683732bb9037bbb732b960b91b6064820152608490fd5b503461019d57604036600319011261019d576108836122d3565b60243533835260206005815260ff6040852054161561096b576001600160a01b03928316928315610587578385526006825260408520541680151580610961575b61094357507f46a53ed9eca0c7b83ffe1816d76072991f61ba734bf907c3db0415bd94503928908261092357838552600681526040852080546001600160a01b03191690555b838552600781528260408620556040519283523392a380f35b838552600681526040852080546001600160a01b0319163317905561090a565b8360449160405191632882d4e560e11b835260048301526024820152fd5b50338114156108c4565b604051630378a85b60e21b8152336004820152602490fd5b503461019d57602036600319011261019d5760209060ff906040906001600160a01b036109ae6122d3565b168152600584522054166040519015158152f35b503461019d578060031936011261019d576109db612379565b6040516310e83c2760e21b8152600490fd5b503461019d57604036600319011261019d576004356024356001600160401b038116809103610a8957610a1e612379565b6276a7008111610a715760207f7ec0af68d379da82a8132661d791f5c353160c81d8356459613151730574aa09918385526004825260408520816001600160401b0319825416179055604051908152a280f35b602490604051906356c9850760e11b82526004820152fd5b600080fd5b503461019d57602036600319011261019d57600435610aab6124f1565b610ab4816126c5565b60408101516001600160a01b03919082163303610be457817f00000000000000000000000000000000000000000000000000000000000000001690610af884612814565b6040519063ed5e843760e01b82526004820152606081602481865afa8015610bb757610b3191600091610bc3575b5084835116866127a6565b610b3a84612814565b823b15610a895760009260248492604051958693849263722081d160e11b845260048401525af1918215610bb757602092610ba8575b50015116907feac6d9697ee75dedfb26400fc1249025755968a8ffadfb31e0bad3ad99b18551602060405160018152a3600160025580f35b610bb190612423565b38610b70565b6040513d6000823e3d90fd5b610bdb915060603d811161043b576104298183612451565b50905038610b26565b60405163cb00a07360e01b8152336004820152602490fd5b503461019d578060031936011261019d57602060ff60015460a01c166040519015158152f35b503461019d5760031960203682011261049b576001600160401b036004351161049b576080906004353603011261019d57610c5b6124f1565b610c6a600435600401356126c5565b610c7960043560040135612814565b60405163ed5e843760e01b81526004810191909152916060836024817f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03165afa801561152157819382916114f4575b506001600160401b0316804210156114dc575060018060a01b036003541691604051926314cffecd60e01b84526020600485015260043560040135602485015260246004350135604485015260221960043536030160446004350135121561040e576001600160401b03600480356044823501350101351161040e57600480356044810135019081013560051b360360249091011361040e5760806064850152600480356044810135019081013560a4860181905284928692909160c460059190911b8401810191602401908401855b6004803560448235013501013581106114935750505082610de28192610dd06064600435016004356004016125a3565b84830360231901608486015290612582565b03915afa9283156104845782936112fc575b5082519360808201948551148015906112ea575b80156112d8575b80156112b4575b8015611291575b801561127b575b8015611265575b801561124e575b61123157608084016001600160401b03815116610e10810180911161121b5742116111f9575090937f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03169190835b610140860180518051831015610f8257610ea483855192612606565b516040519060208201928352604082015260408152610ec281612436565b5190206040519063beddb1d160e01b82526004820152602081602481895afa908115610f77578791610f41575b508015908115610f31575b50610f0e5750610f09906125d4565b610e88565b602491610f1b9151612606565b516040519063026370eb60e61b82526004820152fd5b9050600435600401351438610efa565b90506020813d602011610f6f575b81610f5c60209383612451565b81010312610f6b575138610eef565b8680fd5b3d9150610f4f565b6040513d89823e3d90fd5b8689898760c0820190815160a08401908151808210156000146111c057505085925b831561119f5750508351610fc791906001600160a01b03166004803501356127a6565b60405190610fd4826123d1565b600193848352855b6020811061117c57506040818101805191519094916001600160a01b0316611003826123d1565b8152836020820152611014826125e3565b5261101e816125e3565b5061102e60043560040135612814565b907f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03163b15611178579087916040519163bcdded0b60e01b835260448301906004840152604060248401528151809152602060648401920190845b8a82821061114c57505050508180849203818360018060a01b037f0000000000000000000000000000000000000000000000000000000000000000165af1801561048457611138575b505061012090602060018060a01b03910151169260018060a01b0390511693015160405191825260208201527f19c0f41abb4854ddc0f0248ae1058e8ea7e6e1e506c3d2489a6a51dd714275f760406004356004013592a460025580f35b61114190612423565b61048f5785876110da565b835180516001600160a01b03168652602090810151818701528d97506040909501949093019201611091565b8780fd5b60209060405161118b816123d1565b888152888382015282828701015201610fdc565b6044925051905160405191632c392f3560e01b835260048301526024820152fd5b6111d3916111cd9161261a565b83612627565b81519081156111e3570492610fa4565b634e487b7160e01b600052601260045260246000fd5b6001600160401b03602491511660405190632d6d56ab60e11b82526004820152fd5b634e487b7160e01b600052601160045260246000fd5b6024604051631d57ea6960e11b8152600435600401356004820152fd5b50610100840151606060e084015101511415610e32565b5060e0840151604060e084015101511415610e2b565b5060a0840151602060e084015101511415610e24565b506001600160401b036080850151166001600160401b0360608401511611610e1d565b506001600160401b036060850151166001600160401b0360e0840151511610610e16565b50604084015160c08301511415610e0f565b50602084015160a08301511415610e08565b9092503d908183823e61130f8282612451565b602081838101031261040e578051906001600160401b0382116104975761016092838383018284010312610493576040519384818101106001600160401b03828701111761147d578401604052828201518452602083830101516020850152604083830101516040850152611388606084840101612545565b606085015261139b608084840101612545565b608085015281830160a0818101519086015260c0808201519086015260e08082015190860152610100808201519086015261012080820151908601526101400151916001600160401b03831161048f57818101601f848684010101121561048f578284820101519261140c84612486565b9461141a6040519687612451565b8486526020860193830160208660051b8484870101010111611178579291906020818584010101935b60208660051b838386010101018510611469575050505050506101408201529138610df4565b602080809587518152019501949350611443565b634e487b7160e01b600052604160045260246000fd5b9260209194965060019295506114ca829160c3198c82030187526114c48860246004356044600435013501016125a3565b90612582565b95019301910191879391879593610da0565b602490604051906331a4362960e11b82526004820152fd5b6001600160401b039450611517915060603d60601161043b576104298183612451565b9491509390610cd0565b50604051903d90823e3d90fd5b503461019d578060031936011261019d57611547612379565b60015460ff8160a01c161561158f5760ff60a01b19166001556040513381527f5db9ee0a495bf2e6ff9c91a7834c1ba4fdd244a5e8aa4e537bd38aeae4b073aa90602090a180f35b60405162461bcd60e51b815260206004820152601460248201527314185d5cd8589b194e881b9bdd081c185d5cd95960621b6044820152606490fd5b503461019d57602036600319011261019d576004356001600160a01b038181169182900361040e576115fb612379565b811561058757816003549182167f0994d712b91db9a30e9e4e9f1232a6eb715faef49e730c86bd3ad66c093a4b4e8580a36001600160a01b0319161760035580f35b503461019d578060031936011261019d576020604051610e108152f35b503461019d57602036600319011261019d576020611679600435612814565b604051908152f35b503461019d578060031936011261019d576040517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b503461019d578060031936011261019d576003546040516001600160a01b039091168152602090f35b503461019d5760e036600319011261019d5760a036604319011261019d576117156124aa565b61171d6124f1565b338152600660205260408120546001600160a01b03168015801561222a575b6122125760405163789e235560e11b8152600480359082015282816024817f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03165afa908115610403578391611fc9575b506101a08101516001600160a01b03163003611fb05760c0810151835260046020526001600160401b036040842054168015611f94576001600160401b036117da6126af565b1662278d008101809111611f805760a08301518091108015611f66575b611f3757506084351580611f2d575b611f1b57670de0b6b3a7640000611824610100840151602435612627565b04606435158015611f10575b611ef0575060018060a01b0360408301511661014060608401516024604051809481936313f3f72d60e31b835260048301525afa908115611d35578591611ddd575b50604081810151905163051ed6a360e41b81526001600160a01b0391821691602090829060049082907f0000000000000000000000000000000000000000000000000000000000000000165afa908115610f77578791611da3575b506001600160a01b031603611d7c573385526008602052604085205460243581018111611d68573386526007602052604086205480602435830111611d405750908591338352600860205260243501604083205560018060a01b039051169260c081015161012082015160e0830151916040519661194a886123ec565b33885288602089015260408801526001600160401b0342166060880152608087015260a086015260c085015260405161198281612408565b6044356001600160401b03811681036104975781526064356020820152608435604082015260a435606082015260c435608082015260e0850152600435825260096020526040822060018060a01b038551166bffffffffffffffffffffffff60a01b9081835416178255600182019060018060a01b03602088015116908254161790556002810160018060a01b036040870151168154906001600160401b0360a01b606089015160a01b169163ffffffff60e01b16171790556080850151600382015560a0850151600482015560c08501516005820155600a60806006830160e0880151906001600160401b038251166001600160401b0319825416179055602081015160078501556040810151600885015560608101516009850155015191015560a435611c92575b50506001600160401b03421601906001600160401b038211611c7e5783611ad4600435612814565b927f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03163b1561049b576040516301767f3560e71b815260048101869052602480820195909552933560448501526001600160401b031660648401819052928181608481837f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03165af1801561048457611c6a575b50507f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03163b156104975760405163a876805b60e01b81526004803590820152602480359082015284908181604481837f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03165af1801561048457611c56575b5050611c2390604051926024358452602084015260408301906122e9565b33907f144e34396082ecebe850c0f6826de665adf8e0cb55f866587574859aa93885196101c060043592a4600160025580f35b611c5f90612423565b610497578338611c05565b611c7390612423565b610497578338611b77565b634e487b7160e01b84526011600452602484fd5b60c00151604080516020810192835260a435818301529081527f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03169190611ce081612436565b51902090803b1561040e57604483926040519485938492635b314ea560e01b8452600484015260043560248401525af18015611d3557611d22575b8490611aac565b611d2e90949194612423565b9238611d1b565b6040513d87823e3d90fd5b60649250604051916305ca879f60e01b83523360048401526024350160248301526044820152fd5b634e487b7160e01b86526011600452602486fd5b6040908101519051635f8b555b60e11b81526001600160a01b039091166004820152602490fd5b90506020813d602011611dd5575b81611dbe60209383612451565b81010312610f6b57611dcf90612472565b386118cd565b3d9150611db1565b61014091503d8211611ee8575b611df48282612451565b61014081838101031261048f5760405191826101208101106001600160401b0361012085011117611ed45760409061012084018252611e3283612472565b8452611e4060208401612472565b6020850152611e50828401612472565b848301528201829003605f19011261048f57610120611ec891604051611e75816123d1565b60608201518152608082015160208201526060850152611e9760a0820161249d565b608085015260c081015160a085015260e081015160c0850152611ebd6101008201612472565b60e08501520161249d565b61010082015238611872565b634e487b7160e01b87526041600452602487fd5b3d9150611dea565b604490604051906367d7c18360e01b825260643560048301526024820152fd5b508060643510611830565b60405163f9e355a360e01b8152600490fd5b5060a43515611806565b604490611f426126af565b906001600160401b036040519263f9a2664760e01b84521660048301526024820152fd5b50611f6f6126af565b6001600160401b03429116116117f7565b634e487b7160e01b85526011600452602485fd5b602460c083015160405190632914454f60e21b82526004820152fd5b6024604051632280437960e21b81526004356004820152fd5b3d91508184823e611fda8282612451565b6020818381010312610497578051906001600160401b039283831161048f576101c093848484018385010312610f6b57604051948501858110828211176121bc57604052612029848401612472565b8552612039602085850101612472565b602086015261204c604085850101612472565b6040860152828401606081810151908701526080808201519087015260a0808201519087015260c0808201519087015260e08082015190870152610100808201519087015261012080820151908701526101409081015182811161220e578585010190838501601f8301121561220e5781516120c781612486565b926120d56040519485612451565b81845260208085019260061b82010190868801821161220a57602001915b8183106121d057505050860152610160848401015181811161117857828401601f8287870101011215611178578085850101519182116121bc5760405192612145601f8401601f191660200185612451565b8284528401602083838888010101011161117857908791825b8281106121a157505082016020015261016084015261219790610180612187848301820161249d565b908501526101a092018201612472565b9082015238611794565b6020878701830182018101518683018201528a94500161215e565b634e487b7160e01b88526041600452602488fd5b604083888a01031261220a57602060409182516121ec816123d1565b6121f586612472565b815282860151838201528152019201916120f3565b8b80fd5b8880fd5b60405163740fbe6160e01b8152336004820152602490fd5b50808252600560205260ff6040832054161561173c565b503461019d57602036600319011261019d576020906040906001600160a01b036122696122d3565b168152600883522054604051908152f35b503461019d57602036600319011261019d576020906001600160a01b0390604090826122a46122d3565b16815260068452205416604051908152f35b90503461049b578160031936011261049b578062278d0060209252f35b600435906001600160a01b0382168203610a8957565b60806101609160018060a01b03808251168552806020830151166020860152604082015116604085015260e06001600160401b0391826060820151166060870152838101518487015260a081015160a087015260c081015160c087015201519081511660e08501526020810151610100850152604081015161012085015260608101516101408501520151910152565b6000546001600160a01b0316330361238d57565b606460405162461bcd60e51b815260206004820152602060248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e65726044820152fd5b604081019081106001600160401b0382111761147d57604052565b61010081019081106001600160401b0382111761147d57604052565b60a081019081106001600160401b0382111761147d57604052565b6001600160401b03811161147d57604052565b606081019081106001600160401b0382111761147d57604052565b90601f801991011681019081106001600160401b0382111761147d57604052565b51906001600160a01b0382168203610a8957565b6001600160401b03811161147d5760051b60200190565b51908115158203610a8957565b60ff60015460a01c166124b957565b60405162461bcd60e51b815260206004820152601060248201526f14185d5cd8589b194e881c185d5cd95960821b6044820152606490fd5b60028054146125005760028055565b60405162461bcd60e51b815260206004820152601f60248201527f5265656e7472616e637947756172643a207265656e7472616e742063616c6c006044820152606490fd5b51906001600160401b0382168203610a8957565b90816060910312610a895761256d81612472565b9161257f604060208401519301612545565b90565b908060209392818452848401376000828201840152601f01601f1916010190565b9035601e1982360301811215610a895701602081359101916001600160401b038211610a89578136038313610a8957565b600019811461121b5760010190565b8051156125f05760200190565b634e487b7160e01b600052603260045260246000fd5b80518210156125f05760209160051b010190565b9190820391821161121b57565b8181029291811591840414171561121b57565b91908110156125f05760051b0190565b60405190612657826123ec565b8160e06000918281528260208201528260408201528260608201528260808201528260a08201528260c08201526040519261269184612408565b80845280602085015280604085015280606085015260808401520152565b6044356001600160401b0381168103610a895790565b906126ce61264a565b5081600052600960205260409182600020928051936126ec856123ec565b60018060a01b0390818154168652816001820154166020870152600a600282015491838316858901526001600160401b03809360a01c16606089015260038101546080890152600481015460a0890152600581015460c089015284519261275284612408565b600682015416835260078101546020840152600881015485840152600981015460608401520154608082015260e08601528451161561278f575050565b6024925051906312ee91b360e01b82526004820152fd5b604090612810926000918252600960205281600a848220828155826001820155826002820155826003820155826004820155826005820155826006820155826007820155826008820155826009820155015560018060a01b0316815260086020522091825461261a565b9055565b604051602081019130835260408201526040815261283181612436565b5190209056fea264697066735822122046740fa3c044bd49b9af60ed17da6e7e164144ca04fdd964ebc63d9ad00d877664736f6c63430008120033",
+  "deployedBytecode": "0x608080604052600436101561001357600080fd5b600090813560e01c9081630a7dfa39146122b6575080630d43ea0c1461227a57806311eed02c1461224157806312253086146116ef57806329e600f8146116c65780632d788333146116815780632dae1d861461165a5780633594ef771461163d5780633e654d24146115cb5780633f4ba83a1461152e5780634d5ef5e114610c225780635c975abb14610bfc5780636e5a819414610a8e5780637091468b146109ed578063715018a6146109c2578063748d8ecd14610983578063777541361461086957806379ba5097146107ac5780637f698e92146106cb57806380cbc6fa146106ad5780638456cb591461064a5780638da5cb5b14610623578063b74795d9146105de578063b870676c14610599578063c793df5314610501578063d5a59e52146104c8578063e30c39781461049f578063e7f921a21461020d578063f2fde38b146101a05763fa450a651461016b57600080fd5b3461019d57602036600319011261019d576001600160401b036040602092600435815260048452205416604051908152f35b80fd5b503461019d57602036600319011261019d576101ba6122d3565b6101c2612379565b600180546001600160a01b0319166001600160a01b0392831690811790915582549091167f38d16b8cac22d99fc7c124b9cd0de2d3fa1faef420bfe791d8c362d765e227008380a380f35b503461019d5760208060031936011261049b576004356001600160401b03808211610497573660238301121561049757816004013581811161049357602493848401938536918460051b01011161048f576102699491946124f1565b6001600160a01b037f0000000000000000000000000000000000000000000000000000000000000000811692875b8781106102a75788600160025580f35b6102bb6102b5828a8a61263a565b356126c5565b6102cf6102c9838b8b61263a565b35612814565b60405163ed5e843760e01b9182825260048201528b606091828188818d5afa908115610484578b9291610464575b501680421061044d5750610312848c8c61263a565b359060009261032083612814565b6040519182526004820152818188818d5afa918215610442579061035292918592610412575b505087855116836127a6565b61035b81612814565b883b1561040e576040519063722081d160e11b8252600482015282818781838d5af1801561040357876103c996959493928a926103ce575b50817feac6d9697ee75dedfb26400fc1249025755968a8ffadfb31e0bad3ad99b1855193949501511693604051908152a36125d4565b610297565b7feac6d9697ee75dedfb26400fc1249025755968a8ffadfb31e0bad3ad99b1855193946103fb8492612423565b949350610393565b6040513d85823e3d90fd5b8280fd5b6104319250803d1061043b575b6104298183612451565b810190612559565b5090503880610346565b503d61041f565b6040513d86823e3d90fd5b85906040519063302f66d760e11b82526004820152fd5b61047b9150833d851161043b576104298183612451565b915050386102fd565b6040513d84823e3d90fd5b8580fd5b8480fd5b8380fd5b5080fd5b503461019d578060031936011261019d576001546040516001600160a01b039091168152602090f35b503461019d57602036600319011261019d576020906040906001600160a01b036104f06122d3565b168152600783522054604051908152f35b503461019d57604036600319011261019d5761051b6122d3565b6024359081151580920361040e57610531612379565b6001600160a01b03169081156105875760207fdf660835e7c515ab8e4fea707aef23b901d5e4ba4d7ebf80e239860236912ce491838552600582526040852060ff1981541660ff8316179055604051908152a280f35b60405163d92e233d60e01b8152600490fd5b503461019d578060031936011261019d576040517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b503461019d578060031936011261019d576040517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b503461019d578060031936011261019d57546040516001600160a01b039091168152602090f35b503461019d578060031936011261019d57610663612379565b61066b6124aa565b6001805460ff60a01b1916600160a01b1790556040513381527f62e78cea01bee320cd4e420270b5ea74000d11b0c9f74754ebdbfc544b05a25890602090a180f35b503461019d578060031936011261019d5760206040516276a7008152f35b503461019d57602036600319011261019d576040610180916106eb61264a565b50600435815260096020522060405190610704826123ec565b600a60018060a01b0391828154168452826001820154166020850152600281015492831660408501526001600160401b03809360a01c16606085015260038101546080850152600481015460a0850152600581015460c08501526040519261076b84612408565b60068201541683526007810154602084015260088101546040840152600981015460608401520154608082015260e08201526107aa60405180926122e9565bf35b503461019d578060031936011261019d576001546001600160a01b033381831603610812576001600160a01b031991821660015582543392811683178455167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08380a380f35b60405162461bcd60e51b815260206004820152602960248201527f4f776e61626c6532537465703a2063616c6c6572206973206e6f7420746865206044820152683732bb9037bbb732b960b91b6064820152608490fd5b503461019d57604036600319011261019d576108836122d3565b60243533835260206005815260ff6040852054161561096b576001600160a01b03928316928315610587578385526006825260408520541680151580610961575b61094357507f46a53ed9eca0c7b83ffe1816d76072991f61ba734bf907c3db0415bd94503928908261092357838552600681526040852080546001600160a01b03191690555b838552600781528260408620556040519283523392a380f35b838552600681526040852080546001600160a01b0319163317905561090a565b8360449160405191632882d4e560e11b835260048301526024820152fd5b50338114156108c4565b604051630378a85b60e21b8152336004820152602490fd5b503461019d57602036600319011261019d5760209060ff906040906001600160a01b036109ae6122d3565b168152600584522054166040519015158152f35b503461019d578060031936011261019d576109db612379565b6040516310e83c2760e21b8152600490fd5b503461019d57604036600319011261019d576004356024356001600160401b038116809103610a8957610a1e612379565b6276a7008111610a715760207f7ec0af68d379da82a8132661d791f5c353160c81d8356459613151730574aa09918385526004825260408520816001600160401b0319825416179055604051908152a280f35b602490604051906356c9850760e11b82526004820152fd5b600080fd5b503461019d57602036600319011261019d57600435610aab6124f1565b610ab4816126c5565b60408101516001600160a01b03919082163303610be457817f00000000000000000000000000000000000000000000000000000000000000001690610af884612814565b6040519063ed5e843760e01b82526004820152606081602481865afa8015610bb757610b3191600091610bc3575b5084835116866127a6565b610b3a84612814565b823b15610a895760009260248492604051958693849263722081d160e11b845260048401525af1918215610bb757602092610ba8575b50015116907feac6d9697ee75dedfb26400fc1249025755968a8ffadfb31e0bad3ad99b18551602060405160018152a3600160025580f35b610bb190612423565b38610b70565b6040513d6000823e3d90fd5b610bdb915060603d811161043b576104298183612451565b50905038610b26565b60405163cb00a07360e01b8152336004820152602490fd5b503461019d578060031936011261019d57602060ff60015460a01c166040519015158152f35b503461019d5760031960203682011261049b576001600160401b036004351161049b576080906004353603011261019d57610c5b6124f1565b610c6a600435600401356126c5565b610c7960043560040135612814565b60405163ed5e843760e01b81526004810191909152916060836024817f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03165afa801561152157819382916114f4575b506001600160401b0316804210156114dc575060018060a01b036003541691604051926314cffecd60e01b84526020600485015260043560040135602485015260246004350135604485015260221960043536030160446004350135121561040e576001600160401b03600480356044823501350101351161040e57600480356044810135019081013560051b360360249091011361040e5760806064850152600480356044810135019081013560a4860181905284928692909160c460059190911b8401810191602401908401855b6004803560448235013501013581106114935750505082610de28192610dd06064600435016004356004016125a3565b84830360231901608486015290612582565b03915afa9283156104845782936112fc575b5082519360808201948551148015906112ea575b80156112d8575b80156112b4575b8015611291575b801561127b575b8015611265575b801561124e575b61123157608084016001600160401b03815116610e10810180911161121b5742116111f9575090937f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03169190835b610140860180518051831015610f8257610ea483855192612606565b516040519060208201928352604082015260408152610ec281612436565b5190206040519063beddb1d160e01b82526004820152602081602481895afa908115610f77578791610f41575b508015908115610f31575b50610f0e5750610f09906125d4565b610e88565b602491610f1b9151612606565b516040519063026370eb60e61b82526004820152fd5b9050600435600401351438610efa565b90506020813d602011610f6f575b81610f5c60209383612451565b81010312610f6b575138610eef565b8680fd5b3d9150610f4f565b6040513d89823e3d90fd5b8689898760c0820190815160a08401908151808210156000146111c057505085925b831561119f5750508351610fc791906001600160a01b03166004803501356127a6565b60405190610fd4826123d1565b600193848352855b6020811061117c57506040818101805191519094916001600160a01b0316611003826123d1565b8152836020820152611014826125e3565b5261101e816125e3565b5061102e60043560040135612814565b907f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03163b15611178579087916040519163bcdded0b60e01b835260448301906004840152604060248401528151809152602060648401920190845b8a82821061114c57505050508180849203818360018060a01b037f0000000000000000000000000000000000000000000000000000000000000000165af1801561048457611138575b505061012090602060018060a01b03910151169260018060a01b0390511693015160405191825260208201527f19c0f41abb4854ddc0f0248ae1058e8ea7e6e1e506c3d2489a6a51dd714275f760406004356004013592a460025580f35b61114190612423565b61048f5785876110da565b835180516001600160a01b03168652602090810151818701528d97506040909501949093019201611091565b8780fd5b60209060405161118b816123d1565b888152888382015282828701015201610fdc565b6044925051905160405191632c392f3560e01b835260048301526024820152fd5b6111d3916111cd9161261a565b83612627565b81519081156111e3570492610fa4565b634e487b7160e01b600052601260045260246000fd5b6001600160401b03602491511660405190632d6d56ab60e11b82526004820152fd5b634e487b7160e01b600052601160045260246000fd5b6024604051631d57ea6960e11b8152600435600401356004820152fd5b50610100840151606060e084015101511415610e32565b5060e0840151604060e084015101511415610e2b565b5060a0840151602060e084015101511415610e24565b506001600160401b036080850151166001600160401b0360608401511611610e1d565b506001600160401b036060850151166001600160401b0360e0840151511610610e16565b50604084015160c08301511415610e0f565b50602084015160a08301511415610e08565b9092503d908183823e61130f8282612451565b602081838101031261040e578051906001600160401b0382116104975761016092838383018284010312610493576040519384818101106001600160401b03828701111761147d578401604052828201518452602083830101516020850152604083830101516040850152611388606084840101612545565b606085015261139b608084840101612545565b608085015281830160a0818101519086015260c0808201519086015260e08082015190860152610100808201519086015261012080820151908601526101400151916001600160401b03831161048f57818101601f848684010101121561048f578284820101519261140c84612486565b9461141a6040519687612451565b8486526020860193830160208660051b8484870101010111611178579291906020818584010101935b60208660051b838386010101018510611469575050505050506101408201529138610df4565b602080809587518152019501949350611443565b634e487b7160e01b600052604160045260246000fd5b9260209194965060019295506114ca829160c3198c82030187526114c48860246004356044600435013501016125a3565b90612582565b95019301910191879391879593610da0565b602490604051906331a4362960e11b82526004820152fd5b6001600160401b039450611517915060603d60601161043b576104298183612451565b9491509390610cd0565b50604051903d90823e3d90fd5b503461019d578060031936011261019d57611547612379565b60015460ff8160a01c161561158f5760ff60a01b19166001556040513381527f5db9ee0a495bf2e6ff9c91a7834c1ba4fdd244a5e8aa4e537bd38aeae4b073aa90602090a180f35b60405162461bcd60e51b815260206004820152601460248201527314185d5cd8589b194e881b9bdd081c185d5cd95960621b6044820152606490fd5b503461019d57602036600319011261019d576004356001600160a01b038181169182900361040e576115fb612379565b811561058757816003549182167f0994d712b91db9a30e9e4e9f1232a6eb715faef49e730c86bd3ad66c093a4b4e8580a36001600160a01b0319161760035580f35b503461019d578060031936011261019d576020604051610e108152f35b503461019d57602036600319011261019d576020611679600435612814565b604051908152f35b503461019d578060031936011261019d576040517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b503461019d578060031936011261019d576003546040516001600160a01b039091168152602090f35b503461019d5760e036600319011261019d5760a036604319011261019d576117156124aa565b61171d6124f1565b338152600660205260408120546001600160a01b03168015801561222a575b6122125760405163789e235560e11b8152600480359082015282816024817f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03165afa908115610403578391611fc9575b506101a08101516001600160a01b03163003611fb05760c0810151835260046020526001600160401b036040842054168015611f94576001600160401b036117da6126af565b1662278d008101809111611f805760a08301518091108015611f66575b611f3757506084351580611f2d575b611f1b57670de0b6b3a7640000611824610100840151602435612627565b04606435158015611f10575b611ef0575060018060a01b0360408301511661014060608401516024604051809481936313f3f72d60e31b835260048301525afa908115611d35578591611ddd575b50604081810151905163051ed6a360e41b81526001600160a01b0391821691602090829060049082907f0000000000000000000000000000000000000000000000000000000000000000165afa908115610f77578791611da3575b506001600160a01b031603611d7c573385526008602052604085205460243581018111611d68573386526007602052604086205480602435830111611d405750908591338352600860205260243501604083205560018060a01b039051169260c081015161012082015160e0830151916040519661194a886123ec565b33885288602089015260408801526001600160401b0342166060880152608087015260a086015260c085015260405161198281612408565b6044356001600160401b03811681036104975781526064356020820152608435604082015260a435606082015260c435608082015260e0850152600435825260096020526040822060018060a01b038551166bffffffffffffffffffffffff60a01b9081835416178255600182019060018060a01b03602088015116908254161790556002810160018060a01b036040870151168154906001600160401b0360a01b606089015160a01b169163ffffffff60e01b16171790556080850151600382015560a0850151600482015560c08501516005820155600a60806006830160e0880151906001600160401b038251166001600160401b0319825416179055602081015160078501556040810151600885015560608101516009850155015191015560a435611c92575b50506001600160401b03421601906001600160401b038211611c7e5783611ad4600435612814565b927f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03163b1561049b576040516301767f3560e71b815260048101869052602480820195909552933560448501526001600160401b031660648401819052928181608481837f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03165af1801561048457611c6a575b50507f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03163b156104975760405163a876805b60e01b81526004803590820152602480359082015284908181604481837f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03165af1801561048457611c56575b5050611c2390604051926024358452602084015260408301906122e9565b33907f144e34396082ecebe850c0f6826de665adf8e0cb55f866587574859aa93885196101c060043592a4600160025580f35b611c5f90612423565b610497578338611c05565b611c7390612423565b610497578338611b77565b634e487b7160e01b84526011600452602484fd5b60c00151604080516020810192835260a435818301529081527f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03169190611ce081612436565b51902090803b1561040e57604483926040519485938492635b314ea560e01b8452600484015260043560248401525af18015611d3557611d22575b8490611aac565b611d2e90949194612423565b9238611d1b565b6040513d87823e3d90fd5b60649250604051916305ca879f60e01b83523360048401526024350160248301526044820152fd5b634e487b7160e01b86526011600452602486fd5b6040908101519051635f8b555b60e11b81526001600160a01b039091166004820152602490fd5b90506020813d602011611dd5575b81611dbe60209383612451565b81010312610f6b57611dcf90612472565b386118cd565b3d9150611db1565b61014091503d8211611ee8575b611df48282612451565b61014081838101031261048f5760405191826101208101106001600160401b0361012085011117611ed45760409061012084018252611e3283612472565b8452611e4060208401612472565b6020850152611e50828401612472565b848301528201829003605f19011261048f57610120611ec891604051611e75816123d1565b60608201518152608082015160208201526060850152611e9760a0820161249d565b608085015260c081015160a085015260e081015160c0850152611ebd6101008201612472565b60e08501520161249d565b61010082015238611872565b634e487b7160e01b87526041600452602487fd5b3d9150611dea565b604490604051906367d7c18360e01b825260643560048301526024820152fd5b508060643510611830565b60405163f9e355a360e01b8152600490fd5b5060a43515611806565b604490611f426126af565b906001600160401b036040519263f9a2664760e01b84521660048301526024820152fd5b50611f6f6126af565b6001600160401b03429116116117f7565b634e487b7160e01b85526011600452602485fd5b602460c083015160405190632914454f60e21b82526004820152fd5b6024604051632280437960e21b81526004356004820152fd5b3d91508184823e611fda8282612451565b6020818381010312610497578051906001600160401b039283831161048f576101c093848484018385010312610f6b57604051948501858110828211176121bc57604052612029848401612472565b8552612039602085850101612472565b602086015261204c604085850101612472565b6040860152828401606081810151908701526080808201519087015260a0808201519087015260c0808201519087015260e08082015190870152610100808201519087015261012080820151908701526101409081015182811161220e578585010190838501601f8301121561220e5781516120c781612486565b926120d56040519485612451565b81845260208085019260061b82010190868801821161220a57602001915b8183106121d057505050860152610160848401015181811161117857828401601f8287870101011215611178578085850101519182116121bc5760405192612145601f8401601f191660200185612451565b8284528401602083838888010101011161117857908791825b8281106121a157505082016020015261016084015261219790610180612187848301820161249d565b908501526101a092018201612472565b9082015238611794565b6020878701830182018101518683018201528a94500161215e565b634e487b7160e01b88526041600452602488fd5b604083888a01031261220a57602060409182516121ec816123d1565b6121f586612472565b815282860151838201528152019201916120f3565b8b80fd5b8880fd5b60405163740fbe6160e01b8152336004820152602490fd5b50808252600560205260ff6040832054161561173c565b503461019d57602036600319011261019d576020906040906001600160a01b036122696122d3565b168152600883522054604051908152f35b503461019d57602036600319011261019d576020906001600160a01b0390604090826122a46122d3565b16815260068452205416604051908152f35b90503461049b578160031936011261049b578062278d0060209252f35b600435906001600160a01b0382168203610a8957565b60806101609160018060a01b03808251168552806020830151166020860152604082015116604085015260e06001600160401b0391826060820151166060870152838101518487015260a081015160a087015260c081015160c087015201519081511660e08501526020810151610100850152604081015161012085015260608101516101408501520151910152565b6000546001600160a01b0316330361238d57565b606460405162461bcd60e51b815260206004820152602060248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e65726044820152fd5b604081019081106001600160401b0382111761147d57604052565b61010081019081106001600160401b0382111761147d57604052565b60a081019081106001600160401b0382111761147d57604052565b6001600160401b03811161147d57604052565b606081019081106001600160401b0382111761147d57604052565b90601f801991011681019081106001600160401b0382111761147d57604052565b51906001600160a01b0382168203610a8957565b6001600160401b03811161147d5760051b60200190565b51908115158203610a8957565b60ff60015460a01c166124b957565b60405162461bcd60e51b815260206004820152601060248201526f14185d5cd8589b194e881c185d5cd95960821b6044820152606490fd5b60028054146125005760028055565b60405162461bcd60e51b815260206004820152601f60248201527f5265656e7472616e637947756172643a207265656e7472616e742063616c6c006044820152606490fd5b51906001600160401b0382168203610a8957565b90816060910312610a895761256d81612472565b9161257f604060208401519301612545565b90565b908060209392818452848401376000828201840152601f01601f1916010190565b9035601e1982360301811215610a895701602081359101916001600160401b038211610a89578136038313610a8957565b600019811461121b5760010190565b8051156125f05760200190565b634e487b7160e01b600052603260045260246000fd5b80518210156125f05760209160051b010190565b9190820391821161121b57565b8181029291811591840414171561121b57565b91908110156125f05760051b0190565b60405190612657826123ec565b8160e06000918281528260208201528260408201528260608201528260808201528260a08201528260c08201526040519261269184612408565b80845280602085015280604085015280606085015260808401520152565b6044356001600160401b0381168103610a895790565b906126ce61264a565b5081600052600960205260409182600020928051936126ec856123ec565b60018060a01b0390818154168652816001820154166020870152600a600282015491838316858901526001600160401b03809360a01c16606089015260038101546080890152600481015460a0890152600581015460c089015284519261275284612408565b600682015416835260078101546020840152600881015485840152600981015460608401520154608082015260e08601528451161561278f575050565b6024925051906312ee91b360e01b82526004820152fd5b604090612810926000918252600960205281600a848220828155826001820155826002820155826003820155826004820155826005820155826006820155826007820155826008820155826009820155015560018060a01b0316815260086020522091825461261a565b9055565b604051602081019130835260408201526040815261283181612436565b5190209056fea264697066735822122046740fa3c044bd49b9af60ed17da6e7e164144ca04fdd964ebc63d9ad00d877664736f6c63430008120033",
+  "devdoc": {
+    "details": "The signal policy names this contract as the intent arbitrator. It exposes only release, so the arbitrator's cancel and extend powers stay unused. Authorize it as a StakeVaultV2 controller and a NullifierRegistryV2 writer.",
+    "events": {
+      "Paused(address)": {
+        "details": "Emitted when the pause is triggered by `account`."
+      },
+      "Unpaused(address)": {
+        "details": "Emitted when the pause is lifted by `account`."
+      }
+    },
+    "kind": "dev",
+    "methods": {
+      "acceptOwnership()": {
+        "details": "The new owner accepts the ownership transfer."
+      },
+      "acknowledge(bytes32)": {
+        "params": {
+          "_intentHash": "Released intent."
+        }
+      },
+      "disputeNonPayment((bytes32,bytes32,bytes[],bytes))": {
+        "details": "Anyone may submit: the scan is bound to the deposit's payee and the award always goes to the depositor.",
+        "params": {
+          "_attestation": "Signed scan for the released intent."
+        }
+      },
+      "owner()": {
+        "details": "Returns the address of the current owner."
+      },
+      "paused()": {
+        "details": "Returns true if the contract is paused, and false otherwise."
+      },
+      "pendingOwner()": {
+        "details": "Returns the address of the pending owner."
+      },
+      "release(bytes32,uint256,(uint64,uint256,bytes32,bytes32,bytes32))": {
+        "params": {
+          "_claim": "Payment the operator relied on.",
+          "_intentHash": "Intent naming this contract as arbitrator.",
+          "_releaseAmount": "Deposit tokens to release; any rest returns to the deposit."
+        }
+      },
+      "setBondOwner(address,bool)": {
+        "params": {
+          "_approved": "Whether its operators may release.",
+          "_bondOwner": "Stake owner in StakeVaultV2."
+        }
+      },
+      "setDisputeWindow(bytes32,uint64)": {
+        "params": {
+          "_paymentMethod": "Payment method hash.",
+          "_window": "Seconds a release's bond stays locked."
+        }
+      },
+      "setNonPaymentVerifier(address)": {
+        "params": {
+          "_verifier": "New NonPaymentVerifier."
+        }
+      },
+      "setOperator(address,uint256)": {
+        "details": "Revoking stops new releases only. Open releases keep their lock until dispute or maturity.",
+        "params": {
+          "_cap": "Most stake the operator's open releases may hold locked.",
+          "_operator": "Operator address."
+        }
+      },
+      "settle(bytes32[])": {
+        "params": {
+          "_intentHashes": "Released intents."
+        }
+      },
+      "transferOwnership(address)": {
+        "details": "Starts the ownership transfer of the contract to a new account. Replaces the pending transfer if there is one. Can only be called by the current owner."
+      }
+    },
+    "title": "BondedArbitrator",
+    "version": 1
+  },
+  "userdoc": {
+    "kind": "user",
+    "methods": {
+      "acknowledge(bytes32)": {
+        "notice": "DEPOSITOR ONLY: Confirms the payment arrived and unlocks the bond before maturity."
+      },
+      "bondOwnerOf(address)": {
+        "notice": "Bond owner that authorized each operator."
+      },
+      "disputeNonPayment((bytes32,bytes32,bytes[],bytes))": {
+        "notice": "Pays the depositor the unpaid share of the bond shown by a fresh attestor scan of the seller account."
+      },
+      "disputeWindow(bytes32)": {
+        "notice": "Dispute window per payment method; zero disables arbitrated release on that method."
+      },
+      "getRelease(bytes32)": {
+        "notice": "Returns an open release; all zero after dispute or settlement."
+      },
+      "isBondOwner(address)": {
+        "notice": "Stake owners governance allows to back releases."
+      },
+      "lockId(bytes32)": {
+        "notice": "Returns the StakeVaultV2 lock id that holds a release's bond."
+      },
+      "operatorCap(address)": {
+        "notice": "Most stake an operator's open releases may hold locked, set by its bond owner."
+      },
+      "operatorLocked(address)": {
+        "notice": "Stake currently locked by each operator's open releases."
+      },
+      "pause()": {
+        "notice": "GOVERNANCE ONLY: Stops new releases. Disputes, acknowledgements and settlement stay open."
+      },
+      "release(bytes32,uint256,(uint64,uint256,bytes32,bytes32,bytes32))": {
+        "notice": "OPERATOR ONLY: Pays the intent recipient now and locks the same amount of the bond owner's stake until the payment method's dispute window ends."
+      },
+      "renounceOwnership()": {
+        "notice": "Ownership renunciation is disabled so governance keeps the pause and rail switches."
+      },
+      "setBondOwner(address,bool)": {
+        "notice": "GOVERNANCE ONLY: Approves or removes a stake owner that may back releases."
+      },
+      "setDisputeWindow(bytes32,uint64)": {
+        "notice": "GOVERNANCE ONLY: Sets a payment method's dispute window; zero disables arbitrated release on it."
+      },
+      "setNonPaymentVerifier(address)": {
+        "notice": "GOVERNANCE ONLY: Replaces the scan verifier for future disputes."
+      },
+      "setOperator(address,uint256)": {
+        "notice": "BOND OWNER ONLY: Authorizes an operator to lock the caller's stake up to `_cap`; zero revokes it."
+      },
+      "settle(bytes32[])": {
+        "notice": "Unlocks the bond of every listed release whose dispute window has ended."
+      },
+      "unpause()": {
+        "notice": "GOVERNANCE ONLY: Resumes releases."
+      }
+    },
+    "notice": "OrchestratorV4 arbitrator that releases an intent only against locked stake. An operator releases funds to the intent recipient and locks the same amount of its bond owner's StakeVaultV2 stake for the payment method's dispute window. The depositor takes the share of that stake a signed scan of the seller account shows was never paid: all of it when nothing matching arrived, the shortfall when less arrived. Otherwise the stake unlocks at maturity, or earlier when the depositor confirms the payment.",
+    "version": 1
+  },
+  "storageLayout": {
+    "storage": [
+      {
+        "astId": 7,
+        "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+        "label": "_owner",
+        "offset": 0,
+        "slot": "0",
+        "type": "t_address"
+      },
+      {
+        "astId": 120,
+        "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+        "label": "_pendingOwner",
+        "offset": 0,
+        "slot": "1",
+        "type": "t_address"
+      },
+      {
+        "astId": 252,
+        "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+        "label": "_paused",
+        "offset": 20,
+        "slot": "1",
+        "type": "t_bool"
+      },
+      {
+        "astId": 353,
+        "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+        "label": "_status",
+        "offset": 0,
+        "slot": "2",
+        "type": "t_uint256"
+      },
+      {
+        "astId": 4952,
+        "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+        "label": "nonPaymentVerifier",
+        "offset": 0,
+        "slot": "3",
+        "type": "t_contract(INonPaymentVerifier)35430"
+      },
+      {
+        "astId": 4957,
+        "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+        "label": "disputeWindow",
+        "offset": 0,
+        "slot": "4",
+        "type": "t_mapping(t_bytes32,t_uint64)"
+      },
+      {
+        "astId": 4962,
+        "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+        "label": "isBondOwner",
+        "offset": 0,
+        "slot": "5",
+        "type": "t_mapping(t_address,t_bool)"
+      },
+      {
+        "astId": 4967,
+        "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+        "label": "bondOwnerOf",
+        "offset": 0,
+        "slot": "6",
+        "type": "t_mapping(t_address,t_address)"
+      },
+      {
+        "astId": 4972,
+        "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+        "label": "operatorCap",
+        "offset": 0,
+        "slot": "7",
+        "type": "t_mapping(t_address,t_uint256)"
+      },
+      {
+        "astId": 4977,
+        "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+        "label": "operatorLocked",
+        "offset": 0,
+        "slot": "8",
+        "type": "t_mapping(t_address,t_uint256)"
+      },
+      {
+        "astId": 4982,
+        "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+        "label": "releases",
+        "offset": 0,
+        "slot": "9",
+        "type": "t_mapping(t_bytes32,t_struct(Release)33002_storage)"
+      }
+    ],
+    "types": {
+      "t_address": {
+        "encoding": "inplace",
+        "label": "address",
+        "numberOfBytes": "20"
+      },
+      "t_bool": {
+        "encoding": "inplace",
+        "label": "bool",
+        "numberOfBytes": "1"
+      },
+      "t_bytes32": {
+        "encoding": "inplace",
+        "label": "bytes32",
+        "numberOfBytes": "32"
+      },
+      "t_contract(INonPaymentVerifier)35430": {
+        "encoding": "inplace",
+        "label": "contract INonPaymentVerifier",
+        "numberOfBytes": "20"
+      },
+      "t_mapping(t_address,t_address)": {
+        "encoding": "mapping",
+        "key": "t_address",
+        "label": "mapping(address => address)",
+        "numberOfBytes": "32",
+        "value": "t_address"
+      },
+      "t_mapping(t_address,t_bool)": {
+        "encoding": "mapping",
+        "key": "t_address",
+        "label": "mapping(address => bool)",
+        "numberOfBytes": "32",
+        "value": "t_bool"
+      },
+      "t_mapping(t_address,t_uint256)": {
+        "encoding": "mapping",
+        "key": "t_address",
+        "label": "mapping(address => uint256)",
+        "numberOfBytes": "32",
+        "value": "t_uint256"
+      },
+      "t_mapping(t_bytes32,t_struct(Release)33002_storage)": {
+        "encoding": "mapping",
+        "key": "t_bytes32",
+        "label": "mapping(bytes32 => struct IBondedArbitrator.Release)",
+        "numberOfBytes": "32",
+        "value": "t_struct(Release)33002_storage"
+      },
+      "t_mapping(t_bytes32,t_uint64)": {
+        "encoding": "mapping",
+        "key": "t_bytes32",
+        "label": "mapping(bytes32 => uint64)",
+        "numberOfBytes": "32",
+        "value": "t_uint64"
+      },
+      "t_struct(PaymentClaim)32984_storage": {
+        "encoding": "inplace",
+        "label": "struct IBondedArbitrator.PaymentClaim",
+        "members": [
+          {
+            "astId": 32975,
+            "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+            "label": "paidAfter",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint64"
+          },
+          {
+            "astId": 32977,
+            "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+            "label": "amount",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_uint256"
+          },
+          {
+            "astId": 32979,
+            "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+            "label": "payerHash",
+            "offset": 0,
+            "slot": "2",
+            "type": "t_bytes32"
+          },
+          {
+            "astId": 32981,
+            "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+            "label": "txIdHash",
+            "offset": 0,
+            "slot": "3",
+            "type": "t_bytes32"
+          },
+          {
+            "astId": 32983,
+            "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+            "label": "evidenceHash",
+            "offset": 0,
+            "slot": "4",
+            "type": "t_bytes32"
+          }
+        ],
+        "numberOfBytes": "160"
+      },
+      "t_struct(Release)33002_storage": {
+        "encoding": "inplace",
+        "label": "struct IBondedArbitrator.Release",
+        "members": [
+          {
+            "astId": 32986,
+            "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+            "label": "operator",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_address"
+          },
+          {
+            "astId": 32988,
+            "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+            "label": "bondOwner",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_address"
+          },
+          {
+            "astId": 32990,
+            "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+            "label": "depositor",
+            "offset": 0,
+            "slot": "2",
+            "type": "t_address"
+          },
+          {
+            "astId": 32992,
+            "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+            "label": "releasedAt",
+            "offset": 20,
+            "slot": "2",
+            "type": "t_uint64"
+          },
+          {
+            "astId": 32994,
+            "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+            "label": "paymentMethod",
+            "offset": 0,
+            "slot": "3",
+            "type": "t_bytes32"
+          },
+          {
+            "astId": 32996,
+            "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+            "label": "payeeId",
+            "offset": 0,
+            "slot": "4",
+            "type": "t_bytes32"
+          },
+          {
+            "astId": 32998,
+            "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+            "label": "fiatCurrency",
+            "offset": 0,
+            "slot": "5",
+            "type": "t_bytes32"
+          },
+          {
+            "astId": 33001,
+            "contract": "contracts/BondedArbitrator.sol:BondedArbitrator",
+            "label": "claim",
+            "offset": 0,
+            "slot": "6",
+            "type": "t_struct(PaymentClaim)32984_storage"
+          }
+        ],
+        "numberOfBytes": "352"
+      },
+      "t_uint256": {
+        "encoding": "inplace",
+        "label": "uint256",
+        "numberOfBytes": "32"
+      },
+      "t_uint64": {
+        "encoding": "inplace",
+        "label": "uint64",
+        "numberOfBytes": "8"
+      }
+    }
+  }
+}
