@@ -51,6 +51,8 @@ interface IBondedArbitrator {
     event OperatorSet(address indexed bondOwner, address indexed operator, uint256 cap);
     event BondOwnerSet(address indexed bondOwner, bool approved);
     event DisputeWindowSet(bytes32 indexed paymentMethod, uint64 window);
+    event DustToleranceSet(uint256 previousTolerance, uint256 newTolerance);
+    event DustShareSet(uint256 previousShareBps, uint256 newShareBps);
     event NonPaymentVerifierSet(address indexed previousVerifier, address indexed newVerifier);
 
     error ZeroAddress();
@@ -70,10 +72,13 @@ interface IBondedArbitrator {
     error ScanMismatch(bytes32 intentHash);
     error StaleEvidence(uint64 windowEnd);
     error UnboundExclusion(bytes32 paymentId);
+    /// @notice The scan shows the claim paid in full, or short by no more than the dust tolerance.
     error PaymentCovered(uint256 receivedAmount, uint256 claimedAmount);
     error NotMatured(uint64 maturesAt);
     error UnauthorizedDepositor(address caller);
     error InvalidDisputeWindow(uint64 window);
+    error InvalidDustTolerance(uint256 tolerance);
+    error InvalidDustShare(uint256 shareBps);
     error OwnershipRenunciationDisabled();
 
     /**
@@ -87,6 +92,8 @@ interface IBondedArbitrator {
 
     /**
      * @notice Pays the depositor the unpaid share of the bond shown by a fresh attestor scan of the seller account.
+     * Reverts PaymentCovered when that share is zero or dust: at most `dustTolerance()` and at most
+     * `dustShareBps()` of the release.
      * @param _attestation Signed scan for the released intent.
      */
     function disputeNonPayment(INonPaymentVerifier.NonPaymentAttestation calldata _attestation) external;

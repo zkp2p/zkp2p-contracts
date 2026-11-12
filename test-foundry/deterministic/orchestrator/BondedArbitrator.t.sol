@@ -12,6 +12,9 @@ import {StakeVaultV2} from "contracts/StakeVaultV2.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
 
 contract BondedArbitratorTest is BondedArbitratorFixture {
+    event DustToleranceSet(uint256 previousTolerance, uint256 newTolerance);
+    event DustShareSet(uint256 previousShareBps, uint256 newShareBps);
+
     function test_SignalNamesBondedArbitrator() public {
         bytes32 id = _signal(taker, _defaultParams());
         assertEq(orchestrator.getIntent(id).arbitrator, address(arbitrator));
@@ -85,6 +88,61 @@ contract BondedArbitratorTest is BondedArbitratorFixture {
         arbitrator.disputeNonPayment(scan);
     }
 
+    function test_DisputeRevertsWhenShortfallIsDust() public {
+        bytes32 id = _release();
+        assertEq(arbitrator.dustTolerance(), 0.5e6);
+        // The buyer sent 49.50 of the 50 claimed: a 0.50 shortfall is within the default tolerance and is 1%.
+        uint256 received = INTENT_AMOUNT - 0.5e6;
+        INonPaymentVerifier.NonPaymentAttestation memory scan =
+            _scanFull(id, PAYEE, uint64(block.timestamp), received, new bytes32[](0));
+
+        vm.expectRevert(abi.encodeWithSelector(IBondedArbitrator.PaymentCovered.selector, received, INTENT_AMOUNT));
+        arbitrator.disputeNonPayment(scan);
+
+        // The release stays open: a scan showing a real shortfall still pays it.
+        arbitrator.disputeNonPayment(_scanFull(id, PAYEE, uint64(block.timestamp), INTENT_AMOUNT - 1e6, new bytes32[](0)));
+        assertEq(vault.claimable(depositor), 1e6);
+        assertEq(vault.lockedStake(treasury), 0);
+    }
+
+    function test_ReleaseBelowDustToleranceStaysDisputable() public {
+        bytes32 id = _signal(taker, _defaultParams());
+        IBondedArbitrator.PaymentClaim memory claim = _claim(_paymentId(id));
+        claim.amount = 0.4e6;
+        vm.prank(operator);
+        arbitrator.release(id, 0.4e6, claim);
+
+        // Nothing arrived: all 0.40 is owed, although that is below the 0.50 tolerance.
+        arbitrator.disputeNonPayment(_scan(id, PAYEE, uint64(block.timestamp)));
+
+        assertEq(vault.claimable(depositor), 0.4e6);
+        assertEq(vault.stakeBalance(treasury), BOND - 0.4e6);
+    }
+
+    function test_DustIsCappedAtAShareOfTheRelease() public {
+        // On a 10.00 release, dust is at most 1%: a 0.10 shortfall is forgiven, one base unit more is paid.
+        assertEq(arbitrator.dustShareBps(), 100);
+        bytes32 covered = _releasePartial(10e6, 10e6);
+        INonPaymentVerifier.NonPaymentAttestation memory scan =
+            _scanFull(covered, PAYEE, uint64(block.timestamp), 9.9e6, new bytes32[](0));
+        vm.expectRevert(abi.encodeWithSelector(IBondedArbitrator.PaymentCovered.selector, 9.9e6, 10e6));
+        arbitrator.disputeNonPayment(scan);
+
+        bytes32 paid = _releasePartial(10e6, 10e6);
+        arbitrator.disputeNonPayment(_scanFull(paid, PAYEE, uint64(block.timestamp), 9.9e6 - 1, new bytes32[](0)));
+        assertEq(vault.claimable(depositor), 0.1e6 + 1);
+    }
+
+    function test_DustIsMeasuredOnThePayoutNotTheFiatShortfall() public {
+        // 30 released against a 60 claim: a 0.60 fiat shortfall is a 0.30 payout, which is dust.
+        bytes32 id = _releasePartial(30e6, 60e6);
+        INonPaymentVerifier.NonPaymentAttestation memory scan =
+            _scanFull(id, PAYEE, uint64(block.timestamp), 59.4e6, new bytes32[](0));
+
+        vm.expectRevert(abi.encodeWithSelector(IBondedArbitrator.PaymentCovered.selector, 59.4e6, 60e6));
+        arbitrator.disputeNonPayment(scan);
+    }
+
     function test_DisputePaysInFullWhateverTheClaimedAmount() public {
         // The largest claim an operator can enter must not make the payout overflow.
         bytes32 id = _releasePartial(INTENT_AMOUNT, type(uint256).max);
@@ -93,6 +151,50 @@ contract BondedArbitratorTest is BondedArbitratorFixture {
 
         assertEq(vault.claimable(depositor), INTENT_AMOUNT);
         assertEq(vault.stakeBalance(treasury), BOND - INTENT_AMOUNT);
+    }
+
+    function test_DisputePaysShortfallJustAboveDust() public {
+        bytes32 id = _release();
+        uint256 owed = 0.5e6 + 1;
+        arbitrator.disputeNonPayment(_scanFull(id, PAYEE, uint64(block.timestamp), INTENT_AMOUNT - owed, new bytes32[](0)));
+
+        assertEq(vault.claimable(depositor), owed);
+        assertEq(vault.stakeBalance(treasury), BOND - owed);
+        assertEq(vault.lockedStake(treasury), 0);
+        assertEq(arbitrator.operatorLocked(operator), 0);
+    }
+
+    function test_GovernanceSetsDustTolerance() public {
+        vm.expectRevert(abi.encodeWithSelector(IBondedArbitrator.InvalidDustTolerance.selector, 5e6 + 1));
+        arbitrator.setDustTolerance(5e6 + 1);
+        vm.prank(makeAddr("stranger"));
+        vm.expectRevert("Ownable: caller is not the owner");
+        arbitrator.setDustTolerance(0);
+        assertEq(arbitrator.dustTolerance(), 0.5e6);
+
+        vm.expectEmit(false, false, false, true, address(arbitrator));
+        emit DustToleranceSet(0.5e6, 5e6);
+        arbitrator.setDustTolerance(5e6);
+        assertEq(arbitrator.dustTolerance(), 5e6);
+
+        vm.expectEmit(false, false, false, true, address(arbitrator));
+        emit DustToleranceSet(5e6, 0);
+        arbitrator.setDustTolerance(0);
+
+        vm.expectRevert(abi.encodeWithSelector(IBondedArbitrator.InvalidDustShare.selector, 201));
+        arbitrator.setDustShareBps(201);
+        vm.prank(makeAddr("stranger"));
+        vm.expectRevert("Ownable: caller is not the owner");
+        arbitrator.setDustShareBps(0);
+        vm.expectEmit(false, false, false, true, address(arbitrator));
+        emit DustShareSet(100, 200);
+        arbitrator.setDustShareBps(200);
+        assertEq(arbitrator.dustShareBps(), 200);
+
+        // With no tolerance, a one-unit shortfall is paid, as before the tolerance existed.
+        bytes32 id = _release();
+        arbitrator.disputeNonPayment(_scanFull(id, PAYEE, uint64(block.timestamp), INTENT_AMOUNT - 1, new bytes32[](0)));
+        assertEq(vault.claimable(depositor), 1);
     }
 
     function test_DisputeSkipsPaymentThatBacksAnotherIntent() public {

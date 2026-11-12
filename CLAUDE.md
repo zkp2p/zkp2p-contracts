@@ -93,7 +93,9 @@ Important ownership boundaries:
   takes the unpaid share when `NonPaymentVerifier` accepts an attestor-signed
   scan of the seller account. Every release requires a non-zero platform
   transaction id hash and nullifies that payment in `NullifierRegistryV2`;
-  the payer hash is optional.
+  the payer hash is optional. A dispute whose payout is at or below the
+  governance-set `dustTolerance` (USDC units, default 0.50) and at most
+  `dustShareBps` of the release (default 1%) counts as paid.
 - `PaymentVerifierRegistry` owns payment-method-to-verifier routing.
 - `OrchestratorRegistry` and `EscrowRegistry` own allowed callers/systems.
 - `NullifierRegistry` and `NullifierRegistryV2` are distinct replay domains.

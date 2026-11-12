@@ -18,10 +18,10 @@ import {IStakeVaultV2} from "./interfaces/IStakeVaultV2.sol";
  * @title BondedArbitrator
  * @notice OrchestratorV4 arbitrator that releases an intent only against locked stake. An operator releases funds
  * to the intent recipient against a required platform transaction id and locks the same amount of its bond owner's
- * StakeVaultV2 stake for the payment method's
- * dispute window. The depositor takes the share of that stake a signed scan of the seller account shows was never
- * paid: all of it when nothing matching arrived, the shortfall when less arrived. Otherwise the stake unlocks at
- * maturity, or earlier when the depositor confirms the payment.
+ * StakeVaultV2 stake for the payment method's dispute window. The depositor takes the share of that stake a signed
+ * scan of the seller account shows was never paid: all of it when nothing matching arrived, the shortfall when less
+ * arrived, nothing when the shortfall is dust. Otherwise the stake unlocks at maturity, or earlier when the
+ * depositor confirms the payment.
  * @dev The signal policy names this contract as the intent arbitrator. It exposes only release, so the arbitrator's
  * cancel and extend powers stay unused. Authorize it as a StakeVaultV2 controller and a NullifierRegistryV2 writer.
  */
@@ -32,6 +32,9 @@ contract BondedArbitrator is IBondedArbitrator, Ownable2Step, Pausable, Reentran
     uint64 public constant MAX_DISPUTE_WINDOW = 90 days;
     uint64 public constant MAX_LOOKBACK = 30 days;
     uint64 public constant MAX_SCAN_AGE = 1 hours;
+    uint256 public constant MAX_DUST_TOLERANCE = 5e6;
+    uint256 public constant MAX_DUST_SHARE_BPS = 200;
+    uint256 internal constant BPS = 10_000;
 
     /* ============ Immutables ============ */
 
@@ -42,6 +45,15 @@ contract BondedArbitrator is IBondedArbitrator, Ownable2Step, Pausable, Reentran
     /* ============ State Variables ============ */
 
     INonPaymentVerifier public nonPaymentVerifier;
+
+    /// @notice Largest unpaid share of a release that still counts as paid, in deposit-token units (USDC, 6
+    /// decimals), provided it is also at most `dustShareBps` of that release. Absorbs rounding and payments a few
+    /// cents short; governance changes it with `setDustTolerance`.
+    uint256 public dustTolerance = 0.5e6;
+
+    /// @notice Largest share of a release, in basis points, that dust may be, so no release is too small to dispute
+    /// and a releaser cannot keep a fixed discount on small orders; governance changes it with `setDustShareBps`.
+    uint256 public dustShareBps = 100;
 
     /// @notice Dispute window per payment method; zero disables arbitrated release on that method.
     mapping(bytes32 => uint64) public disputeWindow;
@@ -163,7 +175,11 @@ contract BondedArbitrator is IBondedArbitrator, Ownable2Step, Pausable, Reentran
         uint256 owed = scan.receivedAmount >= scan.claimedAmount
             ? 0
             : Math.mulDiv(amount, scan.claimedAmount - scan.receivedAmount, scan.claimedAmount);
-        if (owed == 0) revert PaymentCovered(scan.receivedAmount, scan.claimedAmount);
+        // Dust counts as paid: within the tolerance and a small share of the release, so no release is too small
+        // to dispute.
+        if (owed <= dustTolerance && owed * BPS <= amount * dustShareBps) {
+            revert PaymentCovered(scan.receivedAmount, scan.claimedAmount);
+        }
         _close(intentHash, open.operator, amount);
         IStakeVaultV2.Claim[] memory claims = new IStakeVaultV2.Claim[](1);
         claims[0] = IStakeVaultV2.Claim({beneficiary: open.depositor, amount: owed});
@@ -230,6 +246,28 @@ contract BondedArbitrator is IBondedArbitrator, Ownable2Step, Pausable, Reentran
         if (_window > MAX_DISPUTE_WINDOW) revert InvalidDisputeWindow(_window);
         disputeWindow[_paymentMethod] = _window;
         emit DisputeWindowSet(_paymentMethod, _window);
+    }
+
+    /**
+     * @notice GOVERNANCE ONLY: Sets the largest unpaid share that counts as dust. Applies to every dispute submitted
+     * after the change, including on releases already open.
+     * @param _tolerance Deposit-token units (USDC, 6 decimals); at most MAX_DUST_TOLERANCE. Zero pays any shortfall.
+     */
+    function setDustTolerance(uint256 _tolerance) external onlyOwner {
+        if (_tolerance > MAX_DUST_TOLERANCE) revert InvalidDustTolerance(_tolerance);
+        emit DustToleranceSet(dustTolerance, _tolerance);
+        dustTolerance = _tolerance;
+    }
+
+    /**
+     * @notice GOVERNANCE ONLY: Sets the largest share of a release that dust may be. Applies to every dispute
+     * submitted after the change, including on releases already open.
+     * @param _shareBps Basis points of the release; at most MAX_DUST_SHARE_BPS. Zero pays any shortfall.
+     */
+    function setDustShareBps(uint256 _shareBps) external onlyOwner {
+        if (_shareBps > MAX_DUST_SHARE_BPS) revert InvalidDustShare(_shareBps);
+        emit DustShareSet(dustShareBps, _shareBps);
+        dustShareBps = _shareBps;
     }
 
     /**
