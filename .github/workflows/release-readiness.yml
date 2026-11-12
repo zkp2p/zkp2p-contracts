@@ -52,7 +52,7 @@ concurrency:
 
 env:
   FOUNDRY_VERSION: v1.7.1
-  NODE_VERSION: 22.23.4
+  NODE_VERSION: 22.23.5
 
 jobs:
   build-and-deploy:
@@ -61,7 +61,7 @@ jobs:
     steps:
       - name: Patch hosted action runtime
         if: runner.environment == 'github-hosted' && runner.os == 'Linux'
-        uses: zkp2p/.github/actions/patch-node24@4ef0030bb0aca98a6c4a6378dbf48ad159ff25d4
+        uses: zkp2p/.github/actions/patch-node24@2d18c4a7aba9f63b1878b140852f275cac14f911
 
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -136,7 +136,7 @@ jobs:
     steps:
       - name: Patch hosted action runtime
         if: runner.environment == 'github-hosted' && runner.os == 'Linux'
-        uses: zkp2p/.github/actions/patch-node24@4ef0030bb0aca98a6c4a6378dbf48ad159ff25d4
+        uses: zkp2p/.github/actions/patch-node24@2d18c4a7aba9f63b1878b140852f275cac14f911
 
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -181,7 +181,7 @@ jobs:
     steps:
       - name: Patch hosted action runtime
         if: runner.environment == 'github-hosted' && runner.os == 'Linux'
-        uses: zkp2p/.github/actions/patch-node24@4ef0030bb0aca98a6c4a6378dbf48ad159ff25d4
+        uses: zkp2p/.github/actions/patch-node24@2d18c4a7aba9f63b1878b140852f275cac14f911
 
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
