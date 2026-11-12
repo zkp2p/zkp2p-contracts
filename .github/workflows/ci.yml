@@ -30,7 +30,7 @@ concurrency:
 
 env:
   FOUNDRY_VERSION: v1.7.1
-  NODE_VERSION: 22.23.4
+  NODE_VERSION: 22.23.5
 
 jobs:
   test:
