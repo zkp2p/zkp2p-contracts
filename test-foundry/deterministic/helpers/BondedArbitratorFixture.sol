@@ -40,6 +40,14 @@ abstract contract BondedArbitratorFixture is DisputeProtectionStackV2Fixture {
         arbitrator.release(id, INTENT_AMOUNT, claim);
     }
 
+    function _releasePartial(uint256 _releaseAmount, uint256 _claimedAmount) internal returns (bytes32 id) {
+        id = _signal(taker, _defaultParams());
+        IBondedArbitrator.PaymentClaim memory claim = _claim(_paymentId(id));
+        claim.amount = _claimedAmount;
+        vm.prank(operator);
+        arbitrator.release(id, _releaseAmount, claim);
+    }
+
     function _claim(bytes32 _txIdHash) internal view returns (IBondedArbitrator.PaymentClaim memory) {
         return IBondedArbitrator.PaymentClaim({
             paidAfter: uint64(block.timestamp - 1 hours),

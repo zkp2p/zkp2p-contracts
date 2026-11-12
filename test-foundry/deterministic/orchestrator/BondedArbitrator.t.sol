@@ -85,6 +85,16 @@ contract BondedArbitratorTest is BondedArbitratorFixture {
         arbitrator.disputeNonPayment(scan);
     }
 
+    function test_DisputePaysInFullWhateverTheClaimedAmount() public {
+        // The largest claim an operator can enter must not make the payout overflow.
+        bytes32 id = _releasePartial(INTENT_AMOUNT, type(uint256).max);
+
+        arbitrator.disputeNonPayment(_scan(id, PAYEE, uint64(block.timestamp)));
+
+        assertEq(vault.claimable(depositor), INTENT_AMOUNT);
+        assertEq(vault.stakeBalance(treasury), BOND - INTENT_AMOUNT);
+    }
+
     function test_DisputeSkipsPaymentThatBacksAnotherIntent() public {
         bytes32 id = _release();
         // The same buyer's next order is paid and verified through UPV4, which binds its payment id to that intent.

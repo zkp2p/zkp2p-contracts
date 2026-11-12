@@ -5,6 +5,7 @@ pragma solidity ^0.8.18;
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {Pausable} from "@openzeppelin/contracts/security/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {IBondedArbitrator} from "./interfaces/IBondedArbitrator.sol";
 import {IEscrow} from "./interfaces/IEscrow.sol";
@@ -158,9 +159,10 @@ contract BondedArbitrator is IBondedArbitrator, Ownable2Step, Pausable, Reentran
             if (boundTo == bytes32(0) || boundTo == intentHash) revert UnboundExclusion(scan.excludedPaymentIds[i]);
         }
         // The unpaid share of the release; the vault returns the rest of the lock to the bond owner's free stake.
+        // mulDiv keeps any claimed amount disputable, however large the operator made it.
         uint256 owed = scan.receivedAmount >= scan.claimedAmount
             ? 0
-            : amount * (scan.claimedAmount - scan.receivedAmount) / scan.claimedAmount;
+            : Math.mulDiv(amount, scan.claimedAmount - scan.receivedAmount, scan.claimedAmount);
         if (owed == 0) revert PaymentCovered(scan.receivedAmount, scan.claimedAmount);
         _close(intentHash, open.operator, amount);
         IStakeVaultV2.Claim[] memory claims = new IStakeVaultV2.Claim[](1);
