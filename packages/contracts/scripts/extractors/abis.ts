@@ -65,6 +65,10 @@ export const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
     "contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol/UnifiedPaymentVerifierV4.json",
   OrchestratorV4: "contracts/OrchestratorV4.sol/OrchestratorV4.json",
   ProtocolViewerV4: "contracts/ProtocolViewerV4.sol/ProtocolViewerV4.json",
+  IntentSignalPolicyV2: "contracts/hooks/IntentSignalPolicyV2.sol/IntentSignalPolicyV2.json",
+  BondedArbitrator: "contracts/BondedArbitrator.sol/BondedArbitrator.json",
+  NonPaymentVerifier:
+    "contracts/unifiedVerifier/NonPaymentVerifier.sol/NonPaymentVerifier.json",
 };
 
 // Executed staging stacks still hold historical obligations. Their ABI must stay
