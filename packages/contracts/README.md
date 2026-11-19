@@ -2,7 +2,7 @@
 
 Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, and utilities.
 
-## O3 retirement (next release)
+## O3 retirement in 0.4.4
 
 Release verification expects O4 registered and O3 unregistered on both networks.
 The exact post-retirement registry sets are V1 + O4 on Base and V1 + O2 + O4 on
@@ -161,49 +161,16 @@ pnpm add @zkp2p/contracts-v2
 
 ## Quick Start
 
+Read the Base orchestrator with ethers v5 and the matching network ABI.
+
 ```typescript
-// Import addresses for specific networks
-import { base, baseStaging } from "@zkp2p/contracts-v2/addresses"
+import { ethers } from "ethers"
+import { base } from "@zkp2p/contracts-v2/addresses"
+import OrchestratorV4 from "@zkp2p/contracts-v2/abis/base/OrchestratorV4.json" with { type: "json" }
 
-// Import specific contract ABIs from a network
-import { Escrow, Orchestrator } from "@zkp2p/contracts-v2/abis/baseStaging"
-
-// Import constants
-import { USDC, INTENT_EXPIRATION_PERIOD } from "@zkp2p/contracts-v2/constants/base"
-
-// Import payment method configurations
-import { baseStaging as paymentMethods } from "@zkp2p/contracts-v2/paymentMethods"
-
-// Import TypeScript types
-import type { Escrow, Orchestrator } from "@zkp2p/contracts-v2/types"
-
-// Import utility functions
-import { getKeccak256Hash, calculateIntentHash } from "@zkp2p/contracts-v2/utils/protocolUtils"
-
-// Import stable source ABIs for the deposit-scoped whitelist policy
-import {
-  AddressGroupRegistry,
-  OrchestratorV3,
-  WhitelistLifecycleHook,
-  WhitelistPolicy,
-} from "@zkp2p/contracts-v2/abis/contracts"
-
-// Import the selected per-network dispute-stack manifest
-import { base as baseDisputeStack } from "@zkp2p/contracts-v2/disputeStack"
-
-// Example: Create contract instance with ethers
-import { ethers } from 'ethers';
-
-const provider = new ethers.providers.JsonRpcProvider('https://mainnet.base.org');
-const orchestrator = new ethers.Contract(
-  base.Orchestrator,
-  Orchestrator,
-  provider
-);
-
-console.log('Intent expiration:', INTENT_EXPIRATION_PERIOD);
-console.log('Venmo config:', paymentMethods.venmo);
-console.log('Expected successor hook:', baseDisputeStack.expectedRelations.activeLifecycleHook);
+const provider = new ethers.providers.JsonRpcProvider("https://mainnet.base.org")
+const orchestrator = new ethers.Contract(base.contracts.OrchestratorV4, OrchestratorV4, provider)
+console.log("Protocol fee:", (await orchestrator.protocolFee()).toString())
 ```
 
 ## Features
@@ -215,9 +182,9 @@ Pre-configured addresses for all deployed networks:
 ```typescript
 import { base, baseStaging } from "@zkp2p/contracts-v2/addresses"
 
-console.log(base.Orchestrator);
-console.log(base.Escrow);
-console.log(baseStaging.UnifiedPaymentVerifier);
+console.log(base.contracts.OrchestratorV4);
+console.log(base.contracts.EscrowV2);
+console.log(baseStaging.contracts.UnifiedPaymentVerifierV4);
 ```
 
 Supported networks:
@@ -226,38 +193,34 @@ Supported networks:
 
 ### 📜 Network-Specific Contract ABIs
 
-Minimal ABIs extracted from on-chain deployments:
+Network ABIs extracted from the recorded deployments:
 
 ```typescript
 // Import specific contracts from a network
-import { Orchestrator, Escrow } from "@zkp2p/contracts-v2/abis/baseStaging"
+import { OrchestratorV4, EscrowV2 } from "@zkp2p/contracts-v2/abis/baseStaging"
 
 // Use the ABIs directly with ethers or viem
-const orchestratorABI = Orchestrator;
-const escrowABI = Escrow;
+const orchestratorABI = OrchestratorV4;
+const escrowABI = EscrowV2;
 
 // Alternative: Import all ABIs for a network
 import * as baseStagingAbis from "@zkp2p/contracts-v2/abis/baseStaging"
-const unifiedVerifierABI = baseStagingAbis.UnifiedPaymentVerifier;
+const unifiedVerifierABI = baseStagingAbis.UnifiedPaymentVerifierV4;
 
 // Also supports direct JSON imports for bundle optimization
-import EscrowABI from "@zkp2p/contracts-v2/abis/baseStaging/Escrow.json"
+import EscrowABI from "@zkp2p/contracts-v2/abis/baseStaging/EscrowV2.json"
 ```
 
 ### 🔧 Network-Specific Protocol Constants
 
-All protocol parameters and configurations per network:
+Read the constants object for the selected network:
 
 ```typescript
-import { INTENT_EXPIRATION_PERIOD, MAX_INTENTS_PER_DEPOSIT, DUST_THRESHOLD } from "@zkp2p/contracts-v2/constants/base"
-import * as baseStagingConstants from "@zkp2p/contracts-v2/constants/baseStaging"
+import constants from "@zkp2p/contracts-v2/constants/base"
 
-// Use specific constants
-console.log('Intent expiration:', INTENT_EXPIRATION_PERIOD);
-console.log('Max intents:', MAX_INTENTS_PER_DEPOSIT);
-
-// Or access all constants for a network
-console.log('USDC address:', baseStagingConstants.USDC);
+console.log("Intent expiration:", constants.INTENT_EXPIRATION_PERIOD)
+console.log("Max intents per deposit:", constants.MAX_INTENTS_PER_DEPOSIT)
+console.log("USDC address:", constants.USDC)
 ```
 
 ### 💳 Payment Methods with Provider Hashes
@@ -268,32 +231,30 @@ Unified payment method configurations including provider hashes from deployment:
 import { base, baseStaging } from "@zkp2p/contracts-v2/paymentMethods"
 
 // Access payment method configurations
-const venmoConfig = base.venmo;
+const venmoConfig = base.methods.venmo;
 console.log('Payment Method Hash:', venmoConfig.paymentMethodHash);
 console.log('Currencies:', venmoConfig.currencies);
 
 // Or use staging configurations
-const stagingPaymentMethods = baseStaging;
+const stagingPaymentMethods = baseStaging.methods;
 console.log('Available methods:', Object.keys(stagingPaymentMethods));
 ```
 
 ### 🛠️ Utility Functions
 
-Protocol utility functions:
+This subpath ships TypeScript source that uses ethers v5. Use a build tool that transpiles TypeScript dependencies.
 
 ```typescript
-// Import protocol utilities
-import { getKeccak256Hash, calculateIntentHash, getCurrencyInfo } from "@zkp2p/contracts-v2/utils/protocolUtils"
-import { Currency } from "@zkp2p/contracts-v2/utils/types"
+import { base } from "@zkp2p/contracts-v2/addresses"
+import {
+  calculateIntentHash,
+  Currency,
+  getCurrencyCodeFromHash,
+} from "@zkp2p/contracts-v2/utils/protocolUtils"
 
-// Use utility functions
-const paymentMethodHash = getKeccak256Hash("venmo");
-const intentHash = calculateIntentHash(depositor, depositId, signalIntentParams);
-
-// Get currency information
-const usdInfo = getCurrencyInfo(Currency.USD);
-console.log('Currency code:', usdInfo.code);
-console.log('Decimals:', usdInfo.decimals);
+// Use the counter assigned to the intent on this orchestrator.
+const intentHash = calculateIntentHash(base.contracts.OrchestratorV4, 1)
+console.log(intentHash, getCurrencyCodeFromHash(Currency.USD))
 ```
 
 ### 🛡️ Dispute Stack
@@ -312,8 +273,8 @@ manifest pins:
 - The approved risk window for every active payment-method bytes32 hash: 1,209,600 seconds for
   PayPal and Venmo, and zero for all other active methods, including Cash App.
 
-The package exports the currently selected (latest) addresses for each network, and consumers should
-treat them as the addresses to use.
+The manifest describes historical O3 dispute wiring. For new integrations use the network’s
+`contracts.OrchestratorV4`, `contracts.EscrowV2`, and matching V4 policies.
 
 
 ## API Reference
@@ -325,9 +286,12 @@ The package follows modern ESM/CJS patterns with clean subpath exports:
 ```
 @zkp2p/contracts-v2/
 ├── addresses/          # Network-specific contract addresses
-├── abis/              # Network-specific contract ABIs  
+├── abis/              # Network-specific contract ABIs
 ├── constants/         # Protocol constants per network
 ├── paymentMethods/    # Payment method configurations
+├── currencies/         # Currency lookups
+├── oracleFeeds/        # Configured price feeds
+├── networks/           # Per-network entry points
 ├── disputeStack/      # Trusted V3 identities and policy expectations
 ├── types/             # TypeScript type definitions
 └── utils/             # Utility functions
@@ -339,7 +303,7 @@ All modules are directly accessible via subpath exports:
 
 - `@zkp2p/contracts-v2/addresses` - Contract addresses for all networks
 - `@zkp2p/contracts-v2/abis/<network>` - Contract ABIs per network (e.g., `/abis/baseStaging`)
-- `@zkp2p/contracts-v2/abis/contracts` - Stable source ABIs for approved but not-yet-deployed contracts
+- `@zkp2p/contracts-v2/abis/contracts` - Source ABIs independent of network deployment
 - `@zkp2p/contracts-v2/abis/<network>/<contract>.json` - Direct JSON import for specific contracts
 - `@zkp2p/contracts-v2/constants/<network>` - Constants per network
 - `@zkp2p/contracts-v2/paymentMethods` - Payment method configs
@@ -350,36 +314,24 @@ All modules are directly accessible via subpath exports:
 
 ### Export Format Details
 
-The package now uses explicit wrapper modules for each network to ensure reliable imports across all environments:
+The ABI wrapper for each network has an ESM entry point, a CommonJS entry point and TypeScript declarations. For example, a CommonJS consumer can use:
 
-```typescript
-// Recommended: Import from network-specific wrappers
-import { Escrow, Orchestrator } from "@zkp2p/contracts-v2/abis/baseStaging"
-
-// Alternative: Direct JSON imports for bundle size optimization
-import EscrowABI from "@zkp2p/contracts-v2/abis/baseStaging/Escrow.json"
-
-// CommonJS compatibility
-const { Escrow } = require("@zkp2p/contracts-v2/abis/baseStaging")
+```javascript
+const { EscrowV2 } = require("@zkp2p/contracts-v2/abis/baseStaging")
 ```
-
-Each network export provides:
-- CommonJS support (`.cjs`)
-- ESM support (`.mjs`)
-- TypeScript definitions (`.d.ts`)
-- Direct JSON file access
 
 ## Development
 
 ### Build and release
 
+First run `yarn compile` from the repository root to generate the Hardhat artifacts used by extraction.
 From `packages/contracts`:
 - `yarn build` – Clean, extract, and bundle package
 - `yarn test` – Run package tests
 - `yarn verify:release` – Verify current ABIs and deployment-address integrity
 - `npm pack --dry-run` – Preview tarball contents
 
-Publishing is performed only by the protected GitHub Actions trusted-publishing workflow. It uses npm OIDC and provenance without a long-lived npm token. See [the release runbook](../../NPM_RELEASE.md).
+Publishing is performed only by the protected GitHub Actions trusted-publishing workflow. It uses npm OIDC and provenance without a long-lived npm token. See [the release runbook](https://github.com/zkp2p/zkp2p-contracts/blob/main/NPM_RELEASE.md).
 
 The package uses modern module patterns with `_esm/`, `_cjs/`, and `_types/` folders for compatibility.
 
@@ -390,5 +342,5 @@ MIT
 ## Links
 
 - [GitHub Repository](https://github.com/zkp2p/zkp2p-contracts)
-- [Documentation](https://docs.zkp2p.xyz)
-- [Website](https://zkp2p.xyz)
+- [Documentation](https://docs.peer.xyz)
+- [Website](https://peer.xyz)

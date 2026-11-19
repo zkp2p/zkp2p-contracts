@@ -50,8 +50,8 @@
 - `deploy/34_deploy_opt_in_dispute_lifecycle_stack.ts` is immutable and retired. It deployed and, on Base, activated
   the `*OptIn` dispute stack built from the deposit-only interfaces; the runner verifies its digest, excludes it from
   every supported run, and rejects both of its tags. Its Safe simulation and verification scripts remain as tooling
-  for that executed history. The Base `*OptIn` trio is the live dispute stack until a later activation lane replaces
-  it; the Base-staging `*OptIn` trio is deployed but was never activated.
+  for that executed history. The Base `*OptIn` trio preceded the lane-39/40 stack. The Base-staging `*OptIn` trio
+  was deployed but never activated.
 - Lanes `36` and `37` executed deploy-only on Base staging and Base on 2026-08-27 and are immutable (pinned in
   `deployments/immutableDeploymentLanes.ts`). Lane `36` stays mounted behind its canonical-record skip; lane `37` is
   retired for live networks (its preflight requires the predecessor hook, which lane 38 replaces) and is mounted through
@@ -148,8 +148,7 @@
   - **Contract guarantee:** the updater can't publish a price more than 5% away from any price shown in the last
     24 hours. That window is 25 hourly buckets on block time plus the latest price. Only the Safe can `seedFeed`
     outside the band. Its `emergencyStop` zeroes the updater and locks the feeds.
-  - **Package:** feed addresses join `oracleFeeds` (`provider: "zkp2p"`) only in release B, after keeper rounds
-    land.
+  - **Package:** feed addresses join `oracleFeeds` (`provider: "zkp2p"`) in release 0.4.3.
   - **Base execution (2026-10-01):** run from `88be796` (#325 + #326) by deployer `0x84e1…1929` (nonces
     15421–15430, all successful). Addresses:
     - `FxRateStore` `0x389206956C57bdB5d07FF78AB3D1e1DEED070b9c`
@@ -161,8 +160,7 @@
     `0x81630fb1ab2A7Eab137888b9746b66889f78F091`. All three contracts are Basescan-verified. The lane is immutable
     and pinned in `deployments/immutableDeploymentLanes.ts`.
 - Lane `47` (`deploy/47_deploy_unified_payment_verifier_v4.ts`) records the Base production
-  `UnifiedPaymentVerifierV4`. It shipped before OrchestratorV4 and now serves both the live OrchestratorV4 and
-  OrchestratorV3. Runbook: `docs/releases/upv4-base-production-cutover.md`; the O4 release that followed is
+  `UnifiedPaymentVerifierV4`. It shipped before OrchestratorV4 and served OrchestratorV3 before its retirement. It now verifies OrchestratorV4 payments. Runbook: `docs/releases/upv4-base-production-cutover.md`; the O4 release that followed is
   `docs/releases/orchestrator-v4-base-production.md`.
   - **Deployment:** UPV4 was deployed outside the lane on 2026-10-28 from main `646898f`:
     - `0x7bE50E6206a9b3AdF36dbEAFac0e45Cc03A72048`, deploy tx `0xa6fa…cf931` at block 53210472;
@@ -184,7 +182,7 @@
   - **Safe batches:** `yarn write:upv4-safe-batches` renders them from the record and the pins in
     `UPV4_BASE_RELEASE` (`deployments/parameters.ts`):
     - `base_upv4_cutover` (27 calls): adds the UPV4 writer, then removes every route in reverse and re-adds it on
-      UPV4. UPV3 stays a writer, so rollback still works. It executed at Safe nonce 86 on 2026-10-29 as safeTxHash
+      UPV4. UPV3 stayed a writer. It cannot verify O4 payments. It executed at Safe nonce 86 on 2026-10-29 as safeTxHash
       `0x710a…7057` (the Safe UI's MultiSendCallOnly); the repo's default wrapper hashes it to `0xe22b…8c70`.
     - `base_upv4_upv3_writer_removal` (1 call): prepared, not scheduled.
     - `base_upv4_rollback` (26 calls): routes back to UPV3.
@@ -200,8 +198,8 @@
   OrchestratorV3 is retired as an integration target. Its Base-staging registration was removed on 2026-11-05
   (tx `0xadb0b597468f34fa684e21409ee736dcc7779170722ecaacf8032efb052d85cc`, block 53549246). Base removal executed
   the same day by Safe `0x0bC26FF515411396DD588Abd6Ef6846E04470227` nonce 94 (tx `0x85b7c40b779350cdeb6890f84d72375588e1bf930f9fdcd8eeea97aa4ea60dfc`, block 53550556). O3 sources,
-  tests, deployment records, ABIs, and historical reads remain until a later major release. The next package
-  release expects O4 registered and O3 absent on both networks, and the Base removal has executed.
+  tests, deployment records, ABIs, and historical reads remain until a later major release. Package 0.4.4 expects O4
+  registered and O3 absent on both networks.
   - **Tooling:** runner `scripts/deploy-orchestrator-v4.ts` (`yarn deploy:orchestrator-v4`), inputs
     `deployments/orchestrator-v4/{base,base_staging}.json`, manifests `deployments/outputs/orchestrator-v4-<network>.json`,
     Base Safe batches `yarn o4:safe-batches`, runbooks `docs/releases/orchestrator-v4-*.md`.
@@ -210,7 +208,7 @@
 - `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the
   predecessor of the currently selected stack and feeds the lane-30 wrapper, the package's recognized-predecessor
   identities, and lane-34 tooling; `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS` describes what lane 37 replaces (the
-  Base `*OptIn` trio, the Base-staging lane-32 stack). Do not merge them until the method-scoped stack is activated.
+  Base `*OptIn` trio, the Base-staging lane-32 stack). Preserve the distinct predecessor sets when checking those lanes.
 - `scripts/bootstrapWhitelistPolicy.ts` targets only `WhitelistPolicyMethodScoped` and refuses the lane-29 policy
   address. Its required `WHITELIST_GROUP_IDS` is an ordered, non-empty, distinct list; on Base every ID must be one
   of the known production groups. The Peer Pay group (Base `0x174b…5e48`, Base staging `0xc82c…00f7`) is retired
@@ -229,7 +227,7 @@
 ## Architecture Overview (v2.1)
 
 This section describes the V1 stack, whose sources now live in `contracts/archive/`. The current stack is `EscrowV2`,
-`OrchestratorV4` (O3 is retired, with Base deregistration pending), and `UnifiedPaymentVerifierV4`.
+`OrchestratorV4` (O3 is unregistered on both networks), and `UnifiedPaymentVerifierV4`.
 
 - Core: `Escrow` holds maker deposits and per-deposit config (methods, currencies, min rates, intent limits/expiry); `Orchestrator` manages intents, routes to verifiers, collects protocol/referrer fees; `ProtocolViewer` provides aggregated read views.
 - Registries: `PaymentVerifierRegistry` maps `paymentMethod` → verifier + currencies; `EscrowRegistry` whitelists escrows; `PostIntentHookRegistry` whitelists post‑intent hooks; `NullifierRegistry` records consumed nullifiers. `RelayerRegistry` backs the deployed legacy V1 stack, deployed production `OrchestratorV2`, and retained `OrchestratorV3` source and historical wiring, including relayer-gated multi-intent admission.
@@ -365,7 +363,8 @@ iteration loop.
 - Code pull requests run the complete Foundry suite without coverage. Contract-only changes intentionally do not run
   package and localhost-deployment validation until the integrated `main` commit. Release-surface pull requests that
   touch deploy, package, scripts, tasks, utilities, configuration, or workflow files run those checks immediately.
-- Markdown, agent instructions, audits, and deployment logs intentionally skip CI. Use `git diff --check` and any
+- Foundry CI skips Markdown, agent instructions, audits, and deployment logs. Release readiness separately
+  matches paths such as `packages/**`, including package documentation. Use `git diff --check` and any
   documentation-specific validation; do not manufacture an empty status check. A docs-only release head may inherit
   the immediately preceding green runtime SHA only after the complete intervening diff is proven non-executable.
   This skip applies only when the entire PR or push is limited to ignored paths; a docs-only follow-up in a mixed PR
