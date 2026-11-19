@@ -274,7 +274,8 @@ manifest pins:
   PayPal and Venmo, and zero for all other active methods, including Cash App.
 
 The manifest describes historical O3 dispute wiring. For new integrations use the network’s
-`contracts.OrchestratorV4`, `contracts.EscrowV2`, and matching V4 policies.
+`contracts.OrchestratorV4`, `contracts.EscrowV2`, and the O4 policies: `IntentSignalPolicy`,
+`WhitelistPolicyV2`, `DisputeProtectionPolicyV2`, `StakeVaultV2` and `AddressGroupRegistryV4`.
 
 
 ## API Reference

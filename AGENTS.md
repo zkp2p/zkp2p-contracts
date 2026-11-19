@@ -208,7 +208,7 @@
 - `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the
   predecessor of the currently selected stack and feeds the lane-30 wrapper, the package's recognized-predecessor
   identities, and lane-34 tooling; `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS` describes what lane 37 replaces (the
-  Base `*OptIn` trio, the Base-staging lane-32 stack). Preserve the distinct predecessor sets when checking those lanes.
+  Base `*OptIn` trio, the Base-staging lane-32 stack). Keep the two maps pinned separately when checking those lanes; their contents currently match.
 - `scripts/bootstrapWhitelistPolicy.ts` targets only `WhitelistPolicyMethodScoped` and refuses the lane-29 policy
   address. Its required `WHITELIST_GROUP_IDS` is an ordered, non-empty, distinct list; on Base every ID must be one
   of the known production groups. The Peer Pay group (Base `0x174b…5e48`, Base staging `0xc82c…00f7`) is retired
