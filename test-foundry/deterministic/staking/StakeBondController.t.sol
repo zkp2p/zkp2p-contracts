@@ -21,6 +21,8 @@ contract StakeBondControllerTest is Test {
     );
 
     uint256 internal constant BOND = 500e6;
+    uint256 internal constant WALLET = 1_500e6;
+    uint256 internal constant OTHER_STAKE = 300e6;
     uint64 internal constant EXIT_DELAY = 30 days;
     bytes32 internal constant SUBJECT = keccak256("merchant-a");
     bytes32 internal constant OTHER_SUBJECT = keccak256("merchant-b");
@@ -49,8 +51,13 @@ contract StakeBondControllerTest is Test {
         vault.setController(address(bonds), true);
         vault.setController(disputeController, true);
 
-        _stake(merchant, 1_000e6);
-        _stake(attacker, 1_000e6);
+        _fundWallet(merchant);
+        _fundWallet(attacker);
+        // Dispute stake the merchant already holds; a bond must never touch it.
+        vm.startPrank(merchant);
+        token.approve(address(vault), OTHER_STAKE);
+        vault.depositStake(OTHER_STAKE);
+        vm.stopPrank();
     }
 
     /* ============ Constructor ============ */
@@ -75,6 +82,7 @@ contract StakeBondControllerTest is Test {
 
     function test_ConstructorStoresConfiguration() public view {
         assertEq(address(bonds.stakeVault()), address(vault));
+        assertEq(address(bonds.stakeToken()), address(token));
         assertEq(bonds.bondAmount(), BOND);
         assertEq(bonds.exitDelay(), EXIT_DELAY);
         assertEq(bonds.owner(), governance);
@@ -82,7 +90,7 @@ contract StakeBondControllerTest is Test {
 
     /* ============ Post ============ */
 
-    function test_PostBondLocksBondAmountOfCallerStake() public {
+    function test_PostBondMovesTheBondFromTheWalletIntoALock() public {
         bytes32 id = bonds.bondId(merchant, SUBJECT);
         vm.expectEmit(true, true, true, true, address(bonds));
         emit BondPosted(merchant, SUBJECT, id, BOND);
@@ -94,41 +102,68 @@ contract StakeBondControllerTest is Test {
         assertEq(lockAmount, BOND);
         assertEq(maturesAt, type(uint64).max);
         assertEq(vault.lockController(id), address(bonds));
-        assertEq(vault.freeStake(merchant), 500e6);
-        assertEq(vault.stakeBalance(merchant), 1_000e6);
+        assertEq(token.balanceOf(merchant), WALLET - OTHER_STAKE - BOND);
+        assertEq(vault.stakeBalance(merchant), OTHER_STAKE + BOND);
+        assertEq(vault.freeStake(merchant), OTHER_STAKE);
+        assertEq(token.balanceOf(address(vault)), vault.totalAccounted());
 
         IStakeBondController.Bond memory bond = bonds.getBond(merchant, SUBJECT);
         assertTrue(bond.posted);
         assertEq(bond.exitableAt, 0);
     }
 
-    function test_PostBondRevertsWithoutEnoughFreeStake() public {
-        address thin = makeAddr("thin");
-        _stake(thin, BOND - 1);
+    function test_PostBondRevertsWithoutAllowance() public {
+        vm.prank(merchant);
+        token.approve(address(bonds), BOND - 1);
 
-        vm.prank(thin);
-        vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.InsufficientFreeStake.selector, thin, BOND - 1, BOND));
+        vm.prank(merchant);
+        vm.expectRevert("ERC20: insufficient allowance");
         bonds.postBond(SUBJECT);
     }
 
-    function test_PostBondRevertsForASubjectAlreadyBonded() public {
-        vm.startPrank(merchant);
-        bonds.postBond(SUBJECT);
-        vm.expectRevert(
-            abi.encodeWithSelector(IStakeVaultV2.LockAlreadyExists.selector, bonds.bondId(merchant, SUBJECT))
-        );
+    function test_PostBondRevertsWithoutWalletBalance() public {
+        address thin = makeAddr("thin");
+        token.transfer(thin, BOND - 1);
+        vm.startPrank(thin);
+        token.approve(address(bonds), BOND);
+        vm.expectRevert("ERC20: transfer amount exceeds balance");
         bonds.postBond(SUBJECT);
         vm.stopPrank();
     }
 
+    function test_PostBondNeverAdoptsOtherUnaccountedTokens() public {
+        token.transfer(address(vault), 7e6);
+
+        vm.prank(merchant);
+        bonds.postBond(SUBJECT);
+
+        assertEq(vault.unaccountedBalance(), 7e6);
+        assertEq(vault.stakeBalance(merchant), OTHER_STAKE + BOND);
+    }
+
+    function test_PostBondRevertsForASubjectAlreadyBondedAndKeepsTheTokens() public {
+        bytes32 id = bonds.bondId(merchant, SUBJECT);
+        vm.startPrank(merchant);
+        token.approve(address(bonds), 2 * BOND);
+        bonds.postBond(SUBJECT);
+        uint256 walletAfterFirst = token.balanceOf(merchant);
+        vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.LockAlreadyExists.selector, id));
+        bonds.postBond(SUBJECT);
+        vm.stopPrank();
+
+        assertEq(token.balanceOf(merchant), walletAfterFirst);
+        assertEq(vault.stakeBalance(merchant), OTHER_STAKE + BOND);
+    }
+
     function test_EachSubjectNeedsItsOwnBond() public {
         vm.startPrank(merchant);
+        token.approve(address(bonds), 2 * BOND);
         bonds.postBond(SUBJECT);
         bonds.postBond(OTHER_SUBJECT);
         vm.stopPrank();
 
         assertEq(vault.lockedStake(merchant), 2 * BOND);
-        assertEq(vault.freeStake(merchant), 0);
+        assertEq(vault.freeStake(merchant), OTHER_STAKE);
     }
 
     function test_AnotherOwnersBondOnTheSameSubjectIsSeparate() public {
@@ -148,6 +183,7 @@ contract StakeBondControllerTest is Test {
         vm.prank(merchant);
         vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.UnauthorizedController.selector, address(bonds)));
         bonds.postBond(SUBJECT);
+        assertEq(token.balanceOf(merchant), WALLET - OTHER_STAKE);
     }
 
     /* ============ Reservation ============ */
@@ -156,10 +192,10 @@ contract StakeBondControllerTest is Test {
         vm.startPrank(merchant);
         bonds.postBond(SUBJECT);
         vm.expectRevert(
-            abi.encodeWithSelector(IStakeVaultV2.InsufficientFreeStake.selector, merchant, 500e6, 500e6 + 1)
+            abi.encodeWithSelector(IStakeVaultV2.InsufficientFreeStake.selector, merchant, OTHER_STAKE, OTHER_STAKE + 1)
         );
-        vault.withdrawStake(500e6 + 1);
-        vault.withdrawStake(500e6);
+        vault.withdrawStake(OTHER_STAKE + 1);
+        vault.withdrawStake(OTHER_STAKE);
         vm.stopPrank();
 
         assertEq(vault.stakeBalance(merchant), BOND);
@@ -172,29 +208,26 @@ contract StakeBondControllerTest is Test {
 
         vm.prank(disputeController);
         vm.expectRevert(
-            abi.encodeWithSelector(IStakeVaultV2.InsufficientFreeStake.selector, merchant, 500e6, 500e6 + 1)
+            abi.encodeWithSelector(IStakeVaultV2.InsufficientFreeStake.selector, merchant, OTHER_STAKE, OTHER_STAKE + 1)
         );
-        vault.lockStake(merchant, keccak256("intent"), 500e6 + 1, uint64(block.timestamp + 1 days));
+        vault.lockStake(merchant, keccak256("intent"), OTHER_STAKE + 1, uint64(block.timestamp + 1 days));
     }
 
     function test_AnotherControllerCannotReleaseOrResolveABond() public {
         vm.prank(merchant);
         bonds.postBond(SUBJECT);
         bytes32 id = bonds.bondId(merchant, SUBJECT);
+        bytes memory refusal = abi.encodeWithSelector(
+            IStakeVaultV2.UnauthorizedLockController.selector, id, disputeController, address(bonds)
+        );
 
         vm.startPrank(disputeController);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IStakeVaultV2.UnauthorizedLockController.selector, id, disputeController, address(bonds)
-            )
-        );
+        vm.expectRevert(refusal);
         vault.unlockStake(id);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IStakeVaultV2.UnauthorizedLockController.selector, id, disputeController, address(bonds)
-            )
-        );
+        vm.expectRevert(refusal);
         vault.payOutLock(id);
+        vm.expectRevert(refusal);
+        vault.resolveLock(id, new IStakeVaultV2.Claim[](0));
         vm.stopPrank();
     }
 
@@ -223,16 +256,13 @@ contract StakeBondControllerTest is Test {
     }
 
     function test_RequestExitRevertsWhenAlreadyRequested() public {
+        bytes32 id = bonds.bondId(merchant, SUBJECT);
         vm.startPrank(merchant);
         bonds.postBond(SUBJECT);
         bonds.requestExit(SUBJECT);
         uint64 noticeEnd = uint64(block.timestamp) + EXIT_DELAY;
         vm.warp(block.timestamp + 1 days);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IStakeBondController.ExitAlreadyRequested.selector, bonds.bondId(merchant, SUBJECT), noticeEnd
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(IStakeBondController.ExitAlreadyRequested.selector, id, noticeEnd));
         bonds.requestExit(SUBJECT);
         vm.stopPrank();
     }
@@ -257,53 +287,52 @@ contract StakeBondControllerTest is Test {
     }
 
     function test_ExitRevertsWithoutNotice() public {
+        bytes32 id = bonds.bondId(merchant, SUBJECT);
         vm.startPrank(merchant);
         bonds.postBond(SUBJECT);
-        vm.expectRevert(
-            abi.encodeWithSelector(IStakeBondController.ExitNotRequested.selector, bonds.bondId(merchant, SUBJECT))
-        );
+        vm.expectRevert(abi.encodeWithSelector(IStakeBondController.ExitNotRequested.selector, id));
         bonds.exit(SUBJECT);
         vm.stopPrank();
     }
 
     function test_ExitRevertsBeforeTheNoticeEnds() public {
+        bytes32 id = bonds.bondId(merchant, SUBJECT);
         vm.startPrank(merchant);
         bonds.postBond(SUBJECT);
         bonds.requestExit(SUBJECT);
         uint64 noticeEnd = uint64(block.timestamp) + EXIT_DELAY;
         vm.warp(noticeEnd - 1);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                IStakeBondController.ExitNotReady.selector, bonds.bondId(merchant, SUBJECT), noticeEnd, noticeEnd - 1
-            )
+            abi.encodeWithSelector(IStakeBondController.ExitNotReady.selector, id, noticeEnd, noticeEnd - 1)
         );
         bonds.exit(SUBJECT);
         vm.stopPrank();
     }
 
-    function test_ExitReturnsTheBondToFreeStake() public {
+    function test_ExitPaysTheBondBackToTheWallet() public {
+        bytes32 id = bonds.bondId(merchant, SUBJECT);
         vm.startPrank(merchant);
         bonds.postBond(SUBJECT);
         bonds.requestExit(SUBJECT);
         vm.warp(block.timestamp + EXIT_DELAY);
 
-        bytes32 id = bonds.bondId(merchant, SUBJECT);
         vm.expectEmit(true, true, true, true, address(bonds));
         emit BondExited(merchant, SUBJECT, id);
         bonds.exit(SUBJECT);
-
-        vault.withdrawStake(1_000e6);
         vm.stopPrank();
 
         IStakeBondController.Bond memory bond = bonds.getBond(merchant, SUBJECT);
         assertFalse(bond.posted);
         assertEq(bond.exitableAt, 0);
         assertEq(vault.lockController(id), address(0));
-        assertEq(token.balanceOf(merchant), 1_000e6);
+        assertEq(token.balanceOf(merchant), WALLET - OTHER_STAKE);
+        assertEq(vault.stakeBalance(merchant), OTHER_STAKE);
+        assertEq(vault.freeStake(merchant), OTHER_STAKE);
     }
 
     function test_OwnerCanPostAgainAfterExit() public {
         vm.startPrank(merchant);
+        token.approve(address(bonds), 2 * BOND);
         bonds.postBond(SUBJECT);
         bonds.requestExit(SUBJECT);
         vm.warp(block.timestamp + EXIT_DELAY);
@@ -318,7 +347,7 @@ contract StakeBondControllerTest is Test {
 
     /* ============ Slash ============ */
 
-    function test_SlashTurnsTheWholeBondIntoABeneficiaryClaim() public {
+    function test_SlashTurnsTheBondIntoABeneficiaryClaim() public {
         vm.prank(merchant);
         bonds.postBond(SUBJECT);
         bytes32 id = bonds.bondId(merchant, SUBJECT);
@@ -326,10 +355,10 @@ contract StakeBondControllerTest is Test {
         vm.expectEmit(true, true, true, true, address(bonds));
         emit BondSlashed(merchant, SUBJECT, id, treasury, BOND);
         vm.prank(governance);
-        bonds.slash(merchant, SUBJECT, BOND, treasury);
+        bonds.slash(merchant, SUBJECT, treasury);
 
-        assertEq(vault.stakeBalance(merchant), 500e6);
-        assertEq(vault.freeStake(merchant), 500e6);
+        assertEq(vault.stakeBalance(merchant), OTHER_STAKE);
+        assertEq(vault.freeStake(merchant), OTHER_STAKE);
         assertEq(vault.claimable(treasury), BOND);
         assertFalse(bonds.getBond(merchant, SUBJECT).posted);
 
@@ -338,20 +367,8 @@ contract StakeBondControllerTest is Test {
         assertEq(token.balanceOf(treasury), BOND);
     }
 
-    function test_PartialSlashReturnsTheRestToFreeStake() public {
-        vm.prank(merchant);
-        bonds.postBond(SUBJECT);
-
-        vm.prank(governance);
-        bonds.slash(merchant, SUBJECT, 200e6, treasury);
-
-        assertEq(vault.claimable(treasury), 200e6);
-        assertEq(vault.stakeBalance(merchant), 800e6);
-        assertEq(vault.freeStake(merchant), 800e6);
-        assertFalse(bonds.getBond(merchant, SUBJECT).posted);
-    }
-
     function test_SlashDuringTheExitNoticeClearsIt() public {
+        bytes32 id = bonds.bondId(merchant, SUBJECT);
         vm.startPrank(merchant);
         bonds.postBond(SUBJECT);
         bonds.requestExit(SUBJECT);
@@ -359,52 +376,39 @@ contract StakeBondControllerTest is Test {
         vm.warp(block.timestamp + EXIT_DELAY - 1);
 
         vm.prank(governance);
-        bonds.slash(merchant, SUBJECT, BOND, treasury);
+        bonds.slash(merchant, SUBJECT, treasury);
 
         IStakeBondController.Bond memory bond = bonds.getBond(merchant, SUBJECT);
         assertFalse(bond.posted);
         assertEq(bond.exitableAt, 0);
 
         vm.warp(block.timestamp + 1);
-        bytes32 id = bonds.bondId(merchant, SUBJECT);
         vm.prank(merchant);
         vm.expectRevert(abi.encodeWithSelector(IStakeBondController.ExitNotRequested.selector, id));
         bonds.exit(SUBJECT);
     }
 
     function test_SlashRevertsAfterExit() public {
+        bytes32 id = bonds.bondId(merchant, SUBJECT);
         vm.startPrank(merchant);
         bonds.postBond(SUBJECT);
         bonds.requestExit(SUBJECT);
         vm.warp(block.timestamp + EXIT_DELAY);
         bonds.exit(SUBJECT);
         vm.stopPrank();
-        bytes32 id = bonds.bondId(merchant, SUBJECT);
 
         vm.prank(governance);
         vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.LockNotFound.selector, id));
-        bonds.slash(merchant, SUBJECT, BOND, treasury);
+        bonds.slash(merchant, SUBJECT, treasury);
     }
 
-    function test_SlashRevertsAboveTheBond() public {
+    function test_SlashRevertsForAZeroBeneficiary() public {
         vm.prank(merchant);
         bonds.postBond(SUBJECT);
 
         vm.prank(governance);
-        vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.ClaimsExceedLock.selector, BOND, BOND + 1));
-        bonds.slash(merchant, SUBJECT, BOND + 1, treasury);
-    }
-
-    function test_SlashRevertsForAnInvalidClaim() public {
-        vm.prank(merchant);
-        bonds.postBond(SUBJECT);
-
-        vm.startPrank(governance);
         vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.InvalidClaim.selector, address(0), BOND));
-        bonds.slash(merchant, SUBJECT, BOND, address(0));
-        vm.expectRevert(abi.encodeWithSelector(IStakeVaultV2.InvalidClaim.selector, treasury, 0));
-        bonds.slash(merchant, SUBJECT, 0, treasury);
-        vm.stopPrank();
+        bonds.slash(merchant, SUBJECT, address(0));
     }
 
     function test_OnlyGovernanceCanSlash() public {
@@ -413,7 +417,7 @@ contract StakeBondControllerTest is Test {
 
         vm.prank(attacker);
         vm.expectRevert("Ownable: caller is not the owner");
-        bonds.slash(merchant, SUBJECT, BOND, attacker);
+        bonds.slash(merchant, SUBJECT, attacker);
     }
 
     function test_RenounceOwnershipIsDisabled() public {
@@ -424,11 +428,9 @@ contract StakeBondControllerTest is Test {
 
     /* ============ Helpers ============ */
 
-    function _stake(address _owner, uint256 _amount) internal {
-        token.transfer(_owner, _amount);
-        vm.startPrank(_owner);
-        token.approve(address(vault), _amount);
-        vault.depositStake(_amount);
-        vm.stopPrank();
+    function _fundWallet(address _owner) internal {
+        token.transfer(_owner, WALLET);
+        vm.prank(_owner);
+        token.approve(address(bonds), BOND);
     }
 }
