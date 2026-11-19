@@ -264,7 +264,18 @@ abstract contract OrchestratorV4Fixture is Test {
         IOrchestratorV4.SignalIntentParams memory params,
         uint256 expiration
     ) internal view returns (bytes memory) {
-        bytes32 messageHash = keccak256(
+        bytes32 messageHash = _gatingMessageHash(signedCaller, params, expiration);
+        bytes32 digest = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, digest);
+        return abi.encodePacked(r, s, v);
+    }
+
+    function _gatingMessageHash(
+        address signedCaller,
+        IOrchestratorV4.SignalIntentParams memory params,
+        uint256 expiration
+    ) internal view returns (bytes32) {
+        return keccak256(
             abi.encodePacked(
                 address(orchestrator),
                 params.escrow,
@@ -281,9 +292,6 @@ abstract contract OrchestratorV4Fixture is Test {
                 params.payerCommitment
             )
         );
-        bytes32 digest = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, digest);
-        return abi.encodePacked(r, s, v);
     }
 
     function _gatedParams(uint256 signerKey, address signedCaller, uint256 expiration)
