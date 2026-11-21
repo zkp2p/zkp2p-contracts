@@ -165,7 +165,7 @@ Current numbered lanes include:
 - `32`: dispute lifecycle stack (immutable, retired) and the unrelated
   deposit-creation guard;
 - `33`: IntentGuardian fee update;
-- `34`: opt-in dispute stack (immutable, retired; its Base trio is live);
+- `34`: opt-in dispute stack (immutable, retired; its Base trio preceded lanes 39/40);
 - `35`: Mercury payment method (Base staging only);
 - `36`: `WhitelistPolicyMethodScoped` (immutable, executed on both networks,
   still mounted behind its canonical-record skip);

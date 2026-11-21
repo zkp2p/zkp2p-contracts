@@ -42,9 +42,8 @@ runbook is [orchestrator-v4-base-production.md](docs/releases/orchestrator-v4-ba
 
 ### OrchestratorV3 lifecycle, whitelist and dispute protection
 
-These components serve OrchestratorV3, which stays registered for older clients. Use the familiar names below
-when discussing them. The public package exports those same canonical names; deployment artifacts retain the
-longer method-scoped names. Each pair refers to one deployed contract:
+Use these addresses to decode historical OrchestratorV3 activity. The package preserves the canonical names
+for the method-scoped deployment artifacts.
 
 | Familiar / package name | Deployment artifact name | Base production address |
 | --- | --- | --- |
@@ -99,19 +98,19 @@ Legacy indexed hook fields therefore must not be interpreted as current O3 admis
 ## Settlement flow
 
 1. A maker creates and funds an `EscrowV2` deposit with payment methods, currencies and pricing rules.
-2. A taker signals an intent through `OrchestratorV4` (older clients use `OrchestratorV3`). Registry
+2. A taker signals an intent through `OrchestratorV4`. Registry
    authorization and the orchestrator's admission policy govern admission; the escrow locks the corresponding funds.
 3. The taker completes the fiat payment and obtains the required attestation.
 4. `UnifiedPaymentVerifierV4` verifies the payment and checks the nullifier history. Successful settlement
-   transfers the locked funds and applies fees and the settlement policy (O4) or the snapshotted lifecycle
-   callbacks (O3). Referral and manager-fee
-   terms are captured at signaling; the protocol fee and its recipient are read from current configuration at fulfillment.
+   distributes fees and sends the net payout to the recipient or defers it to the vault according to the
+   settlement policy. Referral and manager-fee terms are captured at signaling; the protocol fee and its recipient are read from current configuration at fulfillment.
 5. Expired intents are reconciled under the active escrow/orchestrator rules, returning the locked portion
    to available deposit liquidity.
 
 ## Repository layout
 
 - `contracts/`: protocol sources, interfaces and shared libraries.
+- `diagrams/`: historical OrchestratorV2 architecture and settlement flow. The settlement flow above describes V4.
 - `deployments/base/`: Base production deployment records.
 - `deployments/base_staging/`: staging deployment records; this environment also uses Base mainnet.
 - `deployments/active-dispute-stack.json`: current package aliases for lifecycle components.
@@ -132,13 +131,14 @@ not change on-chain state, historical ABIs or immutable deployment inputs.
 ### Prerequisites
 
 - Node.js 22.23.4 (the version pinned in CI)
-- Yarn 4
+- Yarn 4.9.1 (pinned in `package.json`)
 - Foundry v1.7.1
 - a `.env` copied from `.env.default`
 
 ### Initial Setup
 
 ```bash
+git submodule update --init --recursive
 corepack yarn install --immutable
 cp .env.default .env
 ```
@@ -196,8 +196,8 @@ See [TESTING.md](./TESTING.md) for suite design, seed reproduction, coverage mec
 Coverage is deliberately outside the pull-request critical path. Code pull requests run the complete deterministic,
 fuzz, invariant, integration, and deployment Foundry suite. The `Release readiness` workflow runs package and
 localhost-deployment checks for release-surface pull requests, every relevant push to `main`, and manual dispatches;
-its four coverage lanes run on `main` and manual dispatches only. Markdown, agent guidance, audits, and deployment
-logs do not start these workflows when the entire PR or push is limited to those paths. A docs-only follow-up inside
+its four coverage lanes run on `main` and manual dispatches only. Foundry CI skips Markdown-only changes. Release readiness uses its own path list,
+so a package README change triggers the package and localhost checks. A docs-only follow-up inside
 a mixed PR still reruns CI because GitHub evaluates pull-request path filters against the complete PR diff.
 
 Before publishing the contracts package, promoting a release branch, or deploying to Base staging or Base, verify
@@ -273,10 +273,9 @@ contract-wide `owner()` interface. The nine outstanding ownership transfers are 
 unchanged. The handoff spans [the EscrowV2 transfer](https://basescan.org/tx/0x99c29550534a6db39d7b3dd78b4d2eaf35e4bd2e3de3dee8239d4ed0c656dd68) through
 [the RateManagerV1 transfer](https://basescan.org/tx/0x9ba1f506cb1aa96d5dfd38abf8c06bbca6dc43609f3990cd7cc174ff2b6bf145).
 
-#### Supported staging V3 stack
+#### Historical staging V3 stack
 
-This is the retained staging integration inventory. Familiar lifecycle names and exact deployment aliases are
-shown together. Superseded staging deployments are excluded.
+Use this inventory for lookups at the time of the October ownership handoff. The V4 suite below handles new intents.
 
 | Contract / familiar name | Deployment artifact | Base staging address |
 | --- | --- | --- |
@@ -311,7 +310,7 @@ with production and are outside this staging ownership handoff.
 
 The fresh eight-contract suite deployed on 28 October 2026
 ([log](docs/releases/orchestrator-v4-staging-2026-10-28.md)) is active. The runner recorded it active at block
-**53201742**, and OrchestratorV4 is registered on the staging `OrchestratorRegistry` next to OrchestratorV3.
+**53201742**, when OrchestratorV3 was also registered. Staging removed OrchestratorV3 on 5 November 2026.
 Every staging payment method routes to the staging UnifiedPaymentVerifierV4, and UnifiedPaymentVerifierV3 is no
 longer a staging `NullifierRegistryV2` writer.
 

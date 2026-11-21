@@ -48,8 +48,8 @@ Do not remove the legacy gating signer: it is shared with the V1 `/v2/verify` pa
 ## Not archived, despite a higher-numbered sibling
 
 - `EscrowV2.sol` is the current escrow.
-- `UnifiedPaymentVerifierV3.sol` is the verifier every payment method routes
-  to.
+- All payment methods were routed to `UnifiedPaymentVerifierV4.sol` at the V4 cutovers.
+  The V3 verifier remains in the deployment and package history.
 - `registries/NullifierRegistry.sol` is the source of the live
   `DisputeNullifierRegistry`.
 - `interfaces/IEscrow.sol`, `IOrchestrator.sol`, `IOrchestratorV2.sol`, and

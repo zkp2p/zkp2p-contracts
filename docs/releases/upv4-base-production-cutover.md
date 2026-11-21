@@ -1,6 +1,7 @@
 # UnifiedPaymentVerifierV4 Base production cutover
 
-Status, 2026-11-02:
+Release snapshot at 2026-11-02. For the subsequent O3 deregistration, see
+[the retirement record](../../contracts/archive/README.md).
 
 - UPV4 is deployed on Base and owned by the Safe.
 - The cutover executed at Safe nonce 86 on 2026-10-29 at 13:04:01 UTC: tx
@@ -25,8 +26,7 @@ Base V1 orchestrator is unused and plays no part in this release.
 
 The previous production deployer `BASE_DEPLOY_PRIVATE_KEY` is compromised and
 must not sign anything. Base production deploys now use
-`0x41123d6419C7b8e44157f6F3b0088442116641eC`. Its key is `STAGING_DEPLOYER_KEY`
-in Kohai Infisical, which the user designated for production too.
+`0x41123d6419C7b8e44157f6F3b0088442116641eC`. The Base network configuration reads `BASE_DEPLOYER_KEY`.
 
 ## Deployment (executed)
 

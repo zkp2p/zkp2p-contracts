@@ -1,6 +1,7 @@
 # Orchestrator V4 Base production release
 
-Status, 2026-11-02:
+The following status is the 2026-11-02 release snapshot. Base subsequently removed O3 on
+2026-11-05. See [the retirement record](../../contracts/archive/README.md) before using this runbook.
 
 - O4 is live on Base. The four-call activation batch executed at Safe nonce 87
   on 2026-10-30 at 01:27:35 UTC: tx

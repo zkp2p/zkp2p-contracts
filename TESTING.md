@@ -7,6 +7,7 @@ Foundry is the repository's only contract test system. Hardhat remains installed
 Install the pinned dependencies and run the complete suite:
 
 ```bash
+git submodule update --init --recursive
 corepack yarn install --immutable
 corepack yarn test
 ```
@@ -18,7 +19,7 @@ corepack yarn test:deterministic
 corepack yarn test:fuzz
 corepack yarn test:invariant
 forge test --match-path 'test-foundry/deterministic/escrow/EscrowCreateDeposit.t.sol'
-forge test --match-test test_CreateDepositStoresEveryField
+forge test --match-test test_CreateDepositPopulatesCompleteDepositView
 ```
 
 The canonical profile in `foundry.toml` runs 512 cases for each fuzz property and 128 stateful invariant runs at depth 64. `fail_on_revert = true`; handlers catch and count only explicitly expected reverts. CI never lowers these values.
@@ -54,7 +55,7 @@ Fuzz and invariant tests remain mandatory in the separate complete-suite CI job,
 
 The local command uses one complete minimal-IR pass. CI partitions the same deterministic tree across four isolated runners, transfers only artifacts generated in the current workflow attempt, and then runs the exact-source shards and merge gate. Every partition must report the complete production-file denominator and identical line, branch, function, and statement anchor shapes. Statement hits are reconstructed by exact source byte range before the permanent floors are enforced. A missing, malformed, partial, or mismatched partition fails the merge.
 
-The CI artifact names include the workflow run ID and attempt. They are transport between jobs, not a reusable coverage cache; every applicable pull request and push to `main` recompiles and reruns all deterministic tests before generating LCOV.
+The CI artifact names include the workflow run ID and attempt. Each coverage run generates its own LCOV on a matching push to `main` or a manual Release readiness dispatch. Pull requests skip the coverage jobs.
 
 Generated artifacts are:
 
@@ -82,7 +83,7 @@ Place additive real-contract properties under `test-foundry/fuzz/`. Document the
 
 Place handlers under `test-foundry/invariant/handlers/` and invariant contracts under `test-foundry/invariant/`. Target selectors deliberately, use multiple realistic actors, maintain sufficient ghost state, and assert both a protocol property and handler reachability. Expected reverting actions belong inside the handler; an uncaught revert must fail the run.
 
-Required suites have no fork-dependent tests. Chain-dependent behavior uses deterministic fixtures, so every required suite runs on pushes to `main` and on every pull request without an RPC secret or mutable live-head state.
+Required suites have no fork-dependent tests. Chain-dependent behavior uses deterministic fixtures, so the complete Foundry CI suite can run without an RPC secret or mutable live-head state. The workflow skips changes confined to its ignored paths.
 
 `test-foundry/fork/` holds opt-in release rehearsals against live Base state. They skip unless `BASE_FORK_RPC_URL` is set, and they live outside `deterministic/`, so coverage never runs them. `UnifiedPaymentVerifierV4BaseCutover.t.sol` forks Base at block `53210521` by default (override with `BASE_FORK_BLOCK`). It runs the lane-47 Safe batch bytes that `scripts/upv4SafeBatches.ts ffi` produces:
 
