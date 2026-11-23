@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-import { BaseUnifiedPaymentVerifierV5 } from "./BaseUnifiedPaymentVerifierV5.sol";
+import { BaseUnifiedPaymentVerifierV3 } from "./BaseUnifiedPaymentVerifierV3.sol";
+import { INullifierRegistryV2 } from "../interfaces/INullifierRegistryV2.sol";
 import { INullifierRegistryV3 } from "../interfaces/INullifierRegistryV3.sol";
 import { IAttestationVerifier } from "../interfaces/IAttestationVerifier.sol";
 import { ERC165Checker } from "@openzeppelin/contracts/utils/introspection/ERC165Checker.sol";
@@ -30,7 +31,7 @@ import { IPaymentVerifierV2 } from "../interfaces/IPaymentVerifierV2.sol";
  * spent, and give every proof route for a transfer a common nullifier. This contract does not hash or interpret
  * them. `PaymentDetails.paymentId` is the receipt's identifier only; replay protection rests on the nullifiers.
  */
-contract UnifiedPaymentVerifierV5 is IPaymentVerifierV2, BaseUnifiedPaymentVerifierV5 {
+contract UnifiedPaymentVerifierV5 is IPaymentVerifierV2, BaseUnifiedPaymentVerifierV3 {
 
     /* ============ Constants ============ */
 
@@ -84,13 +85,18 @@ contract UnifiedPaymentVerifierV5 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
 
     /* ============ Constructor ============ */
 
+    /**
+     * @dev The shared base declares its registry as `INullifierRegistryV2` and calls only `isNullified` and
+     * `addNullifier`, which the V3 registry exposes with the same signatures. `nullifierRegistry` therefore
+     * reads as the V2 type while pointing at a V3 registry; the V2-only views do not exist there.
+     */
     constructor(
         IOrchestratorRegistry _orchestratorRegistry,
         INullifierRegistryV3 _nullifierRegistry,
         IAttestationVerifier _attestationVerifier
-    ) BaseUnifiedPaymentVerifierV5(
+    ) BaseUnifiedPaymentVerifierV3(
         _orchestratorRegistry,
-        _nullifierRegistry,
+        INullifierRegistryV2(address(_nullifierRegistry)),
         _attestationVerifier
     ) {
         // Compute EIP-712 domain separator
