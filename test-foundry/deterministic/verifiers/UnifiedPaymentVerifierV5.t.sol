@@ -10,6 +10,7 @@ import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol"
 import {NullifierRegistryV3} from "contracts/registries/NullifierRegistryV3.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 import {INullifierRegistry} from "contracts/interfaces/INullifierRegistry.sol";
+import {INullifierRegistryV2} from "contracts/interfaces/INullifierRegistryV2.sol";
 import {INullifierRegistryV3} from "contracts/interfaces/INullifierRegistryV3.sol";
 import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
@@ -76,7 +77,9 @@ contract UnifiedPaymentVerifierV5Test is Test {
         nullifierRegistry = new NullifierRegistryV3(predecessor);
         orchestratorRegistry = new OrchestratorRegistry();
         attestationVerifier = new SimpleAttestationVerifier(vm.addr(WITNESS_KEY));
-        verifier = new UnifiedPaymentVerifierV5(orchestratorRegistry, nullifierRegistry, attestationVerifier);
+        verifier = new UnifiedPaymentVerifierV5(
+            orchestratorRegistry, INullifierRegistryV2(address(nullifierRegistry)), attestationVerifier
+        );
         caller = new UnifiedPaymentVerifierV4V4CallerHarness();
 
         orchestratorRegistry.addOrchestrator(address(caller));
@@ -389,12 +392,13 @@ contract UnifiedPaymentVerifierV5Test is Test {
 
     function test_ConstructorRequiresDeployedDependenciesAndBindsTheDomain() public {
         address empty = makeAddr("empty");
+        INullifierRegistryV2 registry = INullifierRegistryV2(address(nullifierRegistry));
         vm.expectRevert("UPV: Invalid orchestrator registry");
-        new UnifiedPaymentVerifierV5(OrchestratorRegistry(empty), nullifierRegistry, attestationVerifier);
+        new UnifiedPaymentVerifierV5(OrchestratorRegistry(empty), registry, attestationVerifier);
         vm.expectRevert("UPV: Invalid nullifier registry");
-        new UnifiedPaymentVerifierV5(orchestratorRegistry, NullifierRegistryV3(empty), attestationVerifier);
+        new UnifiedPaymentVerifierV5(orchestratorRegistry, INullifierRegistryV2(empty), attestationVerifier);
         vm.expectRevert("UPV: Invalid attestation verifier");
-        new UnifiedPaymentVerifierV5(orchestratorRegistry, nullifierRegistry, SimpleAttestationVerifier(empty));
+        new UnifiedPaymentVerifierV5(orchestratorRegistry, registry, SimpleAttestationVerifier(empty));
 
         assertEq(address(verifier.nullifierRegistry()), address(nullifierRegistry));
         assertEq(

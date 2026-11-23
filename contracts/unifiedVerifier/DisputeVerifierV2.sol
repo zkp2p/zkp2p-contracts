@@ -28,25 +28,6 @@ contract DisputeVerifierV2 is IDisputeVerifier, Ownable2Step, EIP712 {
     bytes32 public constant DISPUTE_ATTESTATION_TYPEHASH =
         keccak256("DisputeAttestation(bytes32 intentHash,bytes32 dataHash)");
 
-    /* ============ Structs ============ */
-
-    /**
-     * @notice Payment and dispute identifiers attested by the dispute witnesses. Same layout as
-     * `IDisputeVerifier.DisputeDetails`, with the original payment named by its nullifier.
-     * @param paymentMethod Payment rail used by the original payment.
-     * @param paymentNullifier A nullifier the original payment consumed, as the attestation service derived it.
-     * @param disputeId Provider identifier for the dispute or reversal.
-     * @param paymentAmount Attested off-chain payment amount.
-     * @param paymentCurrency Attested off-chain payment currency.
-     */
-    struct DisputeDetailsV2 {
-        bytes32 paymentMethod;
-        bytes32 paymentNullifier;
-        bytes32 disputeId;
-        uint256 paymentAmount;
-        bytes32 paymentCurrency;
-    }
-
     /* ============ State Variables ============ */
 
     INullifierRegistryV3 public immutable nullifierRegistry;
@@ -79,7 +60,7 @@ contract DisputeVerifierV2 is IDisputeVerifier, Ownable2Step, EIP712 {
     {
         if (keccak256(_attestation.data) != _attestation.dataHash) revert InvalidAttestation();
 
-        DisputeDetailsV2 memory details = abi.decode(_attestation.data, (DisputeDetailsV2));
+        DisputeDetails memory details = abi.decode(_attestation.data, (DisputeDetails));
         if (details.paymentMethod != _paymentMethod) revert InvalidAttestation();
 
         bytes32 digest = _hashTypedDataV4(_disputeAttestationStructHash(_attestation));
@@ -87,11 +68,13 @@ contract DisputeVerifierV2 is IDisputeVerifier, Ownable2Step, EIP712 {
             revert AttestationVerificationFailed();
         }
 
+        // `originalPaymentId` carries a nullifier the payment consumed, as the attestation service derived it.
+        // It is looked up as given, not hashed with the payment method.
         if (
             _attestation.intentHash == bytes32(0)
-                || nullifierRegistry.intentHashByNullifier(details.paymentNullifier) != _attestation.intentHash
+                || nullifierRegistry.intentHashByNullifier(details.originalPaymentId) != _attestation.intentHash
         ) {
-            revert InvalidPaymentBinding(_attestation.intentHash, details.paymentNullifier);
+            revert InvalidPaymentBinding(_attestation.intentHash, details.originalPaymentId);
         }
 
         disputeId = details.disputeId;

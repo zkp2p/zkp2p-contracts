@@ -99,20 +99,6 @@ contract DisputeVerifierV2Test is Test {
         assertEq(disputeId, DISPUTE_ID);
     }
 
-    /// @dev Same five words as the V1 details, so signing and decoding code keeps one layout.
-    function test_DisputeDetailsKeepTheV1Layout() public {
-        bytes memory v1 = abi.encode(
-            IDisputeVerifier.DisputeDetails({
-                paymentMethod: METHOD,
-                originalPaymentId: NULLIFIER,
-                disputeId: DISPUTE_ID,
-                paymentAmount: 100,
-                paymentCurrency: USD
-            })
-        );
-        assertEq(_attestation(INTENT, METHOD, NULLIFIER).data, v1);
-    }
-
     /* ============ Attestation ============ */
 
     function test_VerifyDisputeRejectsTamperedDataHash() public {
@@ -224,9 +210,9 @@ contract DisputeVerifierV2Test is Test {
         pure
         returns (IDisputeVerifier.DisputeAttestation memory attestation)
     {
-        DisputeVerifierV2.DisputeDetailsV2 memory details = DisputeVerifierV2.DisputeDetailsV2({
+        IDisputeVerifier.DisputeDetails memory details = IDisputeVerifier.DisputeDetails({
             paymentMethod: paymentMethod,
-            paymentNullifier: paymentNullifier,
+            originalPaymentId: paymentNullifier,
             disputeId: DISPUTE_ID,
             paymentAmount: 100,
             paymentCurrency: USD

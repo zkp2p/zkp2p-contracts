@@ -3,7 +3,6 @@ pragma solidity ^0.8.18;
 
 import { BaseUnifiedPaymentVerifierV3 } from "./BaseUnifiedPaymentVerifierV3.sol";
 import { INullifierRegistryV2 } from "../interfaces/INullifierRegistryV2.sol";
-import { INullifierRegistryV3 } from "../interfaces/INullifierRegistryV3.sol";
 import { IAttestationVerifier } from "../interfaces/IAttestationVerifier.sol";
 import { ERC165Checker } from "@openzeppelin/contracts/utils/introspection/ERC165Checker.sol";
 import { IOrchestratorV4 } from "../interfaces/IOrchestratorV4.sol";
@@ -86,17 +85,17 @@ contract UnifiedPaymentVerifierV5 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
     /* ============ Constructor ============ */
 
     /**
-     * @dev The shared base declares its registry as `INullifierRegistryV2` and calls only `isNullified` and
-     * `addNullifier`, which the V3 registry exposes with the same signatures. `nullifierRegistry` therefore
-     * reads as the V2 type while pointing at a V3 registry; the V2-only views do not exist there.
+     * @dev `_nullifierRegistry` is a NullifierRegistryV3, declared through the V2 interface the shared base uses.
+     * The base calls only `isNullified` and `addNullifier`, which V3 exposes with the same signatures; the
+     * V2-only views do not exist there.
      */
     constructor(
         IOrchestratorRegistry _orchestratorRegistry,
-        INullifierRegistryV3 _nullifierRegistry,
+        INullifierRegistryV2 _nullifierRegistry,
         IAttestationVerifier _attestationVerifier
     ) BaseUnifiedPaymentVerifierV3(
         _orchestratorRegistry,
-        INullifierRegistryV2(address(_nullifierRegistry)),
+        _nullifierRegistry,
         _attestationVerifier
     ) {
         // Compute EIP-712 domain separator
