@@ -9,12 +9,11 @@ import { IOrchestratorV4 } from "../interfaces/IOrchestratorV4.sol";
 import { IOrchestratorV2 } from "../interfaces/IOrchestratorV2.sol";
 import { IOrchestratorRegistry } from "../interfaces/IOrchestratorRegistry.sol";
 import { IPaymentVerifierV2 } from "../interfaces/IPaymentVerifierV2.sol";
-import { PaymentNullifierLib } from "../lib/PaymentNullifierLib.sol";
 
 /**
  * @title UnifiedPaymentVerifierV5
- * @notice Preserves V4 payment verification and consumes every signed identifier of a payment, so two proofs of
- * the same transfer that name it by different identifiers cannot both settle.
+ * @notice Preserves V4 payment verification and consumes every nullifier the attestation signs for a payment, so
+ * two proofs of the same transfer that share a nullifier cannot both settle.
  *
  * Key features:
  * - Supports Orchestrator V2/V3 and V4 intent layouts; rejects V1
@@ -22,13 +21,14 @@ import { PaymentNullifierLib } from "../lib/PaymentNullifierLib.sol";
  * - Uses AttestationVerifier to validate offchain payment attestations
  * - Ensures trust anchor integrity for off-chain verification processes
  * - Verifies standardized payment details against provided data
- * - Consumes one nullifier per signed payment ID, all bound to the same intent
- * @dev attestation.data is `abi.encode(SignedPaymentDetails, IntentSnapshot, bytes settlementData)`, signed under
- * this deployment's EIP-712 domain. settlementData is opaque here and to OrchestratorV4; the settlement policy
- * decodes it.
- * @dev The attestation service lists every identifier it authenticated for the transfer, primary first. The
- * returned `PaymentDetails` and `PaymentVerified` carry the primary only, so the orchestrator's return layout and
- * existing event consumers are unchanged.
+ * - Consumes the signed nullifiers as given, all bound to the same intent
+ * @dev attestation.data is `abi.encode(PaymentDetails, IntentSnapshot, bytes settlementData, bytes32[] nullifiers)`,
+ * signed under this deployment's EIP-712 domain. settlementData is opaque here and to OrchestratorV4; the
+ * settlement policy decodes it.
+ * @dev The attestation service derives the nullifiers and owns what they mean. It must scope each one to its
+ * payment method, keep the derivation of every existing identifier kind unchanged so settled payments stay
+ * spent, and give every proof route for a transfer a common nullifier. This contract does not hash or interpret
+ * them. `PaymentDetails.paymentId` is the receipt's identifier only; replay protection rests on the nullifiers.
  */
 contract UnifiedPaymentVerifierV5 is IPaymentVerifierV2, BaseUnifiedPaymentVerifierV5 {
 
@@ -71,26 +71,7 @@ contract UnifiedPaymentVerifierV5 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
         bytes32 payeeId
     );
 
-    /**
-     * @notice One consumed payment ID. `PaymentVerified` carries only the primary; this carries all of them.
-     */
-    event PaymentIdConsumed(bytes32 indexed intentHash, bytes32 indexed scheme, bytes32 id);
-
     /* ============ Structs ============ */
-
-    struct PaymentId {
-        bytes32 scheme;           // Identifier kind; PaymentNullifierLib.NATIVE_SCHEME for the platform's own ID
-        bytes32 id;               // Hashed identifier
-    }
-
-    struct SignedPaymentDetails {
-        bytes32 method;           // Payment method hash (e.g., "venmo", "paypal", "wise")
-        bytes32 payeeId;          // Payment recipient ID (hashed payee details to preserve privacy)
-        uint256 amount;           // Payment amount in smallest currency unit (i.e. cents)
-        bytes32 currency;         // Payment currency hash (e.g., "USD", "EUR")
-        uint256 timestamp;        // Payment timestamp in UTC in milliseconds
-        PaymentId[] paymentIds;   // Every authenticated identifier of the transfer, primary first
-    }
 
     struct PaymentAttestation {
         bytes32 intentHash;       // Binds the payment to the intent on Orchestrator
@@ -148,31 +129,25 @@ contract UnifiedPaymentVerifierV5 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
         require(attestation.intentHash == _verifyPaymentData.intentHash, "UPV: Attestation hash mismatch");
         require(attestation.releaseAmount != 0, "UPV: Invalid release amount");
 
-        SignedPaymentDetails memory signedDetails;
+        PaymentDetails memory paymentDetails;
         IntentSnapshot memory intentSnapshot;
-        (signedDetails, intentSnapshot, settlementData) = _decodeAttestationPayload(attestation.data);
-        require(isPaymentMethod[signedDetails.method], "UPV: Invalid payment method");
-        require(signedDetails.method == intentSnapshot.paymentMethod, "UPV: Payment method mismatch");
-        require(signedDetails.paymentIds.length != 0, "UPV: Invalid payment ID");
-        require(signedDetails.amount != 0, "UPV: Invalid payment amount");
-        require(signedDetails.currency != bytes32(0), "UPV: Invalid payment currency");
+        bytes32[] memory nullifiers;
+        (paymentDetails, intentSnapshot, settlementData, nullifiers) = _decodeAttestationPayload(attestation.data);
+        require(isPaymentMethod[paymentDetails.method], "UPV: Invalid payment method");
+        require(paymentDetails.method == intentSnapshot.paymentMethod, "UPV: Payment method mismatch");
+        require(paymentDetails.paymentId != bytes32(0), "UPV: Invalid payment ID");
+        require(paymentDetails.amount != 0, "UPV: Invalid payment amount");
+        require(paymentDetails.currency != bytes32(0), "UPV: Invalid payment currency");
+        require(nullifiers.length != 0, "UPV: No nullifiers");
 
         _validateIntentSnapshot(_verifyPaymentData.intentHash, intentSnapshot);
 
         bool isValid = _verifyAttestation(attestation);
         require(isValid, "UPV: Invalid attestation");
 
-        // Nullify every payment ID to prevent double-spending
-        _nullifyPayment(signedDetails.method, signedDetails.paymentIds, attestation.intentHash);
+        // Nullify the payment to prevent double-spending
+        _nullifyPayment(nullifiers, attestation.intentHash);
 
-        PaymentDetails memory paymentDetails = PaymentDetails({
-            method: signedDetails.method,
-            payeeId: signedDetails.payeeId,
-            amount: signedDetails.amount,
-            currency: signedDetails.currency,
-            timestamp: signedDetails.timestamp,
-            paymentId: signedDetails.paymentIds[0].id
-        });
         _emitPaymentDetails(attestation.intentHash, paymentDetails);
 
         uint256 releaseAmount = _calculateReleaseAmount(attestation.releaseAmount, intentSnapshot.amount);
@@ -196,13 +171,14 @@ contract UnifiedPaymentVerifierV5 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
         internal
         pure
         returns (
-            SignedPaymentDetails memory signedDetails,
+            PaymentDetails memory paymentDetails,
             IntentSnapshot memory intentSnapshot,
-            bytes memory settlementData
+            bytes memory settlementData,
+            bytes32[] memory nullifiers
         )
     {
-        (signedDetails, intentSnapshot, settlementData) =
-            abi.decode(paymentData, (SignedPaymentDetails, IntentSnapshot, bytes));
+        (paymentDetails, intentSnapshot, settlementData, nullifiers) =
+            abi.decode(paymentData, (PaymentDetails, IntentSnapshot, bytes, bytes32[]));
     }
 
     /**
@@ -317,33 +293,14 @@ contract UnifiedPaymentVerifierV5 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
     }
 
     /**
-     * Nullifies every signed ID of a payment to prevent double-spending
-     * @dev Each nullifier encodes the payment method, the ID's scheme and the ID together. This prevents
-     * collisions where the same ID could exist across different payment methods (e.g., Venmo transaction #123
-     * vs PayPal transaction #123) or across different kinds of ID on one method.
-     * @dev One spent or repeated ID reverts the whole settlement, so no ID of a rejected payment is consumed.
+     * Nullifies a payment to prevent double-spending
+     * @dev Consumes every signed nullifier for the intent. One spent or repeated nullifier reverts the whole
+     * settlement, so no nullifier of a rejected payment is consumed.
      */
-    function _nullifyPayment(bytes32 paymentMethod, PaymentId[] memory paymentIds, bytes32 intentHash) internal {
-        bytes32[] storage required = requiredSchemes[paymentMethod];
-        for (uint256 i = 0; i < required.length; i++) {
-            require(_hasScheme(paymentIds, required[i]), "UPV: Missing required payment ID scheme");
+    function _nullifyPayment(bytes32[] memory nullifiers, bytes32 intentHash) internal {
+        for (uint256 i = 0; i < nullifiers.length; i++) {
+            _validateAndAddNullifier(nullifiers[i], intentHash);
         }
-
-        for (uint256 i = 0; i < paymentIds.length; i++) {
-            PaymentId memory paymentId = paymentIds[i];
-            require(paymentId.id != bytes32(0), "UPV: Invalid payment ID");
-            _validateAndAddNullifier(
-                PaymentNullifierLib.key(paymentMethod, paymentId.scheme, paymentId.id), intentHash
-            );
-            emit PaymentIdConsumed(intentHash, paymentId.scheme, paymentId.id);
-        }
-    }
-
-    function _hasScheme(PaymentId[] memory paymentIds, bytes32 scheme) internal pure returns (bool) {
-        for (uint256 i = 0; i < paymentIds.length; i++) {
-            if (paymentIds[i].scheme == scheme) return true;
-        }
-        return false;
     }
 
     /**

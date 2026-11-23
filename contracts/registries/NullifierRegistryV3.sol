@@ -12,8 +12,8 @@ import { INullifierRegistryV3 } from "../interfaces/INullifierRegistryV3.sol";
  * @title NullifierRegistryV3
  * @notice Enforces payment replay protection while binding every nullifier to the intent it fulfilled. A payment
  *         can consume several nullifiers, so one intent can hold many.
- * @dev The registry stores opaque keys and holds no rule about how many belong to an intent or what they mean.
- *      Writers derive the keys and own every such rule.
+ * @dev The registry stores opaque keys and holds no rule about how they are derived, how many belong to an
+ *      intent, or what they mean.
  * @dev The immutable predecessor keeps every pre-cutover nullifier and binding authoritative. New writes are
  *      local; a binding can never be replaced.
  * @dev CUTOVER INVARIANT: before this registry accepts its first live write, every retired verifier must

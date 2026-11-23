@@ -13,7 +13,6 @@ import { IOrchestratorRegistry } from "../interfaces/IOrchestratorRegistry.sol";
  *
  * This contract handles:
  * - Supported payment methods
- * - The payment ID schemes every proof for a method must carry
  * - Attestation verification through pluggable attestation verifiers
  *
  * @dev This is an abstract contract that must be inherited by concrete implementations.
@@ -32,8 +31,6 @@ abstract contract BaseUnifiedPaymentVerifierV5 is Ownable {
     event PaymentMethodAdded(bytes32 indexed paymentMethod);
     event PaymentMethodRemoved(bytes32 indexed paymentMethod);
     event AttestationVerifierUpdated(address indexed oldVerifier, address indexed newVerifier);
-    event RequiredSchemesUpdated(bytes32 indexed paymentMethod, bytes32[] schemes);
-
     /* ============ State Variables ============ */
 
     IOrchestratorRegistry public immutable orchestratorRegistry;
@@ -42,10 +39,6 @@ abstract contract BaseUnifiedPaymentVerifierV5 is Ownable {
 
     bytes32[] public paymentMethods;
     mapping(bytes32 => bool) public isPaymentMethod;
-
-    // Payment ID schemes every proof for a method must carry. Two proof routes for the same transfer can only
-    // exclude each other when both consume a common ID, so a route that omits the shared scheme is rejected.
-    mapping(bytes32 => bytes32[]) internal requiredSchemes;
 
     /* ============ Modifiers ============ */
 
@@ -102,23 +95,9 @@ abstract contract BaseUnifiedPaymentVerifierV5 is Ownable {
         require(isPaymentMethod[_paymentMethod], "UPV: Payment method does not exist");
 
         delete isPaymentMethod[_paymentMethod];
-        delete requiredSchemes[_paymentMethod];
         paymentMethods.removeStorage(_paymentMethod);
 
         emit PaymentMethodRemoved(_paymentMethod);
-    }
-
-    /**
-     * ONLY OWNER: Replaces the payment ID schemes every proof for a payment method must carry
-     * @param _paymentMethod The payment method to configure
-     * @param _schemes The complete required set; empty requires none
-     */
-    function setRequiredSchemes(bytes32 _paymentMethod, bytes32[] calldata _schemes) external onlyOwner {
-        require(isPaymentMethod[_paymentMethod], "UPV: Payment method does not exist");
-
-        requiredSchemes[_paymentMethod] = _schemes;
-
-        emit RequiredSchemesUpdated(_paymentMethod, _schemes);
     }
 
     /**
@@ -138,10 +117,6 @@ abstract contract BaseUnifiedPaymentVerifierV5 is Ownable {
 
     function getPaymentMethods() external view returns (bytes32[] memory) {
         return paymentMethods;
-    }
-
-    function getRequiredSchemes(bytes32 _paymentMethod) external view returns (bytes32[] memory) {
-        return requiredSchemes[_paymentMethod];
     }
 
     /* ============ Internal Functions ============ */

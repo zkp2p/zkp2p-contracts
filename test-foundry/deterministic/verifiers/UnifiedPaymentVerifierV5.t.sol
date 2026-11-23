@@ -10,12 +10,12 @@ import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol"
 import {NullifierRegistryV3} from "contracts/registries/NullifierRegistryV3.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 import {INullifierRegistry} from "contracts/interfaces/INullifierRegistry.sol";
+import {INullifierRegistryV3} from "contracts/interfaces/INullifierRegistryV3.sol";
 import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {IPaymentVerifierV2} from "contracts/interfaces/IPaymentVerifierV2.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
 import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
-import {PaymentNullifierLib} from "contracts/lib/PaymentNullifierLib.sol";
 import {
     UnifiedPaymentVerifierV4CallerHarness,
     UnifiedPaymentVerifierV4V4CallerHarness
@@ -41,9 +41,7 @@ contract UnifiedPaymentVerifierV5Test is Test {
         bytes32 paymentId,
         bytes32 payeeId
     );
-    event PaymentIdConsumed(bytes32 indexed intentHash, bytes32 indexed scheme, bytes32 id);
     event NullifierAdded(bytes32 indexed nullifier, bytes32 indexed intentHash, address indexed writer);
-    event RequiredSchemesUpdated(bytes32 indexed paymentMethod, bytes32[] schemes);
     event PaymentMethodAdded(bytes32 indexed paymentMethod);
     event PaymentMethodRemoved(bytes32 indexed paymentMethod);
     event AttestationVerifierUpdated(address indexed oldVerifier, address indexed newVerifier);
@@ -58,12 +56,10 @@ contract UnifiedPaymentVerifierV5Test is Test {
     bytes32 internal constant INTENT_A = keccak256("intent-a");
     bytes32 internal constant INTENT_B = keccak256("intent-b");
 
-    bytes32 internal constant NATIVE = bytes32(0);
-    bytes32 internal constant SHARED_SCHEME = keccak256("shared-transfer.v1");
-    bytes32 internal constant SELLER_SCHEME = keccak256("seller-record.v1");
-    bytes32 internal constant NATIVE_ID = keccak256("native-transaction");
-    bytes32 internal constant SHARED_ID = keccak256("shared-transfer");
-    bytes32 internal constant SELLER_ID = keccak256("seller-row");
+    bytes32 internal constant PAYMENT_ID = keccak256("payment-id");
+    bytes32 internal constant BUYER_NULLIFIER = keccak256("buyer-nullifier");
+    bytes32 internal constant SELLER_NULLIFIER = keccak256("seller-nullifier");
+    bytes32 internal constant SHARED_NULLIFIER = keccak256("shared-nullifier");
 
     NullifierRegistry internal legacyRegistry;
     NullifierRegistryV2 internal predecessor;
@@ -92,20 +88,16 @@ contract UnifiedPaymentVerifierV5Test is Test {
         caller.setIntent(INTENT_B, _intent());
     }
 
-    /* ============ One ID ============ */
+    /* ============ Signed nullifiers ============ */
 
-    function test_NativeIdKeepsThePredecessorKeyAndTheReceipt() public {
-        bytes32 key = keccak256(abi.encodePacked(METHOD, NATIVE_ID));
-        assertEq(PaymentNullifierLib.key(METHOD, NATIVE, NATIVE_ID), key);
-
+    /// @dev The verifier neither hashes nor derives: the registry holds exactly the signed words.
+    function test_StoresTheSignedNullifierAsGivenAndReturnsTheReceipt() public {
         vm.expectEmit(true, true, true, true, address(nullifierRegistry));
-        emit NullifierAdded(key, INTENT_A, address(verifier));
-        vm.expectEmit(true, true, false, true, address(verifier));
-        emit PaymentIdConsumed(INTENT_A, NATIVE, NATIVE_ID);
+        emit NullifierAdded(BUYER_NULLIFIER, INTENT_A, address(verifier));
         vm.expectEmit(true, true, true, true, address(verifier));
-        emit PaymentVerified(INTENT_A, METHOD, USD, AMOUNT, TIMESTAMP * 1000, NATIVE_ID, PAYEE);
+        emit PaymentVerified(INTENT_A, METHOD, USD, AMOUNT, TIMESTAMP * 1000, PAYMENT_ID, PAYEE);
         (IPaymentVerifierV2.PaymentVerificationResultV2 memory result, bytes memory settlementData) =
-            _verify(INTENT_A, _proof(INTENT_A, _ids(NATIVE, NATIVE_ID), hex"deadbeef"));
+            _verify(INTENT_A, _proof(INTENT_A, _nullifiers(BUYER_NULLIFIER), hex"deadbeef"));
 
         assertTrue(result.success);
         assertEq(result.intentHash, INTENT_A);
@@ -116,9 +108,24 @@ contract UnifiedPaymentVerifierV5Test is Test {
         assertEq(result.payment.amount, AMOUNT);
         assertEq(result.payment.currency, USD);
         assertEq(result.payment.timestamp, TIMESTAMP * 1000);
-        assertEq(result.payment.paymentId, NATIVE_ID);
+        assertEq(result.payment.paymentId, PAYMENT_ID);
         assertEq(settlementData, hex"deadbeef");
-        assertEq(nullifierRegistry.intentHashByNullifier(key), INTENT_A);
+        assertEq(nullifierRegistry.intentHashByNullifier(BUYER_NULLIFIER), INTENT_A);
+        assertFalse(nullifierRegistry.isNullified(keccak256(abi.encodePacked(METHOD, PAYMENT_ID))));
+        assertFalse(nullifierRegistry.isNullified(keccak256(abi.encodePacked(METHOD, BUYER_NULLIFIER))));
+    }
+
+    function test_ConsumesEveryNullifierForOneIntent() public {
+        vm.expectEmit(true, true, true, true, address(nullifierRegistry));
+        emit NullifierAdded(BUYER_NULLIFIER, INTENT_A, address(verifier));
+        vm.expectEmit(true, true, true, true, address(nullifierRegistry));
+        emit NullifierAdded(SHARED_NULLIFIER, INTENT_A, address(verifier));
+        vm.expectEmit(true, true, true, true, address(verifier));
+        emit PaymentVerified(INTENT_A, METHOD, USD, AMOUNT, TIMESTAMP * 1000, PAYMENT_ID, PAYEE);
+        _verify(INTENT_A, _proof(INTENT_A, _nullifiers(BUYER_NULLIFIER, SHARED_NULLIFIER), ""));
+
+        assertEq(nullifierRegistry.intentHashByNullifier(BUYER_NULLIFIER), INTENT_A);
+        assertEq(nullifierRegistry.intentHashByNullifier(SHARED_NULLIFIER), INTENT_A);
     }
 
     function test_ServesV2ShapedOrchestrators() public {
@@ -146,114 +153,92 @@ contract UnifiedPaymentVerifierV5Test is Test {
         (IPaymentVerifierV2.PaymentVerificationResultV2 memory result,) = v2Caller.verifyPayment(
             IPaymentVerifierV2(address(verifier)),
             IPaymentVerifierV2.VerifyPaymentData(
-                INTENT_A, _proof(INTENT_A, _ids(NATIVE, NATIVE_ID, SHARED_SCHEME, SHARED_ID), ""), ""
+                INTENT_A, _proof(INTENT_A, _nullifiers(BUYER_NULLIFIER, SHARED_NULLIFIER), ""), ""
             )
         );
 
         assertTrue(result.success);
-        assertEq(nullifierRegistry.intentHashByNullifier(_key(SHARED_SCHEME, SHARED_ID)), INTENT_A);
+        assertEq(nullifierRegistry.intentHashByNullifier(SHARED_NULLIFIER), INTENT_A);
     }
 
-    /* ============ Several IDs ============ */
+    /* ============ Two proofs of one transfer ============ */
 
-    function test_ConsumesEveryIdForOneIntentAndReturnsThePrimary() public {
-        vm.expectEmit(true, true, false, true, address(verifier));
-        emit PaymentIdConsumed(INTENT_A, NATIVE, NATIVE_ID);
-        vm.expectEmit(true, true, false, true, address(verifier));
-        emit PaymentIdConsumed(INTENT_A, SHARED_SCHEME, SHARED_ID);
-        vm.expectEmit(true, true, true, true, address(verifier));
-        emit PaymentVerified(INTENT_A, METHOD, USD, AMOUNT, TIMESTAMP * 1000, NATIVE_ID, PAYEE);
-        (IPaymentVerifierV2.PaymentVerificationResultV2 memory result,) =
-            _verify(INTENT_A, _proof(INTENT_A, _ids(NATIVE, NATIVE_ID, SHARED_SCHEME, SHARED_ID), ""));
-
-        assertEq(result.payment.paymentId, NATIVE_ID);
-        assertEq(_key(SHARED_SCHEME, SHARED_ID), keccak256(abi.encode(METHOD, SHARED_SCHEME, SHARED_ID)));
-        assertEq(nullifierRegistry.intentHashByNullifier(_key(NATIVE, NATIVE_ID)), INTENT_A);
-        assertEq(nullifierRegistry.intentHashByNullifier(_key(SHARED_SCHEME, SHARED_ID)), INTENT_A);
-    }
-
-    /// @dev Buyer and seller name one transfer by different primaries. The shared ID is what stops the second.
+    /// @dev Buyer and seller proofs carry their own nullifier plus a shared one. The shared one stops the second.
     function test_BuyerProofFirstBlocksTheSellerProofOfTheSameTransfer() public {
-        _verify(INTENT_A, _proof(INTENT_A, _ids(NATIVE, NATIVE_ID, SHARED_SCHEME, SHARED_ID), ""));
+        _verify(INTENT_A, _proof(INTENT_A, _nullifiers(BUYER_NULLIFIER, SHARED_NULLIFIER), ""));
 
-        bytes memory sellerProof = _proof(INTENT_B, _ids(SELLER_SCHEME, SELLER_ID, SHARED_SCHEME, SHARED_ID), "");
+        bytes memory sellerProof = _proof(INTENT_B, _nullifiers(SELLER_NULLIFIER, SHARED_NULLIFIER), "");
         vm.expectRevert("Nullifier has already been used");
         _verify(INTENT_B, sellerProof);
 
-        assertFalse(nullifierRegistry.isNullified(_key(SELLER_SCHEME, SELLER_ID)));
-        assertEq(nullifierRegistry.intentHashByNullifier(_key(SHARED_SCHEME, SHARED_ID)), INTENT_A);
+        assertFalse(nullifierRegistry.isNullified(SELLER_NULLIFIER));
+        assertEq(nullifierRegistry.intentHashByNullifier(SHARED_NULLIFIER), INTENT_A);
     }
 
     function test_SellerProofFirstBlocksTheBuyerProofOfTheSameTransfer() public {
-        _verify(INTENT_B, _proof(INTENT_B, _ids(SELLER_SCHEME, SELLER_ID, SHARED_SCHEME, SHARED_ID), ""));
+        _verify(INTENT_B, _proof(INTENT_B, _nullifiers(SELLER_NULLIFIER, SHARED_NULLIFIER), ""));
 
-        bytes memory buyerProof = _proof(INTENT_A, _ids(NATIVE, NATIVE_ID, SHARED_SCHEME, SHARED_ID), "");
+        bytes memory buyerProof = _proof(INTENT_A, _nullifiers(BUYER_NULLIFIER, SHARED_NULLIFIER), "");
         vm.expectRevert("Nullifier has already been used");
         _verify(INTENT_A, buyerProof);
 
-        assertFalse(nullifierRegistry.isNullified(_key(NATIVE, NATIVE_ID)));
-        assertEq(nullifierRegistry.intentHashByNullifier(_key(SHARED_SCHEME, SHARED_ID)), INTENT_B);
+        assertFalse(nullifierRegistry.isNullified(BUYER_NULLIFIER));
+        assertEq(nullifierRegistry.intentHashByNullifier(SHARED_NULLIFIER), INTENT_B);
     }
 
-    /// @dev Without a common ID the registry cannot tell the two proofs describe one transfer.
-    function test_ProofsWithNoCommonIdBothSettle() public {
-        _verify(INTENT_A, _proof(INTENT_A, _ids(NATIVE, NATIVE_ID), ""));
-        _verify(INTENT_B, _proof(INTENT_B, _ids(SELLER_SCHEME, SELLER_ID), ""));
+    /// @dev Without a common nullifier the registry cannot tell the two proofs describe one transfer. The
+    /// attestation service owns giving every proof route of a transfer a common nullifier.
+    function test_ProofsWithNoCommonNullifierBothSettle() public {
+        _verify(INTENT_A, _proof(INTENT_A, _nullifiers(BUYER_NULLIFIER), ""));
+        _verify(INTENT_B, _proof(INTENT_B, _nullifiers(SELLER_NULLIFIER), ""));
 
-        assertEq(nullifierRegistry.intentHashByNullifier(_key(NATIVE, NATIVE_ID)), INTENT_A);
-        assertEq(nullifierRegistry.intentHashByNullifier(_key(SELLER_SCHEME, SELLER_ID)), INTENT_B);
-    }
-
-    function test_OneIdUnderTwoSchemesIsTwoKeys() public {
-        _verify(INTENT_A, _proof(INTENT_A, _ids(NATIVE, NATIVE_ID), ""));
-        _verify(INTENT_B, _proof(INTENT_B, _ids(SHARED_SCHEME, NATIVE_ID), ""));
-
-        assertTrue(_key(NATIVE, NATIVE_ID) != _key(SHARED_SCHEME, NATIVE_ID));
-        assertEq(nullifierRegistry.intentHashByNullifier(_key(NATIVE, NATIVE_ID)), INTENT_A);
-        assertEq(nullifierRegistry.intentHashByNullifier(_key(SHARED_SCHEME, NATIVE_ID)), INTENT_B);
+        assertEq(nullifierRegistry.intentHashByNullifier(BUYER_NULLIFIER), INTENT_A);
+        assertEq(nullifierRegistry.intentHashByNullifier(SELLER_NULLIFIER), INTENT_B);
     }
 
     /* ============ Replay across registries ============ */
 
+    /// @dev A pre-cutover payment stays spent only when the attestation signs the nullifier the predecessor holds.
     function test_PaymentSettledBeforeCutoverCannotSettleAgain() public {
-        predecessor.addNullifier(_key(NATIVE, NATIVE_ID), keccak256("pre-cutover-intent"));
-        bytes memory proof = _proof(INTENT_A, _ids(NATIVE, NATIVE_ID, SHARED_SCHEME, SHARED_ID), "");
+        bytes32 predecessorNullifier = keccak256(abi.encodePacked(METHOD, PAYMENT_ID));
+        predecessor.addNullifier(predecessorNullifier, keccak256("pre-cutover-intent"));
+        bytes memory proof = _proof(INTENT_A, _nullifiers(predecessorNullifier, SHARED_NULLIFIER), "");
         vm.expectRevert("Nullifier has already been used");
         _verify(INTENT_A, proof);
-        assertFalse(nullifierRegistry.isNullified(_key(SHARED_SCHEME, SHARED_ID)));
+        assertFalse(nullifierRegistry.isNullified(SHARED_NULLIFIER));
 
-        bytes32 legacyId = keccak256("legacy-transaction");
-        legacyRegistry.addNullifier(_key(NATIVE, legacyId));
-        proof = _proof(INTENT_A, _ids(NATIVE, legacyId), "");
+        bytes32 legacyNullifier = keccak256("legacy-nullifier");
+        legacyRegistry.addNullifier(legacyNullifier);
+        proof = _proof(INTENT_A, _nullifiers(legacyNullifier), "");
         vm.expectRevert("Nullifier has already been used");
         _verify(INTENT_A, proof);
     }
 
-    /* ============ Rejected ID lists ============ */
+    /* ============ Rejected nullifier lists ============ */
 
-    function test_RejectsEmptyZeroAndRepeatedIds() public {
-        bytes memory proof = _proof(INTENT_A, new UnifiedPaymentVerifierV5.PaymentId[](0), "");
-        vm.expectRevert("UPV: Invalid payment ID");
+    function test_RejectsEmptyZeroAndRepeatedNullifiers() public {
+        bytes memory proof = _proof(INTENT_A, new bytes32[](0), "");
+        vm.expectRevert("UPV: No nullifiers");
         _verify(INTENT_A, proof);
 
-        proof = _proof(INTENT_A, _ids(NATIVE, NATIVE_ID, SHARED_SCHEME, bytes32(0)), "");
-        vm.expectRevert("UPV: Invalid payment ID");
+        proof = _proof(INTENT_A, _nullifiers(BUYER_NULLIFIER, bytes32(0)), "");
+        vm.expectRevert(INullifierRegistryV3.ZeroNullifier.selector);
         _verify(INTENT_A, proof);
 
-        proof = _proof(INTENT_A, _ids(SHARED_SCHEME, SHARED_ID, SHARED_SCHEME, SHARED_ID), "");
+        proof = _proof(INTENT_A, _nullifiers(SHARED_NULLIFIER, SHARED_NULLIFIER), "");
         vm.expectRevert("Nullifier has already been used");
         _verify(INTENT_A, proof);
 
-        assertFalse(nullifierRegistry.isNullified(_key(NATIVE, NATIVE_ID)));
-        assertFalse(nullifierRegistry.isNullified(_key(SHARED_SCHEME, SHARED_ID)));
+        assertFalse(nullifierRegistry.isNullified(BUYER_NULLIFIER));
+        assertFalse(nullifierRegistry.isNullified(SHARED_NULLIFIER));
     }
 
-    function test_SignedIdListCannotBeExtendedOrTrimmed() public {
+    function test_SignedNullifierListCannotBeExtendedOrTrimmed() public {
         UnifiedPaymentVerifierV5.PaymentAttestation memory attestation = abi.decode(
-            _proof(INTENT_A, _ids(NATIVE, NATIVE_ID, SHARED_SCHEME, SHARED_ID), ""),
+            _proof(INTENT_A, _nullifiers(BUYER_NULLIFIER, SHARED_NULLIFIER), ""),
             (UnifiedPaymentVerifierV5.PaymentAttestation)
         );
-        attestation.data = abi.encode(_details(_ids(NATIVE, NATIVE_ID)), _snapshot(INTENT_A), bytes(""));
+        attestation.data = abi.encode(_payment(), _snapshot(INTENT_A), bytes(""), _nullifiers(BUYER_NULLIFIER));
         vm.expectRevert("UPV: Data hash mismatch");
         _verify(INTENT_A, abi.encode(attestation));
 
@@ -261,111 +246,92 @@ contract UnifiedPaymentVerifierV5Test is Test {
         vm.expectRevert();
         _verify(INTENT_A, abi.encode(attestation));
 
-        assertFalse(nullifierRegistry.isNullified(_key(NATIVE, NATIVE_ID)));
+        assertFalse(nullifierRegistry.isNullified(BUYER_NULLIFIER));
     }
 
-    /* ============ Required schemes ============ */
+    /// @dev The fixed-size payment and snapshot fields stay where V4 put them; the list is appended.
+    function test_PayloadKeepsTheV4PrefixAndAppendsTheList() public {
+        bytes memory v4 = abi.encode(_payment(), _snapshot(INTENT_A), bytes(""));
+        bytes memory v5 = abi.encode(_payment(), _snapshot(INTENT_A), bytes(""), _nullifiers(BUYER_NULLIFIER));
 
-    function test_ProofMissingARequiredSchemeIsRejected() public {
-        bytes32[] memory schemes = new bytes32[](1);
-        schemes[0] = SHARED_SCHEME;
-        vm.expectEmit(true, false, false, true, address(verifier));
-        emit RequiredSchemesUpdated(METHOD, schemes);
-        verifier.setRequiredSchemes(METHOD, schemes);
-        assertEq(verifier.getRequiredSchemes(METHOD), schemes);
-
-        bytes memory proof = _proof(INTENT_A, _ids(NATIVE, NATIVE_ID), "");
-        vm.expectRevert("UPV: Missing required payment ID scheme");
-        _verify(INTENT_A, proof);
-        assertFalse(nullifierRegistry.isNullified(_key(NATIVE, NATIVE_ID)));
-
-        _verify(INTENT_A, _proof(INTENT_A, _ids(NATIVE, NATIVE_ID, SHARED_SCHEME, SHARED_ID), ""));
-        proof = _proof(INTENT_B, _ids(SELLER_SCHEME, SELLER_ID, SHARED_SCHEME, SHARED_ID), "");
-        vm.expectRevert("Nullifier has already been used");
-        _verify(INTENT_B, proof);
-    }
-
-    function test_RequiredSchemesAreOwnerGovernedAndClearedWithTheMethod() public {
-        bytes32[] memory schemes = new bytes32[](2);
-        schemes[0] = SHARED_SCHEME;
-        schemes[1] = NATIVE;
-
-        vm.prank(makeAddr("attacker"));
-        vm.expectRevert("Ownable: caller is not the owner");
-        verifier.setRequiredSchemes(METHOD, schemes);
-        vm.expectRevert("UPV: Payment method does not exist");
-        verifier.setRequiredSchemes(keccak256("unknown"), schemes);
-
-        verifier.setRequiredSchemes(METHOD, schemes);
-        assertEq(verifier.getRequiredSchemes(METHOD), schemes);
-
-        verifier.removePaymentMethod(METHOD);
-        verifier.addPaymentMethod(METHOD);
-        assertEq(verifier.getRequiredSchemes(METHOD).length, 0);
-        _verify(INTENT_A, _proof(INTENT_A, _ids(SELLER_SCHEME, SELLER_ID), ""));
+        // Six payment words and ten snapshot words.
+        for (uint256 offset = 32; offset <= 16 * 32; offset += 32) {
+            bytes32 expected;
+            bytes32 actual;
+            assembly {
+                expected := mload(add(v4, offset))
+                actual := mload(add(v5, offset))
+            }
+            assertEq(actual, expected);
+        }
     }
 
     /* ============ Checks preserved from V4 ============ */
 
-    function test_RejectsMalformedPaymentsWithoutConsumingAnId() public {
-        UnifiedPaymentVerifierV5.PaymentId[] memory ids = _ids(NATIVE, NATIVE_ID, SHARED_SCHEME, SHARED_ID);
-        UnifiedPaymentVerifierV5.SignedPaymentDetails memory details = _details(ids);
+    function test_RejectsMalformedPaymentsWithoutConsumingANullifier() public {
+        IPaymentVerifierV2.PaymentDetails memory payment = _payment();
         IPaymentVerifierV2.IntentSnapshot memory snapshot = _snapshot(INTENT_A);
 
-        _expectFailure(_proof(INTENT_B, AMOUNT, details, snapshot), "UPV: Attestation hash mismatch");
-        _expectFailure(_proof(INTENT_A, 0, details, snapshot), "UPV: Invalid release amount");
+        _expectFailure(_proof(INTENT_B, AMOUNT, payment, snapshot), "UPV: Attestation hash mismatch");
+        _expectFailure(_proof(INTENT_A, 0, payment, snapshot), "UPV: Invalid release amount");
 
-        details.method = keccak256("unknown");
-        _expectFailure(_proof(INTENT_A, AMOUNT, details, snapshot), "UPV: Invalid payment method");
-        verifier.addPaymentMethod(details.method);
-        _expectFailure(_proof(INTENT_A, AMOUNT, details, snapshot), "UPV: Payment method mismatch");
-        details = _details(ids);
+        payment.method = keccak256("unknown");
+        _expectFailure(_proof(INTENT_A, AMOUNT, payment, snapshot), "UPV: Invalid payment method");
+        verifier.addPaymentMethod(payment.method);
+        _expectFailure(_proof(INTENT_A, AMOUNT, payment, snapshot), "UPV: Payment method mismatch");
+        payment = _payment();
 
-        details.amount = 0;
-        _expectFailure(_proof(INTENT_A, AMOUNT, details, snapshot), "UPV: Invalid payment amount");
-        details = _details(ids);
+        payment.paymentId = bytes32(0);
+        _expectFailure(_proof(INTENT_A, AMOUNT, payment, snapshot), "UPV: Invalid payment ID");
+        payment = _payment();
 
-        details.currency = bytes32(0);
-        _expectFailure(_proof(INTENT_A, AMOUNT, details, snapshot), "UPV: Invalid payment currency");
-        details = _details(ids);
+        payment.amount = 0;
+        _expectFailure(_proof(INTENT_A, AMOUNT, payment, snapshot), "UPV: Invalid payment amount");
+        payment = _payment();
+
+        payment.currency = bytes32(0);
+        _expectFailure(_proof(INTENT_A, AMOUNT, payment, snapshot), "UPV: Invalid payment currency");
+        payment = _payment();
 
         snapshot.intentHash = INTENT_B;
-        _expectFailure(_proof(INTENT_A, AMOUNT, details, snapshot), "UPV: Snapshot hash mismatch");
+        _expectFailure(_proof(INTENT_A, AMOUNT, payment, snapshot), "UPV: Snapshot hash mismatch");
         snapshot = _snapshot(INTENT_A);
 
         snapshot.amount = AMOUNT + 1;
-        _expectFailure(_proof(INTENT_A, AMOUNT, details, snapshot), "UPV: Snapshot amount mismatch");
+        _expectFailure(_proof(INTENT_A, AMOUNT, payment, snapshot), "UPV: Snapshot amount mismatch");
         snapshot = _snapshot(INTENT_A);
 
         snapshot.timestampBuffer = 48 hours * 1000 + 1;
         _expectFailure(
-            _proof(INTENT_A, AMOUNT, details, snapshot), "UPV: Snapshot timestamp buffer exceeds maximum"
+            _proof(INTENT_A, AMOUNT, payment, snapshot), "UPV: Snapshot timestamp buffer exceeds maximum"
         );
         snapshot = _snapshot(INTENT_A);
 
-        bytes memory unauthorized = _sign(INTENT_A, AMOUNT, abi.encode(details, snapshot, bytes("")), 0xBAD);
+        bytes memory unauthorized = _sign(
+            INTENT_A, AMOUNT, abi.encode(payment, snapshot, bytes(""), _nullifiers(BUYER_NULLIFIER)), 0xBAD
+        );
         vm.expectRevert();
         _verify(INTENT_A, unauthorized);
 
-        assertFalse(nullifierRegistry.isNullified(_key(NATIVE, NATIVE_ID)));
-        assertFalse(nullifierRegistry.isNullified(_key(SHARED_SCHEME, SHARED_ID)));
+        assertFalse(nullifierRegistry.isNullified(BUYER_NULLIFIER));
+        assertFalse(nullifierRegistry.isNullified(SHARED_NULLIFIER));
     }
 
     function test_CapsTheReleaseAtTheIntentAmountAndKeepsTheAttestedAmount() public {
-        UnifiedPaymentVerifierV5.SignedPaymentDetails memory details = _details(_ids(NATIVE, NATIVE_ID));
+        bytes memory data = abi.encode(_payment(), _snapshot(INTENT_A), bytes(""), _nullifiers(BUYER_NULLIFIER));
         (IPaymentVerifierV2.PaymentVerificationResultV2 memory result,) =
-            _verify(INTENT_A, _proof(INTENT_A, AMOUNT + 1, details, _snapshot(INTENT_A)));
+            _verify(INTENT_A, _sign(INTENT_A, AMOUNT + 1, data, WITNESS_KEY));
         assertEq(result.releaseAmount, AMOUNT);
         assertEq(result.attestedReleaseAmount, AMOUNT + 1);
 
-        details = _details(_ids(SHARED_SCHEME, SHARED_ID));
-        (result,) = _verify(INTENT_B, _proof(INTENT_B, AMOUNT - 1, details, _snapshot(INTENT_B)));
+        data = abi.encode(_payment(), _snapshot(INTENT_B), bytes(""), _nullifiers(SELLER_NULLIFIER));
+        (result,) = _verify(INTENT_B, _sign(INTENT_B, AMOUNT - 1, data, WITNESS_KEY));
         assertEq(result.releaseAmount, AMOUNT - 1);
         assertEq(result.attestedReleaseAmount, AMOUNT - 1);
     }
 
     function test_OnlyRegisteredSupportedOrchestratorsCanVerify() public {
-        bytes memory proof = _proof(INTENT_A, _ids(NATIVE, NATIVE_ID), "");
+        bytes memory proof = _proof(INTENT_A, _nullifiers(BUYER_NULLIFIER), "");
         IPaymentVerifierV2.VerifyPaymentData memory request =
             IPaymentVerifierV2.VerifyPaymentData(INTENT_A, proof, "");
 
@@ -377,7 +343,7 @@ contract UnifiedPaymentVerifierV5Test is Test {
         vm.expectRevert("UPV: Unsupported orchestrator");
         unshaped.verifyPayment(IPaymentVerifierV2(address(verifier)), request);
 
-        assertFalse(nullifierRegistry.isNullified(_key(NATIVE, NATIVE_ID)));
+        assertFalse(nullifierRegistry.isNullified(BUYER_NULLIFIER));
     }
 
     function test_PaymentMethodsAndAttestationVerifierAreOwnerGoverned() public {
@@ -466,37 +432,25 @@ contract UnifiedPaymentVerifierV5Test is Test {
         });
     }
 
-    function _ids(bytes32 scheme, bytes32 id) internal pure returns (UnifiedPaymentVerifierV5.PaymentId[] memory ids) {
-        ids = new UnifiedPaymentVerifierV5.PaymentId[](1);
-        ids[0] = UnifiedPaymentVerifierV5.PaymentId(scheme, id);
+    function _nullifiers(bytes32 first) internal pure returns (bytes32[] memory nullifiers) {
+        nullifiers = new bytes32[](1);
+        nullifiers[0] = first;
     }
 
-    function _ids(bytes32 firstScheme, bytes32 firstId, bytes32 secondScheme, bytes32 secondId)
-        internal
-        pure
-        returns (UnifiedPaymentVerifierV5.PaymentId[] memory ids)
-    {
-        ids = new UnifiedPaymentVerifierV5.PaymentId[](2);
-        ids[0] = UnifiedPaymentVerifierV5.PaymentId(firstScheme, firstId);
-        ids[1] = UnifiedPaymentVerifierV5.PaymentId(secondScheme, secondId);
+    function _nullifiers(bytes32 first, bytes32 second) internal pure returns (bytes32[] memory nullifiers) {
+        nullifiers = new bytes32[](2);
+        nullifiers[0] = first;
+        nullifiers[1] = second;
     }
 
-    function _key(bytes32 scheme, bytes32 id) internal pure returns (bytes32) {
-        return PaymentNullifierLib.key(METHOD, scheme, id);
-    }
-
-    function _details(UnifiedPaymentVerifierV5.PaymentId[] memory ids)
-        internal
-        pure
-        returns (UnifiedPaymentVerifierV5.SignedPaymentDetails memory)
-    {
-        return UnifiedPaymentVerifierV5.SignedPaymentDetails({
+    function _payment() internal pure returns (IPaymentVerifierV2.PaymentDetails memory) {
+        return IPaymentVerifierV2.PaymentDetails({
             method: METHOD,
             payeeId: PAYEE,
             amount: AMOUNT,
             currency: USD,
             timestamp: TIMESTAMP * 1000,
-            paymentIds: ids
+            paymentId: PAYMENT_ID
         });
     }
 
@@ -515,21 +469,28 @@ contract UnifiedPaymentVerifierV5Test is Test {
         });
     }
 
-    function _proof(bytes32 intentHash, UnifiedPaymentVerifierV5.PaymentId[] memory ids, bytes memory settlementData)
+    function _proof(bytes32 intentHash, bytes32[] memory nullifiers, bytes memory settlementData)
         internal
         view
         returns (bytes memory)
     {
-        return _sign(intentHash, AMOUNT, abi.encode(_details(ids), _snapshot(intentHash), settlementData), WITNESS_KEY);
+        return _sign(
+            intentHash, AMOUNT, abi.encode(_payment(), _snapshot(intentHash), settlementData, nullifiers), WITNESS_KEY
+        );
     }
 
     function _proof(
         bytes32 attestedIntentHash,
         uint256 releaseAmount,
-        UnifiedPaymentVerifierV5.SignedPaymentDetails memory details,
+        IPaymentVerifierV2.PaymentDetails memory payment,
         IPaymentVerifierV2.IntentSnapshot memory snapshot
     ) internal view returns (bytes memory) {
-        return _sign(attestedIntentHash, releaseAmount, abi.encode(details, snapshot, bytes("")), WITNESS_KEY);
+        return _sign(
+            attestedIntentHash,
+            releaseAmount,
+            abi.encode(payment, snapshot, bytes(""), _nullifiers(BUYER_NULLIFIER, SHARED_NULLIFIER)),
+            WITNESS_KEY
+        );
     }
 
     function _sign(bytes32 intentHash, uint256 releaseAmount, bytes memory data, uint256 signerKey)
