@@ -26,6 +26,10 @@ import {INullifierRegistryV3} from "../interfaces/INullifierRegistryV3.sol";
  * names, and keeps the two in step. This contract enforces no shape and no count on the candidates. Duplicates
  * cost only a repeated lookup, and a zero entry never matches because the intent hash must be nonzero. Absence of
  * an identifier that only one side of a transfer can see proves nothing about the other side's records.
+ * @dev The attestation service also owns `paymentMethod` and `disputeId`, and so the dispute replay key
+ * `keccak256(abi.encodePacked(paymentMethod, disputeId))`, as it owns payment nullifiers. `details.paymentMethod` is
+ * a signed label and is not checked against the protection's payment method. `disputeId` is opaque, and the key
+ * keeps DisputeVerifier's derivation, so disputes resolved before the cutover keep their keys.
  */
 contract DisputeVerifierV2 is IDisputeVerifier, Ownable2Step, EIP712 {
     /* ============ Constants ============ */
@@ -60,10 +64,11 @@ contract DisputeVerifierV2 is IDisputeVerifier, Ownable2Step, EIP712 {
 
     /**
      * @inheritdoc IDisputeVerifier
-     * @dev View-only and stateless. Reverts when the payload is malformed, mismatched, unsigned, names no candidate
+     * @dev View-only and stateless. Ignores the policy's payment method argument: the signed `details.paymentMethod`
+     * only feeds the dispute nullifier. Reverts when the payload is malformed or unsigned, names no candidate
      * nullifier, or names none bound to the intent.
      */
-    function verifyDispute(DisputeAttestation calldata _attestation, bytes32 _paymentMethod)
+    function verifyDispute(DisputeAttestation calldata _attestation, bytes32 /* _paymentMethod */)
         external
         view
         override
@@ -73,7 +78,6 @@ contract DisputeVerifierV2 is IDisputeVerifier, Ownable2Step, EIP712 {
 
         (DisputeDetails memory details, bytes32[] memory nullifiers) =
             abi.decode(_attestation.data, (DisputeDetails, bytes32[]));
-        if (details.paymentMethod != _paymentMethod) revert InvalidAttestation();
         if (nullifiers.length == 0) revert NoNullifierCandidates();
 
         bytes32 digest = _hashTypedDataV4(_disputeAttestationStructHash(_attestation));

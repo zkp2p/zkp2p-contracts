@@ -203,12 +203,16 @@ contract DisputeVerifierV2Test is Test {
         verifier.verifyDispute(attestation, METHOD);
     }
 
-    function test_VerifyDisputeRejectsMethodMismatch() public {
-        IDisputeVerifier.DisputeAttestation memory attestation =
-            _attestation(INTENT, keccak256("wrong"), NULLIFIER);
+    /// @dev The signed payment method is the TEE's label for the replay key; the policy's method is not compared.
+    function test_VerifyDisputeKeysTheSignedMethodAndIgnoresThePolicyMethod() public {
+        bytes32 signedMethod = keccak256("signed-label");
+        nullifierRegistry.addNullifier(NULLIFIER, INTENT);
 
-        vm.expectRevert(IDisputeVerifier.InvalidAttestation.selector);
-        verifier.verifyDispute(attestation, METHOD);
+        (bytes32 disputeId, bytes32 disputeNullifier) =
+            verifier.verifyDispute(_attestation(INTENT, signedMethod, NULLIFIER), METHOD);
+        assertEq(disputeId, DISPUTE_ID);
+        assertEq(disputeNullifier, keccak256(abi.encodePacked(signedMethod, DISPUTE_ID)));
+        assertNotEq(disputeNullifier, keccak256(abi.encodePacked(METHOD, DISPUTE_ID)));
     }
 
     function test_VerifyDisputeRejectsSignatureFailure() public {
