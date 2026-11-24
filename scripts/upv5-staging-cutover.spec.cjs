@@ -2,7 +2,7 @@
 require(require.resolve("ts-node/register/transpile-only"));
 const assert = require("node:assert/strict");
 const { spawnSync } = require("node:child_process");
-const { readFileSync } = require("node:fs");
+const { existsSync, readFileSync } = require("node:fs");
 const { resolve } = require("node:path");
 const { test } = require("node:test");
 const { utils } = require("ethers");
@@ -51,7 +51,10 @@ test("the CLI refuses unknown arguments and missing records before any RPC or ke
   assert.match(unknown.stderr, /Usage: upv5-staging-cutover.ts \[--execute\]/);
   const missing = run(["--execute"]);
   assert.equal(missing.status, 1);
-  assert.match(missing.stderr, /base_staging: UPV5 deployment records missing; run lane 49 first/);
+  // Before lane 49 records exist the script stops at the records check; once they do, it stops at the unreachable
+  // RPC. Either way it fails before any key is resolved or anything is signed.
+  const recorded = existsSync(resolve(ROOT, "deployments/base_staging/UnifiedPaymentVerifierV5.json"));
+  assert.match(missing.stderr, recorded ? /ECONNREFUSED|missing response/ : /base_staging: UPV5 deployment records missing; run lane 49 first/);
 });
 
 test("the script signs only as the staging signer, through KMS or the staging key, never the retired key", () => {

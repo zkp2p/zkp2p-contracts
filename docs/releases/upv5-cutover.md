@@ -6,12 +6,12 @@ Status: not started. Staging first, then Base production.
 | --- | --- |
 | Contracts | [zkp2p-contracts#395](https://github.com/zkp2p/zkp2p-contracts/pull/395) |
 | Deploy lane, scripts, this runbook | [zkp2p-contracts#396](https://github.com/zkp2p/zkp2p-contracts/pull/396) |
-| Attestation service | [attestation-service#771](https://github.com/zkp2p/attestation-service/pull/771), pinned at `74ed5a97` |
+| Attestation service | [attestation-service#771](https://github.com/zkp2p/attestation-service/pull/771), pinned at the commit staging deploys (head `02311488` when the staging stack was recorded) |
 | Pay | [pay#1688](https://github.com/zkp2p/pay/pull/1688) |
 | Curator | [curator#1195](https://github.com/zkp2p/curator/pull/1195) |
 | Indexer | [zkp2p-indexer#334](https://github.com/zkp2p/zkp2p-indexer/pull/334) |
 | zkp2p-clients SDK | [zkp2p-clients#2675](https://github.com/zkp2p/zkp2p-clients/pull/2675) |
-| Staging `@zkp2p/contracts-v2` RC | _TBD_ |
+| Staging `@zkp2p/contracts-v2` RC | `0.4.5-rc.1` (Base staging UPV5 stack, lane 49 from `db7ba23e`) |
 | Base `@zkp2p/contracts-v2` RC | _TBD_ |
 
 Each step below is its own approval boundary (`.claude/skills/ship-contracts/SKILL.md`). Nothing in this repo
@@ -192,6 +192,17 @@ interrupted run resumes from its records; the deployment output is exported only
 
 Expected pre-check: `11/16 true`. The five TODOs are the cutover checks: NullifierRegistryV2 writers, V3 writer,
 routes, catalog plan (no journal yet) and dispute verifier.
+
+**Executed 2026-11-25** from main `db7ba23e0f6e1c473daf21ad8e148ea50188318d`, signed by `0x4112…41eC` through KMS
+(deployer nonces 198–214):
+
+| Contract | Address | Deploy tx |
+| --- | --- | --- |
+| NullifierRegistryV3 | `0x301f236d276343BdBf82605Dd48a9298472aADdA` | `0x10edb400d7844aeec0e230dacb077f0c827a5085027cfcc9c8db04c7fa01e9ab` |
+| UnifiedPaymentVerifierV5 | `0x4f29Ca5c9c4DBB35381cc39eAb620453eFBCF4AF` | `0x2bf081bbd5d198270b4a62d6627a94a39b6b50c0c72f33c7fa0085c208a17302` |
+| DisputeVerifierV2 | `0xa78bFd7582c9E6a03E42f91d72924B0d5A8D313b` | `0x024ac8356f207e438e19c025668dddaeb5e33f25237e40fe56757c24c57aa938` |
+
+Pre-check after the deploy: `11/16 true`, the five cutover checks outstanding.
 
 ### S2. Record, publish, bump consumers
 
