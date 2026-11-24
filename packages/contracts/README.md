@@ -20,6 +20,16 @@ prerequisites describe the retained O3 stack, not O4 policies or admission readi
 O4 has no relayer-registry dependency. O3 source/network ABIs, addresses, and event
 decoding remain exported for history, payouts, indexers, and support.
 
+## Release 0.4.5-rc.1
+
+- Adds `NullifierRegistryV3`, `UnifiedPaymentVerifierV5` and `DisputeVerifierV2` ABIs, plus their Base staging
+  addresses from lane 49 (source `db7ba23e`): NullifierRegistryV3
+  `0x301f236d276343BdBf82605Dd48a9298472aADdA`, UnifiedPaymentVerifierV5
+  `0x4f29Ca5c9c4DBB35381cc39eAb620453eFBCF4AF`, DisputeVerifierV2 `0xa78bFd7582c9E6a03E42f91d72924B0d5A8D313b`.
+- Base production has no UPV5-stack records yet. Addresses are the latest recorded ones, not activation status:
+  staging routes payments to UPV5 only after its cutover script runs (see `docs/releases/upv5-cutover.md`).
+- Targets `rc`, moving it from `0.4.4-rc.14` to `0.4.5-rc.1`; `latest` remains at `0.4.4`.
+
 ## Release 0.4.4
 
 - Promotes the current OrchestratorV4 package exports to stable, including Base
