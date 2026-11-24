@@ -34,6 +34,8 @@
     "scripts/upv4SafeBatches.ts",
     "deploy/49_deploy_unified_payment_verifier_v5_stack.ts",
     "deployments/upv5Cutover.ts",
+    "deployments/upv5Postconditions.ts",
+    "scripts/upv5-postconditions.ts",
     "scripts/fx-rate-feeds-deployment.spec.cjs",
     "deploy/deploy_summary.ts",
     "packages/contracts/scripts/extractors/abis.ts",
