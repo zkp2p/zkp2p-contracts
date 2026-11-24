@@ -6,7 +6,7 @@ import 'hardhat-deploy';
 import '@nomicfoundation/hardhat-verify';
 
 import { HardhatUserConfig } from "hardhat/config";
-import { getDeployerAccounts } from "./utils/deployerKeys";
+import { getDeployerAccounts, getDeployerKms } from "./utils/deployerKeys";
 import { installDeployerKmsSigning } from "./utils/kmsSigningProvider";
 
 import "./tasks/etherscanVerifyWithDelay";
@@ -16,6 +16,11 @@ dotenv.config();
 const deployerAccounts = getDeployerAccounts(process.env);
 // STAGING_DEPLOYER_KMS_KEY_ID / BASE_DEPLOYER_KMS_KEY_ID sign as the deployer through AWS KMS instead of a raw key.
 installDeployerKmsSigning(process.env);
+const deployerKms = getDeployerKms(process.env);
+// A KMS network must use "remote" accounts: Hardhat's local-accounts layer sits above provider extenders and answers
+// eth_accounts itself, which would hide the KMS deployer from hardhat-deploy and ethers.
+const networkAccounts = (kmsKeyId: string | undefined, rawKeys: string[]): "remote" | string[] =>
+  kmsKeyId ? "remote" : rawKeys;
 
 // Skip non-deploy script files (e.g., Markdown notes, CLAUDE.md etc.) in the deploy/ folder
 // by registering no-op require handlers that instruct hardhat-deploy to skip them.
@@ -74,7 +79,7 @@ const config: HardhatUserConfig = {
     base_staging: {
       url: "https://base-mainnet.g.alchemy.com/v2/" + process.env.ALCHEMY_API_KEY,
       // Staging shares Base's chain ID, but must never inherit its production key.
-      accounts: deployerAccounts.base_staging,
+      accounts: networkAccounts(deployerKms.base_staging, deployerAccounts.base_staging),
       verify: {
         etherscan: {
           apiUrl: "https://api.basescan.org/",
@@ -88,7 +93,7 @@ const config: HardhatUserConfig = {
     },
     base: {
       url: "https://base-mainnet.g.alchemy.com/v2/" + process.env.ALCHEMY_API_KEY,
-      accounts: deployerAccounts.base,
+      accounts: networkAccounts(deployerKms.base, deployerAccounts.base),
     },
   },
   // @ts-ignore
