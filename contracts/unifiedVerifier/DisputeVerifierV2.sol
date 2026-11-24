@@ -18,18 +18,24 @@ import {INullifierRegistryV3} from "../interfaces/INullifierRegistryV3.sol";
  * @dev Swapping this verifier rotates the EIP-712 domain (it binds this contract's address), which
  * invalidates signed-but-unsubmitted attestations. The attestation service must always sign against
  * the policy's currently configured verifier.
- * @dev `IDisputeVerifier.DisputeDetails.originalPaymentId` keeps its name and slot from DisputeVerifier, where it is
- * the provider payment ID hash that the verifier hashes with the payment method. Here it carries the payment's
- * nullifier, looked up as given.
- * @dev A settled payment can consume several nullifiers, and evidence naming any of them binds to its intent.
- * The attestation service derives the nullifier it names and owns which one a kind of evidence may use: absence
- * of an identifier that only one side of a transfer can see proves nothing about the other side's records.
+ * @dev Evidence data is `abi.encode(IDisputeVerifier.DisputeDetails, bytes32[] nullifiers)`. `originalPaymentId`
+ * keeps its DisputeVerifier meaning, the provider payment ID hash, and is not read for binding. `nullifiers` is a
+ * candidate set: the evidence binds to the intent when any candidate is bound to it in the registry, which reads
+ * through to its predecessor for payments settled before the cutover.
+ * @dev The attestation service chooses both the nullifiers a payment settles with and the candidates its evidence
+ * names, and keeps the two in step. This contract enforces no shape and no count on the candidates. Duplicates
+ * cost only a repeated lookup, and a zero entry never matches because the intent hash must be nonzero. Absence of
+ * an identifier that only one side of a transfer can see proves nothing about the other side's records.
  */
 contract DisputeVerifierV2 is IDisputeVerifier, Ownable2Step, EIP712 {
     /* ============ Constants ============ */
 
     bytes32 public constant DISPUTE_ATTESTATION_TYPEHASH =
         keccak256("DisputeAttestation(bytes32 intentHash,bytes32 dataHash)");
+
+    /* ============ Errors ============ */
+
+    error NoNullifierCandidates();
 
     /* ============ State Variables ============ */
 
@@ -54,6 +60,8 @@ contract DisputeVerifierV2 is IDisputeVerifier, Ownable2Step, EIP712 {
 
     /**
      * @inheritdoc IDisputeVerifier
+     * @dev View-only and stateless. Reverts when the payload is malformed, mismatched, unsigned, names no candidate
+     * nullifier, or names none bound to the intent.
      */
     function verifyDispute(DisputeAttestation calldata _attestation, bytes32 _paymentMethod)
         external
@@ -63,21 +71,18 @@ contract DisputeVerifierV2 is IDisputeVerifier, Ownable2Step, EIP712 {
     {
         if (keccak256(_attestation.data) != _attestation.dataHash) revert InvalidAttestation();
 
-        DisputeDetails memory details = abi.decode(_attestation.data, (DisputeDetails));
+        (DisputeDetails memory details, bytes32[] memory nullifiers) =
+            abi.decode(_attestation.data, (DisputeDetails, bytes32[]));
         if (details.paymentMethod != _paymentMethod) revert InvalidAttestation();
+        if (nullifiers.length == 0) revert NoNullifierCandidates();
 
         bytes32 digest = _hashTypedDataV4(_disputeAttestationStructHash(_attestation));
         if (!attestationVerifier.verify(digest, _attestation.signatures, _attestation.data)) {
             revert AttestationVerificationFailed();
         }
 
-        // `originalPaymentId` carries a nullifier the payment consumed, as the attestation service derived it.
-        // It is looked up as given, not hashed with the payment method.
-        if (
-            _attestation.intentHash == bytes32(0)
-                || nullifierRegistry.intentHashByNullifier(details.originalPaymentId) != _attestation.intentHash
-        ) {
-            revert InvalidPaymentBinding(_attestation.intentHash, details.originalPaymentId);
+        if (_attestation.intentHash == bytes32(0) || !_anyBoundToIntent(nullifiers, _attestation.intentHash)) {
+            revert InvalidPaymentBinding(_attestation.intentHash, nullifiers[0]);
         }
 
         disputeId = details.disputeId;
@@ -119,6 +124,13 @@ contract DisputeVerifierV2 is IDisputeVerifier, Ownable2Step, EIP712 {
 
     function _disputeAttestationStructHash(DisputeAttestation calldata _attestation) internal pure returns (bytes32) {
         return keccak256(abi.encode(DISPUTE_ATTESTATION_TYPEHASH, _attestation.intentHash, _attestation.dataHash));
+    }
+
+    function _anyBoundToIntent(bytes32[] memory _nullifiers, bytes32 _intentHash) internal view returns (bool) {
+        for (uint256 i = 0; i < _nullifiers.length; i++) {
+            if (nullifierRegistry.intentHashByNullifier(_nullifiers[i]) == _intentHash) return true;
+        }
+        return false;
     }
 
     function _validateDependency(address _dependency) internal view {

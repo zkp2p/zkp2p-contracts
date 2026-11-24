@@ -24,9 +24,9 @@ import {UnifiedPaymentVerifierV4V4CallerHarness} from "../../mocks/UnifiedPaymen
  * @notice UPV5 and DisputeVerifierV2 wired as the Base cutover wires them: one production MultiAttestationVerifier
  * with two witnesses and threshold one, shared with the retiring UPV4 and DisputeVerifier, and NullifierRegistryV3
  * reading through NullifierRegistryV2 and the legacy registry.
- * @dev The golden vector is `test-foundry/fixtures/upv5-golden-vector.json`, which the attestation service asserts
- * byte for byte. Its values are embedded below because Foundry has no file-read permission here; change both
- * together.
+ * @dev The golden vector is `test-foundry/fixtures/upv5-golden-vector.json` (version 2), which the attestation
+ * service asserts byte for byte. Its values are embedded below because Foundry has no file-read permission here;
+ * change both together.
  */
 contract UnifiedPaymentVerifierV5CutoverTest is Test {
     event PaymentVerified(
@@ -70,8 +70,12 @@ contract UnifiedPaymentVerifierV5CutoverTest is Test {
     bytes32 internal constant GOLDEN_NULLIFIER = 0xedf06cc2b152dcdbcffbbd4a7661587ff4fcb8f22310c2aef960a53157ee167d;
     bytes32 internal constant GOLDEN_PAYMENT_DATA_HASH =
         0x4e45abe8a6ecdcbcf7ee8888f0726e7026e487247aec59b6470a736201ac2db1;
+    bytes32 internal constant GOLDEN_UNRELATED_NULLIFIER =
+        0x7b290df65a5eb6ad829d9e4f4320876d89ed9983eb48f76f91ed4c90f5410a09;
     bytes32 internal constant GOLDEN_DISPUTE_DATA_HASH =
-        0x635f6857f7787a86fad8e1c178f946d821f1e14c634726b8dac1d321e4c9fcf3;
+        0xba9d18772db7612acb405e2a4f690af059cbb1fbc2c3166a9dcc911fea9ce31d;
+    bytes32 internal constant GOLDEN_DISPUTE_DATA_TWO_CANDIDATES_HASH =
+        0xf1bf32720d980c14a725bbb2f4d3353d1fc76d70e7a4b2ccb827f03c13af534f;
 
     /// @dev `abi.encode(PaymentDetails, IntentSnapshot, bytes settlementData, bytes32[] nullifiers)`, one word a line.
     bytes internal constant GOLDEN_PAYMENT_DATA =
@@ -98,13 +102,29 @@ contract UnifiedPaymentVerifierV5CutoverTest is Test {
         hex"0000000000000000000000000000000000000000000000000000000000000001"
         hex"edf06cc2b152dcdbcffbbd4a7661587ff4fcb8f22310c2aef960a53157ee167d";
 
-    /// @dev `abi.encode(IDisputeVerifier.DisputeDetails)`, one word a line.
+    /// @dev `disputeAttestationData`: `abi.encode(IDisputeVerifier.DisputeDetails, bytes32[] nullifiers)` with the
+    /// golden nullifier as the only candidate, one word a line.
     bytes internal constant GOLDEN_DISPUTE_DATA =
         hex"90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
-        hex"edf06cc2b152dcdbcffbbd4a7661587ff4fcb8f22310c2aef960a53157ee167d"
+        hex"4b837befdc945edbecacae6ab3c40f8e404ffcb0ee7cbf5d944123d37564cd8b"
         hex"d6283071c9bb5e4bf91a1270e1ceaf76786faeb0ba4e7cfc8614f54da4035130"
         hex"0000000000000000000000000000000000000000000000000000000000002710"
-        hex"c4ae21aac0c6549d71dd96035b7e0bdb6c79ebdba8891b666115bc976d16a29e";
+        hex"c4ae21aac0c6549d71dd96035b7e0bdb6c79ebdba8891b666115bc976d16a29e"
+        hex"00000000000000000000000000000000000000000000000000000000000000c0"
+        hex"0000000000000000000000000000000000000000000000000000000000000001"
+        hex"edf06cc2b152dcdbcffbbd4a7661587ff4fcb8f22310c2aef960a53157ee167d";
+
+    /// @dev `disputeAttestationDataTwoCandidates`: an unrelated nullifier first, the golden one second.
+    bytes internal constant GOLDEN_DISPUTE_DATA_TWO_CANDIDATES =
+        hex"90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268"
+        hex"4b837befdc945edbecacae6ab3c40f8e404ffcb0ee7cbf5d944123d37564cd8b"
+        hex"d6283071c9bb5e4bf91a1270e1ceaf76786faeb0ba4e7cfc8614f54da4035130"
+        hex"0000000000000000000000000000000000000000000000000000000000002710"
+        hex"c4ae21aac0c6549d71dd96035b7e0bdb6c79ebdba8891b666115bc976d16a29e"
+        hex"00000000000000000000000000000000000000000000000000000000000000c0"
+        hex"0000000000000000000000000000000000000000000000000000000000000002"
+        hex"7b290df65a5eb6ad829d9e4f4320876d89ed9983eb48f76f91ed4c90f5410a09"
+        hex"edf06cc2b152dcdbcffbbd4a7661587ff4fcb8f22310c2aef960a53157ee167d";
 
     /// @dev Signed beside the data, not part of the vector.
     uint256 internal constant RELEASE_AMOUNT = GOLDEN_INTENT_AMOUNT;
@@ -220,27 +240,8 @@ contract UnifiedPaymentVerifierV5CutoverTest is Test {
         assertFalse(nullifierRegistryV2.isNullified(GOLDEN_NULLIFIER));
     }
 
-    function test_GoldenDisputeDetailsBindToTheGoldenIntentOnceV3HoldsTheNullifier() public {
-        IDisputeVerifier.DisputeDetails memory details =
-            abi.decode(GOLDEN_DISPUTE_DATA, (IDisputeVerifier.DisputeDetails));
-        assertEq(details.paymentMethod, GOLDEN_METHOD);
-        assertEq(details.originalPaymentId, GOLDEN_NULLIFIER);
-        assertEq(details.disputeId, GOLDEN_DISPUTE_ID);
-        assertEq(details.paymentAmount, GOLDEN_AMOUNT);
-        assertEq(details.paymentCurrency, GOLDEN_CURRENCY);
-        assertEq(
-            abi.encode(
-                IDisputeVerifier.DisputeDetails({
-                    paymentMethod: GOLDEN_METHOD,
-                    originalPaymentId: GOLDEN_NULLIFIER,
-                    disputeId: GOLDEN_DISPUTE_ID,
-                    paymentAmount: GOLDEN_AMOUNT,
-                    paymentCurrency: GOLDEN_CURRENCY
-                })
-            ),
-            GOLDEN_DISPUTE_DATA
-        );
-        assertEq(keccak256(GOLDEN_DISPUTE_DATA), GOLDEN_DISPUTE_DATA_HASH);
+    function test_GoldenDisputeEvidenceBindsOnceV3HoldsTheGoldenNullifier() public {
+        _assertGoldenDisputeData(GOLDEN_DISPUTE_DATA, GOLDEN_DISPUTE_DATA_HASH, _single(GOLDEN_NULLIFIER));
 
         IDisputeVerifier.DisputeAttestation memory attestation = _goldenDispute();
         attestation.signatures = _signatures(WITNESS_A_KEY, disputeVerifierV2.hashDisputeAttestation(attestation));
@@ -254,6 +255,49 @@ contract UnifiedPaymentVerifierV5CutoverTest is Test {
         (bytes32 disputeId, bytes32 disputeNullifier) = disputeVerifierV2.verifyDispute(attestation, GOLDEN_METHOD);
         assertEq(disputeId, GOLDEN_DISPUTE_ID);
         assertEq(disputeNullifier, keccak256(abi.encodePacked(GOLDEN_METHOD, GOLDEN_DISPUTE_ID)));
+    }
+
+    /// @dev The unrelated first candidate never binds; the golden nullifier in second place does.
+    function test_GoldenTwoCandidateEvidenceBindsThroughTheSecondCandidate() public {
+        assertEq(GOLDEN_UNRELATED_NULLIFIER, keccak256("golden-unrelated-nullifier"));
+        bytes32[] memory candidates = new bytes32[](2);
+        candidates[0] = GOLDEN_UNRELATED_NULLIFIER;
+        candidates[1] = GOLDEN_NULLIFIER;
+        _assertGoldenDisputeData(
+            GOLDEN_DISPUTE_DATA_TWO_CANDIDATES, GOLDEN_DISPUTE_DATA_TWO_CANDIDATES_HASH, candidates
+        );
+
+        IDisputeVerifier.DisputeAttestation memory attestation = IDisputeVerifier.DisputeAttestation({
+            intentHash: GOLDEN_INTENT,
+            dataHash: GOLDEN_DISPUTE_DATA_TWO_CANDIDATES_HASH,
+            signatures: new bytes[](0),
+            data: GOLDEN_DISPUTE_DATA_TWO_CANDIDATES
+        });
+        attestation.signatures = _signatures(WITNESS_A_KEY, disputeVerifierV2.hashDisputeAttestation(attestation));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IDisputeVerifier.InvalidPaymentBinding.selector, GOLDEN_INTENT, GOLDEN_UNRELATED_NULLIFIER
+            )
+        );
+        disputeVerifierV2.verifyDispute(attestation, GOLDEN_METHOD);
+
+        _settleGolden();
+
+        (bytes32 disputeId, bytes32 disputeNullifier) = disputeVerifierV2.verifyDispute(attestation, GOLDEN_METHOD);
+        assertEq(disputeId, GOLDEN_DISPUTE_ID);
+        assertEq(disputeNullifier, keccak256(abi.encodePacked(GOLDEN_METHOD, GOLDEN_DISPUTE_ID)));
+    }
+
+    /// @dev A payment UPV4 settled into V2 before the cutover stays disputable through V3's fallback.
+    function test_GoldenDisputeEvidenceBindsAPaymentUPV4SettledBeforeTheCutover() public {
+        bytes memory v4Data = abi.encode(_goldenPayment(), _goldenSnapshot(), _goldenSettlementData());
+        _verify(upv4, GOLDEN_INTENT, _signPayment(upv4.DOMAIN_SEPARATOR(), GOLDEN_INTENT, v4Data, WITNESS_A_KEY));
+        assertEq(nullifierRegistryV2.intentHashByNullifier(GOLDEN_NULLIFIER), GOLDEN_INTENT);
+
+        IDisputeVerifier.DisputeAttestation memory attestation = _goldenDispute();
+        attestation.signatures = _signatures(WITNESS_A_KEY, disputeVerifierV2.hashDisputeAttestation(attestation));
+        (bytes32 disputeId,) = disputeVerifierV2.verifyDispute(attestation, GOLDEN_METHOD);
+        assertEq(disputeId, GOLDEN_DISPUTE_ID);
     }
 
     /* ============ Production attestation verifier ============ */
@@ -402,6 +446,31 @@ contract UnifiedPaymentVerifierV5CutoverTest is Test {
     /// @dev The dispute protection policy decodes settlement data as `abi.encode(uint256 disputeWindow)`.
     function _goldenSettlementData() internal pure returns (bytes memory) {
         return abi.encode(GOLDEN_DISPUTE_WINDOW_SECONDS);
+    }
+
+    /// @dev `originalPaymentId` is the raw provider payment ID hash, as for DisputeVerifier.
+    function _assertGoldenDisputeData(bytes memory data, bytes32 dataHash, bytes32[] memory expectedCandidates)
+        internal
+        pure
+    {
+        IDisputeVerifier.DisputeDetails memory goldenDetails = IDisputeVerifier.DisputeDetails({
+            paymentMethod: GOLDEN_METHOD,
+            originalPaymentId: GOLDEN_PAYMENT_ID,
+            disputeId: GOLDEN_DISPUTE_ID,
+            paymentAmount: GOLDEN_AMOUNT,
+            paymentCurrency: GOLDEN_CURRENCY
+        });
+        assertEq(abi.encode(goldenDetails, expectedCandidates), data);
+        assertEq(keccak256(data), dataHash);
+
+        (IDisputeVerifier.DisputeDetails memory details, bytes32[] memory candidates) =
+            abi.decode(data, (IDisputeVerifier.DisputeDetails, bytes32[]));
+        assertEq(details.paymentMethod, GOLDEN_METHOD);
+        assertEq(details.originalPaymentId, GOLDEN_PAYMENT_ID);
+        assertEq(details.disputeId, GOLDEN_DISPUTE_ID);
+        assertEq(details.paymentAmount, GOLDEN_AMOUNT);
+        assertEq(details.paymentCurrency, GOLDEN_CURRENCY);
+        assertEq(candidates, expectedCandidates);
     }
 
     function _goldenDispute() internal pure returns (IDisputeVerifier.DisputeAttestation memory) {

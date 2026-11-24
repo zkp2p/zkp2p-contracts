@@ -20,6 +20,8 @@ contract DisputeVerifierV2Test is Test {
     bytes32 internal constant INTENT = keccak256("intent");
     bytes32 internal constant USD = keccak256("USD");
     bytes32 internal constant NULLIFIER = keccak256("payment-nullifier");
+    bytes32 internal constant UNRELATED_NULLIFIER = keccak256("unrelated-nullifier");
+    bytes32 internal constant PAYMENT_ID = keccak256("provider-payment-id");
     bytes32 internal constant DISPUTE_ID = keccak256("dispute");
 
     NullifierRegistryV2 internal predecessor;
@@ -62,7 +64,7 @@ contract DisputeVerifierV2Test is Test {
         verifier.verifyDispute(attestation, METHOD);
     }
 
-    /// @dev An unused nullifier resolves to the zero intent, so a zero intent hash must never count as bound.
+    /// @dev An unused or zero nullifier resolves to the zero intent, so a zero intent hash must never count as bound.
     function test_VerifyDisputeRejectsZeroIntentHash() public {
         IDisputeVerifier.DisputeAttestation memory attestation =
             _attestation(bytes32(0), METHOD, NULLIFIER);
@@ -71,6 +73,12 @@ contract DisputeVerifierV2Test is Test {
             abi.encodeWithSelector(
                 IDisputeVerifier.InvalidPaymentBinding.selector, bytes32(0), NULLIFIER
             )
+        );
+        verifier.verifyDispute(attestation, METHOD);
+
+        attestation = _attestation(bytes32(0), METHOD, bytes32(0));
+        vm.expectRevert(
+            abi.encodeWithSelector(IDisputeVerifier.InvalidPaymentBinding.selector, bytes32(0), bytes32(0))
         );
         verifier.verifyDispute(attestation, METHOD);
     }
@@ -97,6 +105,92 @@ contract DisputeVerifierV2Test is Test {
 
         (bytes32 disputeId,) = verifier.verifyDispute(_attestation(INTENT, METHOD, NULLIFIER), METHOD);
         assertEq(disputeId, DISPUTE_ID);
+
+        (disputeId,) =
+            verifier.verifyDispute(_attestation(INTENT, METHOD, _pair(UNRELATED_NULLIFIER, NULLIFIER)), METHOD);
+        assertEq(disputeId, DISPUTE_ID);
+    }
+
+    /* ============ Candidate nullifiers ============ */
+
+    function test_VerifyDisputeBindsThroughALaterCandidate() public {
+        nullifierRegistry.addNullifier(NULLIFIER, INTENT);
+
+        (bytes32 disputeId, bytes32 disputeNullifier) =
+            verifier.verifyDispute(_attestation(INTENT, METHOD, _pair(UNRELATED_NULLIFIER, NULLIFIER)), METHOD);
+        assertEq(disputeId, DISPUTE_ID);
+        assertEq(disputeNullifier, keccak256(abi.encodePacked(METHOD, DISPUTE_ID)));
+    }
+
+    /// @dev The revert names the first candidate.
+    function test_VerifyDisputeRejectsCandidatesNoneBoundToTheIntent() public {
+        IDisputeVerifier.DisputeAttestation memory attestation =
+            _attestation(INTENT, METHOD, _pair(UNRELATED_NULLIFIER, NULLIFIER));
+        vm.expectRevert(
+            abi.encodeWithSelector(IDisputeVerifier.InvalidPaymentBinding.selector, INTENT, UNRELATED_NULLIFIER)
+        );
+        verifier.verifyDispute(attestation, METHOD);
+
+        nullifierRegistry.addNullifier(UNRELATED_NULLIFIER, keccak256("another-intent"));
+        vm.expectRevert(
+            abi.encodeWithSelector(IDisputeVerifier.InvalidPaymentBinding.selector, INTENT, UNRELATED_NULLIFIER)
+        );
+        verifier.verifyDispute(attestation, METHOD);
+    }
+
+    function test_VerifyDisputeRejectsAnEmptyCandidateSet() public {
+        nullifierRegistry.addNullifier(NULLIFIER, INTENT);
+        IDisputeVerifier.DisputeAttestation memory attestation = _attestation(INTENT, METHOD, new bytes32[](0));
+
+        vm.expectRevert(DisputeVerifierV2.NoNullifierCandidates.selector);
+        verifier.verifyDispute(attestation, METHOD);
+    }
+
+    /// @dev Zero and repeated entries never match a nonzero intent they are not bound to, so they are harmless.
+    function test_VerifyDisputeIgnoresZeroAndRepeatedCandidates() public {
+        nullifierRegistry.addNullifier(NULLIFIER, INTENT);
+        bytes32[] memory candidates = new bytes32[](4);
+        candidates[0] = bytes32(0);
+        candidates[1] = UNRELATED_NULLIFIER;
+        candidates[2] = UNRELATED_NULLIFIER;
+        candidates[3] = NULLIFIER;
+
+        (bytes32 disputeId,) = verifier.verifyDispute(_attestation(INTENT, METHOD, candidates), METHOD);
+        assertEq(disputeId, DISPUTE_ID);
+        (disputeId,) = verifier.verifyDispute(_attestation(INTENT, METHOD, _pair(bytes32(0), NULLIFIER)), METHOD);
+        assertEq(disputeId, DISPUTE_ID);
+    }
+
+    /// @dev `originalPaymentId` is the provider payment ID hash again; only the candidates bind.
+    function test_VerifyDisputeDoesNotBindThroughOriginalPaymentId() public {
+        nullifierRegistry.addNullifier(NULLIFIER, INTENT);
+        IDisputeVerifier.DisputeAttestation memory attestation =
+            _attestation(INTENT, METHOD, NULLIFIER, _single(UNRELATED_NULLIFIER));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(IDisputeVerifier.InvalidPaymentBinding.selector, INTENT, UNRELATED_NULLIFIER)
+        );
+        verifier.verifyDispute(attestation, METHOD);
+    }
+
+    /// @dev DisputeVerifier's five-word layout carries no candidate list and fails to decode.
+    function test_VerifyDisputeRejectsTheDisputeVerifierLayout() public {
+        nullifierRegistry.addNullifier(NULLIFIER, INTENT);
+        bytes memory data = abi.encode(
+            IDisputeVerifier.DisputeDetails({
+                paymentMethod: METHOD,
+                originalPaymentId: NULLIFIER,
+                disputeId: DISPUTE_ID,
+                paymentAmount: 100,
+                paymentCurrency: USD
+            })
+        );
+        IDisputeVerifier.DisputeAttestation memory attestation = IDisputeVerifier.DisputeAttestation({
+            intentHash: INTENT, dataHash: keccak256(data), signatures: new bytes[](0), data: data
+        });
+
+        vm.expectRevert();
+        verifier.verifyDispute(attestation, METHOD);
     }
 
     /* ============ Attestation ============ */
@@ -205,21 +299,49 @@ contract DisputeVerifierV2Test is Test {
 
     /* ============ Helpers ============ */
 
-    function _attestation(bytes32 intentHash, bytes32 paymentMethod, bytes32 paymentNullifier)
+    function _attestation(bytes32 intentHash, bytes32 paymentMethod, bytes32 candidate)
         internal
         pure
-        returns (IDisputeVerifier.DisputeAttestation memory attestation)
+        returns (IDisputeVerifier.DisputeAttestation memory)
     {
+        return _attestation(intentHash, paymentMethod, _single(candidate));
+    }
+
+    function _attestation(bytes32 intentHash, bytes32 paymentMethod, bytes32[] memory candidates)
+        internal
+        pure
+        returns (IDisputeVerifier.DisputeAttestation memory)
+    {
+        return _attestation(intentHash, paymentMethod, PAYMENT_ID, candidates);
+    }
+
+    function _attestation(
+        bytes32 intentHash,
+        bytes32 paymentMethod,
+        bytes32 originalPaymentId,
+        bytes32[] memory candidates
+    ) internal pure returns (IDisputeVerifier.DisputeAttestation memory attestation) {
         IDisputeVerifier.DisputeDetails memory details = IDisputeVerifier.DisputeDetails({
             paymentMethod: paymentMethod,
-            originalPaymentId: paymentNullifier,
+            originalPaymentId: originalPaymentId,
             disputeId: DISPUTE_ID,
             paymentAmount: 100,
             paymentCurrency: USD
         });
-        bytes memory data = abi.encode(details);
+        bytes memory data = abi.encode(details, candidates);
         attestation = IDisputeVerifier.DisputeAttestation({
             intentHash: intentHash, dataHash: keccak256(data), signatures: new bytes[](0), data: data
         });
+    }
+
+    function _single(bytes32 candidate) internal pure returns (bytes32[] memory candidates) {
+        candidates = new bytes32[](1);
+        candidates[0] = candidate;
+    }
+
+    function _pair(bytes32 first, bytes32 second) internal pure returns (bytes32[] memory candidates) {
+        candidates = new bytes32[](2);
+        candidates[0] = first;
+        candidates[1] = second;
     }
 }
