@@ -18,6 +18,9 @@ import {INullifierRegistryV3} from "../interfaces/INullifierRegistryV3.sol";
  * @dev Swapping this verifier rotates the EIP-712 domain (it binds this contract's address), which
  * invalidates signed-but-unsubmitted attestations. The attestation service must always sign against
  * the policy's currently configured verifier.
+ * @dev `IDisputeVerifier.DisputeDetails.originalPaymentId` keeps its name and slot from DisputeVerifier, where it is
+ * the provider payment ID hash that the verifier hashes with the payment method. Here it carries the payment's
+ * nullifier, looked up as given.
  * @dev A settled payment can consume several nullifiers, and evidence naming any of them binds to its intent.
  * The attestation service derives the nullifier it names and owns which one a kind of evidence may use: absence
  * of an identifier that only one side of a transfer can see proves nothing about the other side's records.
