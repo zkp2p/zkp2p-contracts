@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { Wallet, providers, utils } from "ethers";
+import { Signer, Wallet, providers, utils } from "ethers";
 import * as dotenv from "dotenv";
 import {
   UPV5_STAGING_JOURNAL_PATH, Upv5Call, Upv5CatalogPlan, Upv5ContractAddresses, Upv5CutoverInput, Upv5Deployed,
@@ -13,7 +13,8 @@ import {
   routingStateFromSnapshot,
 } from "../deployments/upv5Postconditions";
 import { getActivePaymentMethods } from "../deployments/parameters";
-import { getDeployerAccounts } from "../utils/deployerKeys";
+import { DEPLOYER_SIGNER, getDeployerAccounts, getDeployerKms } from "../utils/deployerKeys";
+import { KmsDigestSigner, KmsSigner, awsKmsApi } from "../utils/kmsSigner";
 
 const ROOT = resolve(__dirname, "..");
 const NETWORK = Upv5Network.BaseStaging;
@@ -147,10 +148,9 @@ async function main(args: string[]): Promise<void> {
     return;
   }
 
-  const [key] = getDeployerAccounts(process.env).base_staging;
-  if (!key) throw new Error("STAGING_DEPLOYER_KEY is not set");
-  const wallet = new Wallet(key, provider);
-  if (!sameAddress(wallet.address, pins.governance)) throw new Error(`STAGING_DEPLOYER_KEY signs as ${wallet.address}, not the staging signer`);
+  const wallet = await stagingSigner(provider);
+  const signerAddress = await wallet.getAddress();
+  if (!sameAddress(signerAddress, pins.governance)) throw new Error(`The staging signer key signs as ${signerAddress}, not the staging signer`);
 
   if (!journal) {
     journal = {
@@ -179,6 +179,15 @@ async function main(args: string[]): Promise<void> {
   const result = evaluateUpv5Postconditions(after, addresses, { governance: pins.governance, bindings, catalog: catalogOf(journal) });
   process.stdout.write(`\nPost-check at block ${after.blockNumber}:\n${formatUpv5Checks(result, Upv5CheckMode.Post)}`);
   if (result.some((check) => !check.ok)) process.exitCode = 1;
+}
+
+/** STAGING_DEPLOYER_KMS_KEY_ID signs through AWS KMS; the older STAGING_DEPLOYER_KEY still works if set instead. */
+async function stagingSigner(provider: providers.Provider): Promise<Signer> {
+  const [key] = getDeployerAccounts(process.env).base_staging;
+  const keyId = getDeployerKms(process.env).base_staging;
+  if (keyId) return new KmsSigner(await KmsDigestSigner.create(awsKmsApi(keyId), keyId, DEPLOYER_SIGNER), provider);
+  if (!key) throw new Error("Set STAGING_DEPLOYER_KMS_KEY_ID (or the retired-path STAGING_DEPLOYER_KEY)");
+  return new Wallet(key, provider);
 }
 
 /** Route re-adds depend on the removal before them, so only calls valid against the current state are simulated. */

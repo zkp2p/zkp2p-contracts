@@ -54,8 +54,10 @@ test("the CLI refuses unknown arguments and missing records before any RPC or ke
   assert.match(missing.stderr, /base_staging: UPV5 deployment records missing; run lane 49 first/);
 });
 
-test("the script signs only with STAGING_DEPLOYER_KEY as the staging signer and never the retired key", () => {
+test("the script signs only as the staging signer, through KMS or the staging key, never the retired key", () => {
   const source = readFileSync(resolve(ROOT, "scripts/upv5-staging-cutover.ts"), "utf8");
+  assert.match(source, /getDeployerKms\(process\.env\)\.base_staging/);
+  assert.match(source, /KmsDigestSigner\.create\(awsKmsApi\(keyId\), keyId, DEPLOYER_SIGNER\)/);
   assert.match(source, /getDeployerAccounts\(process\.env\)\.base_staging/);
   assert.match(source, /not the staging signer/);
   assert.doesNotMatch(source, /0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929|BASE_DEPLOY_PRIVATE_KEY|BASE_DEPLOYER_KEY/);
