@@ -142,6 +142,7 @@ function harness({ mode = "execute", selectedTag = tag, network = "base_staging"
     hardhat: dependencies.hardhat,
     "../../deploy/31_deploy_v3_payment_binding_stack": binding,
     "../../deploy/47_deploy_unified_payment_verifier_v4": { upv4RoutesActive: async () => false },
+    "../../deploy/49_deploy_unified_payment_verifier_v5_stack": { upv5RoutesActive: async () => false },
     "../parameters": parameters,
   }, env).default;
   return {
@@ -199,6 +200,7 @@ test("the mounted lane preserves local deployment and skip behavior", async () =
     hardhat: { ethers },
     "../../deploy/31_deploy_v3_payment_binding_stack": { default: historical },
     "../../deploy/47_deploy_unified_payment_verifier_v4": { upv4RoutesActive: async () => false },
+    "../../deploy/49_deploy_unified_payment_verifier_v5_stack": { upv5RoutesActive: async () => false },
     "../parameters": parameters,
   }, {}).default;
   const hre = { deployments: { getNetworkName: () => "localhost" } };
@@ -254,6 +256,7 @@ test("the lane 31 wrapper defers to active UPV4 and preserves frozen live checks
           return bindingReady();
         },
       },
+      "../../deploy/49_deploy_unified_payment_verifier_v5_stack": { upv5RoutesActive: async () => false },
       "../../deploy/47_deploy_unified_payment_verifier_v4": {
         upv4RoutesActive: async (actual) => {
           assert.equal(actual, hre);
@@ -432,4 +435,54 @@ test("post-write drift cannot record an active snapshot", async () => {
     value === method ? ethers.constants.AddressZero : getVerifier(value);
   await assert.rejects(h.run(), /activation verification failed/);
   assert.equal(h.actions().some((call) => Array.isArray(call) && call[0] === "snapshot"), false);
+});
+
+test("the lane 31 wrapper defers to active UPV5 before probing UPV4", async () => {
+  const writerMessage = "NullifierRegistryV2 writers must contain only UnifiedPaymentVerifierV3";
+  const upv5 = "0x5000000000000000000000000000000000000005";
+  for (const network of ["localhost", "base", "base_staging"]) {
+    const h = network === "localhost" ? null : harness({ network, registryHas: true, verifierHas: true });
+    const hre = h?.hre ?? { deployments: {
+      getNetworkName: () => network,
+      get: async () => assert.fail("local deferral must not read deployment records"),
+    } };
+    const abi = ["function owner() view returns (address)"];
+    const iface = new ethers.utils.Interface(abi);
+    if (h) {
+      const get = hre.deployments.get;
+      hre.deployments.get = async (name) => name === "UnifiedPaymentVerifierV5" ? { address: upv5, abi } : get(name);
+      h.contracts.PaymentVerifierRegistry.getVerifier = async () => upv5;
+      h.provider._isProvider = true;
+      h.provider.call = async (request) => {
+        assert.equal((await request.to).toLowerCase(), upv5.toLowerCase());
+        return iface.encodeFunctionResult("owner", [await h.contracts.UnifiedPaymentVerifierV3.owner()]);
+      };
+    }
+    let upv5Checks = 0;
+    const historical = async () => assert.fail("historical deployment must not run");
+    historical.skip = async () => assert.fail("historical skip must not run");
+    const lane = loadLane("../deployments/activeDeploymentLanes/31_deploy_v3_payment_binding_stack.ts", {
+      "node:assert/strict": assert,
+      hardhat: { ethers: h?.ethers ?? { ...ethers, getContractAt: async () => assert.fail("local deferral must not read contracts") } },
+      "../../deploy/31_deploy_v3_payment_binding_stack": {
+        ...h?.binding, default: historical,
+        assertPaymentBindingReady: async () => { throw new Error(writerMessage); },
+      },
+      "../../deploy/47_deploy_unified_payment_verifier_v4": {
+        upv4RoutesActive: async () => assert.fail("UPV4 probe must not run once UPV5 is routed"),
+      },
+      "../../deploy/49_deploy_unified_payment_verifier_v5_stack": {
+        upv5RoutesActive: async (actual) => { assert.equal(actual, hre); upv5Checks++; return true; },
+      },
+      "../parameters": parameters,
+    }, {}).default;
+    assert.equal(await lane.skip(hre), true);
+    await lane(hre);
+    assert.equal(upv5Checks, 2);
+    if (h) {
+      h.contracts.PaymentVerifierRegistry.getVerifier = async () => parameters.UPV4_BASE_RELEASE.unifiedPaymentVerifierV4;
+      await assert.rejects(lane.skip(hre), /verifier route mismatch/);
+      assert.deepEqual(h.actions(), []);
+    }
+  }
 });

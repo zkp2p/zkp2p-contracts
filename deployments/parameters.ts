@@ -221,6 +221,47 @@ export const UPV4_BASE_RELEASE = {
   ],
 } as const;
 
+// Lane 49 (UPV5 cutover): the predecessors each network's NullifierRegistryV3, UnifiedPaymentVerifierV5 and
+// DisputeVerifierV2 bind to, read at Base block 61639236. Deployed addresses come only from deployment records.
+// Base routes are UPV4_BASE_RELEASE.paymentRoutes, unchanged on-chain at that block.
+export const UPV5_BASE_RELEASE = {
+  pinnedBlock: 61639236,
+  chainId: 8453,
+  deployer: "0x41123d6419C7b8e44157f6F3b0088442116641eC",
+  governance: "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+  orchestratorRegistry: "0xBe9fED15ED7A4B915C03EFcEcb9662739C3382A9",
+  multiAttestationVerifier: "0x9Fe920b24e50e6a6362BA71a1BeB502A99c402d5",
+  paymentVerifierRegistry: "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+  nullifierRegistryV2: "0x5455e761b866dfa6A2f5Dc6d6525825bf9C09aeB",
+  unifiedPaymentVerifierV4: "0x7bE50E6206a9b3AdF36dbEAFac0e45Cc03A72048",
+  // NullifierRegistryV2 writers at the pinned block: UPV3, then UPV4.
+  retiredNullifierWriters: [
+    "0xC6F4a193576C60892a47e111Bb5706c30162502B",
+    "0x7bE50E6206a9b3AdF36dbEAFac0e45Cc03A72048",
+  ],
+  disputeProtectionPolicyV2: "0xB49Fa38C6Bb3C8C51ddb13711BB213cDD9DB1799",
+  disputeVerifier: "0x30d4947f005653637005eed991005119D9eB2f34",
+  // The live DisputeVerifier's attestation verifier, which DisputeVerifierV2 keeps.
+  disputeAttestationVerifier: "0x9Fe920b24e50e6a6362BA71a1BeB502A99c402d5",
+} as const;
+
+// Base staging governance is the deployer EOA, so its cutover is direct transactions. Its NullifierRegistryV2
+// writers are read live and every one is removed.
+export const UPV5_BASE_STAGING_RELEASE = {
+  pinnedBlock: 61639236,
+  chainId: 8453,
+  deployer: "0x41123d6419C7b8e44157f6F3b0088442116641eC",
+  governance: "0x41123d6419C7b8e44157f6F3b0088442116641eC",
+  orchestratorRegistry: "0xfA6384EB6176cfEC049540526A3d2126C3666d8A",
+  multiAttestationVerifier: "0x9855a39aC5975069632e91160d8712CBfF19e864",
+  paymentVerifierRegistry: "0x2261416DA54C85f975C73FA56EF4D2D6b0aEF7Cc",
+  nullifierRegistryV2: "0x2eb43d6C7c7Ec4220Aa6B8735BC053824a71778C",
+  unifiedPaymentVerifierV4: "0x7Da43ba0F85cfb64733216C4A2288f80dFfe1EAb",
+  disputeProtectionPolicyV2: "0x0d5a9162161d195577A3a3458524574bb462ccDc",
+  disputeVerifier: "0x973578148c5Fd49b9f68B50B26066555325AC708",
+  disputeAttestationVerifier: "0x9855a39aC5975069632e91160d8712CBfF19e864",
+} as const;
+
 // Base staging can carry a reviewed payment-method candidate before the
 // separately approved production activation. Keep the production list above
 // unchanged until that boundary is explicitly authorized.

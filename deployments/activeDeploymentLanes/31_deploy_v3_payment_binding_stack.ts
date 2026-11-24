@@ -10,6 +10,7 @@ import {
 } from "../../deploy/31_deploy_v3_payment_binding_stack";
 import { getActivePaymentMethods } from "../parameters";
 import { upv4RoutesActive } from "../../deploy/47_deploy_unified_payment_verifier_v4";
+import { upv5RoutesActive } from "../../deploy/49_deploy_unified_payment_verifier_v5_stack";
 
 const historicalLane = require("../../deploy/31_deploy_v3_payment_binding_stack").default as
   DeployFunction & { skip: (hre: HardhatRuntimeEnvironment) => Promise<boolean> };
@@ -46,30 +47,41 @@ async function verifyLiveRegistrySurface(
   assert.deepEqual(await legacy.getWriters(), [], "Retired legacy nullifier writers remain");
 }
 
+/** Lane 31's frozen checks plus the live registry surface, against whichever successor verifier is routed. */
+async function verifySuccessorBinding(hre: HardhatRuntimeEnvironment, deploymentName: string): Promise<void> {
+  try {
+    if ((await assertPaymentBindingReady(hre)) !== true) {
+      throw new Error("Live payment-binding artifacts are missing");
+    }
+  } catch (error) {
+    // The SHA-256-pinned lane 31 checks writers last, immediately before returning true.
+    // Only this exact error proves all earlier frozen checks passed; the successor's route check covers writers.
+    if (!(error instanceof Error) ||
+      error.message !== "NullifierRegistryV2 writers must contain only UnifiedPaymentVerifierV3") throw error;
+  }
+  const record = await hre.deployments.get(deploymentName);
+  const verifier = new ethers.Contract(record.address, record.abi, ethers.provider);
+  const governance: string = await verifier.owner();
+  await verifyLiveRegistrySurface(hre, record.address, governance);
+  const nullifiers = await ethers.getContractAt(
+    "NullifierRegistryV2", (await hre.deployments.get("NullifierRegistryV2")).address
+  );
+  assert.equal((await nullifiers.owner()).toLowerCase(), governance.toLowerCase(), "Nullifier registry V2 owner mismatch");
+}
+
 async function verifyLivePaymentBinding(hre: HardhatRuntimeEnvironment): Promise<boolean> {
-  const upv4Active = await upv4RoutesActive(hre);
   const network = hre.deployments.getNetworkName();
-  if (network !== "base" && network !== "base_staging") return upv4Active;
+  const live = network === "base" || network === "base_staging";
+  // Checked first: after the UPV5 cutover no route points at UPV4, which upv4RoutesActive rejects as mixed.
+  if (await upv5RoutesActive(hre)) {
+    if (live) await verifySuccessorBinding(hre, "UnifiedPaymentVerifierV5");
+    return true;
+  }
+  const upv4Active = await upv4RoutesActive(hre);
+  if (!live) return upv4Active;
 
   if (upv4Active) {
-    try {
-      if ((await assertPaymentBindingReady(hre)) !== true) {
-        throw new Error("Live payment-binding artifacts are missing");
-      }
-    } catch (error) {
-      // The SHA-256-pinned lane 31 checks writers last, immediately before returning true.
-      // Only this exact error proves all earlier frozen checks passed; upv4RoutesActive checks the new writer set.
-      if (!(error instanceof Error) ||
-        error.message !== "NullifierRegistryV2 writers must contain only UnifiedPaymentVerifierV3") throw error;
-    }
-    const record = await hre.deployments.get("UnifiedPaymentVerifierV4");
-    const verifier = new ethers.Contract(record.address, record.abi, ethers.provider);
-    const governance: string = await verifier.owner();
-    await verifyLiveRegistrySurface(hre, record.address, governance);
-    const nullifiers = await ethers.getContractAt(
-      "NullifierRegistryV2", (await hre.deployments.get("NullifierRegistryV2")).address
-    );
-    assert.equal((await nullifiers.owner()).toLowerCase(), governance.toLowerCase(), "Nullifier registry V2 owner mismatch");
+    await verifySuccessorBinding(hre, "UnifiedPaymentVerifierV4");
     return true;
   }
 
