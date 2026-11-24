@@ -19,7 +19,7 @@ function config(env, retiredDeployers = RETIRED_DEPLOYERS, kmsInstalls = []) {
   }).outputText;
   const exports = {};
   const requireStub = (name) => {
-    if (name === './utils/deployerKeys') return { getDeployerAccounts: (env) => getDeployerAccounts(env, retiredDeployers) };
+    if (name === './utils/deployerKeys') return { getDeployerAccounts: (env) => getDeployerAccounts(env, retiredDeployers), getDeployerKms };
     if (name === './utils/kmsSigningProvider') return { installDeployerKmsSigning: (env) => kmsInstalls.push(env) };
     return { config() {} };
   };
@@ -134,8 +134,12 @@ test('KMS key ids sign instead of raw keys, per network, never alongside one', (
   assert.deepEqual(getDeployerKms({ STAGING_DEPLOYER_KMS_KEY_ID: '' }), {});
   const installs = [];
   const result = config(kms, RETIRED_DEPLOYERS, installs);
-  assert.deepEqual(Array.from(result.networks.base_staging.accounts), []);
-  assert.deepEqual(Array.from(result.networks.base.accounts), []);
+  // Remote accounts, so eth_accounts reaches the KMS provider instead of Hardhat's empty local-accounts layer.
+  assert.equal(result.networks.base_staging.accounts, 'remote');
+  assert.equal(result.networks.base.accounts, 'remote');
+  const stagingOnly = config({ STAGING_DEPLOYER_KMS_KEY_ID: kms.STAGING_DEPLOYER_KMS_KEY_ID, BASE_DEPLOYER_KEY: '11'.repeat(32) });
+  assert.equal(stagingOnly.networks.base_staging.accounts, 'remote');
+  assert.equal(stagingOnly.networks.base.accounts[0], `0x${'11'.repeat(32)}`);
   assert.equal(installs.length, 1);
   assert.equal(installs[0].STAGING_DEPLOYER_KMS_KEY_ID, kms.STAGING_DEPLOYER_KMS_KEY_ID);
   for (const [raw, keyId] of [['STAGING_DEPLOYER_KEY', 'STAGING_DEPLOYER_KMS_KEY_ID'], ['BASE_DEPLOYER_KEY', 'BASE_DEPLOYER_KMS_KEY_ID']]) {
