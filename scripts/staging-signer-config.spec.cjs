@@ -9,18 +9,20 @@ const ts = require('typescript');
 const os = require('node:os');
 const { spawnSync } = require('node:child_process');
 const { Wallet } = require('ethers');
-const { getDeployerAccounts, RETIRED_DEPLOYERS } = require('../utils/deployerKeys.ts');
+const { DEPLOYER_SIGNER, getDeployerAccounts, getDeployerKms, RETIRED_DEPLOYERS } = require('../utils/deployerKeys.ts');
 
 // Evaluate the actual config without registering Hardhat plugins or reading .env.
-function config(env, retiredDeployers = RETIRED_DEPLOYERS) {
+function config(env, retiredDeployers = RETIRED_DEPLOYERS, kmsInstalls = []) {
   const source = fs.readFileSync(path.join(__dirname, '..', 'hardhat.config.ts'), 'utf8');
   const output = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS },
   }).outputText;
   const exports = {};
-  const requireStub = (name) => name === './utils/deployerKeys'
-    ? { getDeployerAccounts: (env) => getDeployerAccounts(env, retiredDeployers) }
-    : { config() {} };
+  const requireStub = (name) => {
+    if (name === './utils/deployerKeys') return { getDeployerAccounts: (env) => getDeployerAccounts(env, retiredDeployers) };
+    if (name === './utils/kmsSigningProvider') return { installDeployerKmsSigning: (env) => kmsInstalls.push(env) };
+    return { config() {} };
+  };
   requireStub.extensions = {};
   vm.runInNewContext(output, { exports, require: requireStub, process: { env } });
   return exports.default;
@@ -122,6 +124,23 @@ test('Base has no deployer when its setting is unset or empty, even with a stagi
       VANITY_ORCHESTRATOR_V2_PROD_PRIVATE_KEY: '44'.repeat(32),
     });
     assert.deepEqual(Array.from(withVanity.networks.base.accounts), []);
+  }
+});
+
+test('KMS key ids sign instead of raw keys, per network, never alongside one', () => {
+  assert.equal(DEPLOYER_SIGNER, '0x41123d6419C7b8e44157f6F3b0088442116641eC');
+  const kms = { STAGING_DEPLOYER_KMS_KEY_ID: 'alias/peer-kohai-staging-deployer', BASE_DEPLOYER_KMS_KEY_ID: 'arn:aws:kms:us-east-1:411399509833:key/b91257fc-7509-4e77-b277-043b67a88291' };
+  assert.deepEqual(getDeployerKms(kms), { base_staging: kms.STAGING_DEPLOYER_KMS_KEY_ID, base: kms.BASE_DEPLOYER_KMS_KEY_ID });
+  assert.deepEqual(getDeployerKms({ STAGING_DEPLOYER_KMS_KEY_ID: '' }), {});
+  const installs = [];
+  const result = config(kms, RETIRED_DEPLOYERS, installs);
+  assert.deepEqual(Array.from(result.networks.base_staging.accounts), []);
+  assert.deepEqual(Array.from(result.networks.base.accounts), []);
+  assert.equal(installs.length, 1);
+  assert.equal(installs[0].STAGING_DEPLOYER_KMS_KEY_ID, kms.STAGING_DEPLOYER_KMS_KEY_ID);
+  for (const [raw, keyId] of [['STAGING_DEPLOYER_KEY', 'STAGING_DEPLOYER_KMS_KEY_ID'], ['BASE_DEPLOYER_KEY', 'BASE_DEPLOYER_KMS_KEY_ID']]) {
+    assert.throws(() => getDeployerAccounts({ [raw]: '22'.repeat(32), [keyId]: 'alias/x' }), { message: `Set ${raw} or ${keyId}, not both` });
+    assert.throws(() => config({ [raw]: '22'.repeat(32), [keyId]: 'alias/x' }), { message: `Set ${raw} or ${keyId}, not both` });
   }
 });
 

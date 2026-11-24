@@ -10,6 +10,10 @@
   },
   "files": [
     "hardhat.config.ts",
+    "hardhat.kms-local.config.ts",
+    "utils/kmsSigner.ts",
+    "utils/kmsSigningProvider.ts",
+    "scripts/lib/fakeKms.ts",
     "deployments/activeDisputeStack.cjs",
     "deployments/activeDeploymentLanes/30_deploy_v3_lifecycle_stack.ts",
     "deployments/activeDeploymentLanes/31_deploy_v3_payment_binding_stack.ts",

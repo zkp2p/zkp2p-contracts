@@ -21,6 +21,7 @@
     "compile": "hardhat compile",
     "coverage": "node scripts/run-foundry-coverage.cjs",
     "deploy:localhost": "ts-node --transpile-only scripts/deployActive.ts localhost",
+    "deploy:localhost:kms": "HARDHAT_CONFIG=hardhat.kms-local.config.ts ts-node --transpile-only scripts/deployActive.ts localhost",
     "deploy:sepolia": "ts-node --transpile-only scripts/deployActive.ts sepolia",
     "deploy:base": "ts-node --transpile-only scripts/deployActive.ts base && hardhat export --network base --export ./deployments/outputs/baseContracts.ts && ts-node --transpile-only scripts/canonicalizeDeploymentOutput.ts base ./deployments/outputs/baseContracts.ts && yarn workspace @zkp2p/contracts-v2 extract",
     "deploy:base_staging": "ts-node --transpile-only scripts/deployActive.ts base_staging && hardhat export --network base_staging --export ./deployments/outputs/baseStagingContracts.ts && ts-node --transpile-only scripts/canonicalizeDeploymentOutput.ts base_staging ./deployments/outputs/baseStagingContracts.ts && yarn workspace @zkp2p/contracts-v2 extract",
@@ -69,6 +70,7 @@
     "test:v3-groups-deployment": "node scripts/test-v3-groups-base-deployment.cjs prepare-resume && node scripts/test-v3-groups-base-deployment.cjs reject-mismatch && node scripts/test-v3-groups-base-deployment.cjs managed-hook-guard && node scripts/test-v3-groups-base-deployment.cjs managed-hook-no-rollback && node scripts/test-v3-groups-base-deployment.cjs managed-hook-successor-policy && node scripts/test-v3-groups-base-deployment.cjs managed-hook-bytecode-mismatch && node scripts/test-v3-groups-base-deployment.cjs managed-hook-historical-successor && node scripts/test-v3-groups-base-deployment.cjs managed-hook-unrecognized-live",
     "test:release-policy": "node --test scripts/verify-github-environment.spec.mjs scripts/npm-release.spec.mjs scripts/orchestrator-v4-history.spec.cjs",
     "test:staging-signer-config": "node --test scripts/staging-signer-config.spec.cjs",
+    "test:kms-signer": "node --test scripts/kms-signer.spec.cjs",
     "typechain": "hardhat typechain",
     "transpile": "tsc",
     "typecheck:dispute-deployment": "tsc -p tsconfig.dispute-deployment.json",
@@ -97,6 +99,7 @@
     "test:orchestrator-v4-base-fork": "HARDHAT_CONFIG=hardhat.base-fork.config.ts HARDHAT_NETWORK=hardhat node --test scripts/orchestrator-v4-base-fork.spec.cjs"
   },
   "devDependencies": {
+    "@aws-sdk/client-kms": "3.1166.0",
     "@nomicfoundation/hardhat-verify": "2.1.3",
     "@nomiclabs/hardhat-ethers": "^2.2.2",
     "@nomiclabs/hardhat-etherscan": "^3.1.7",
