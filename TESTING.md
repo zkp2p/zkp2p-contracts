@@ -91,6 +91,15 @@ BASE_FORK_RPC_URL="https://base-mainnet.g.alchemy.com/v2/$ALCHEMY_API_KEY" \
   forge test --match-path 'test-foundry/fork/UnifiedPaymentVerifierV4BaseCutover.t.sol' -vv
 ```
 
+`NullifierRegistryV3BaseFork.t.sol` forks the latest Base block, so a non-archive RPC is enough. It deploys `NullifierRegistryV3` over the live `NullifierRegistryV2` and checks a pinned live nullifier, a fresh write, and a UPV5 replay against both:
+
+```bash
+BASE_FORK_RPC_URL="https://base-rpc.publicnode.com" \
+  forge test --match-path 'test-foundry/fork/NullifierRegistryV3BaseFork.t.sol' -vv
+```
+
+`test-foundry/fixtures/upv5-golden-vector.json` is the UPV5 payment and dispute vector shared byte for byte with the attestation service. `UnifiedPaymentVerifierV5Cutover.t.sol` embeds its values; change both together.
+
 ## Expected local runtimes
 
 On the recorded Apple M5 Max / Foundry v1.7.1 host, deterministic tests take about 0.8s warm and the complete suite takes about 5.6s warm. The local monolithic coverage command takes about 5 minutes: roughly 288 seconds for the complete minimal-IR pass and about 12 seconds for all exact-source mapping shards. The four CI coverage lanes are balanced independently because GitHub-hosted runners are slower than the local host. Subsequent normal test runs use Foundry's content-addressed cache, while coverage correctness never depends on cache state.
