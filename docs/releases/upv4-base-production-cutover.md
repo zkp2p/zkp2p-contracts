@@ -200,6 +200,10 @@ that as this prohibition, not as an on-chain guard.
 
 Approval: a Safe proposal and execution of the prepared rollback.
 
+Retired: the rollback batch now lives at `superseded/base_upv4_rollback.json`. After the UPV5 cutover
+(`docs/releases/upv5-cutover.md`) it would route to a verifier whose replay domain cannot see NullifierRegistryV3,
+so it must never run. The rest of this section is history.
+
 `base_upv4_rollback.json` holds 26 calls. It removes all 13 routes in reverse
 order and re-adds them on UPV3 in the original order, with the same currencies.
 It changes no writer. It is valid only while UPV3 is still an NRV2 writer, which

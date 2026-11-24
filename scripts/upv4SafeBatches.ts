@@ -1,7 +1,7 @@
 import * as assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { utils } from "ethers";
 import { UPV4_BASE_RELEASE } from "../deployments/parameters";
 import { installSafeArtifactPair } from "../deployments/safeArtifacts";
@@ -50,6 +50,7 @@ function write(): void {
   for (const { kind, fileName, batch, contents, sidecar } of artifacts) {
     assertUpv4SafeBatch(kind, batch, baseCutoverConfig(), address);
     const batchPath = resolve(BATCH_DIRECTORY, fileName);
+    mkdirSync(dirname(batchPath), { recursive: true });
     const result = installSafeArtifactPair({
       batchPath, sidecarPath: batchPath.replace(/\.json$/, ".sha256.json"),
       supersededDir: resolve(BATCH_DIRECTORY, "superseded"), supersededSuffix: randomUUID(),

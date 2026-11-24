@@ -7,12 +7,15 @@ import '@nomicfoundation/hardhat-verify';
 
 import { HardhatUserConfig } from "hardhat/config";
 import { getDeployerAccounts } from "./utils/deployerKeys";
+import { installDeployerKmsSigning } from "./utils/kmsSigningProvider";
 
 import "./tasks/etherscanVerifyWithDelay";
 
 
 dotenv.config();
 const deployerAccounts = getDeployerAccounts(process.env);
+// STAGING_DEPLOYER_KMS_KEY_ID / BASE_DEPLOYER_KMS_KEY_ID sign as the deployer through AWS KMS instead of a raw key.
+installDeployerKmsSigning(process.env);
 
 // Skip non-deploy script files (e.g., Markdown notes, CLAUDE.md etc.) in the deploy/ folder
 // by registering no-op require handlers that instruct hardhat-deploy to skip them.

@@ -17,6 +17,10 @@ const laneSource = fs.readFileSync(
   path.resolve(__dirname, "../deploy/41_add_upi_payment_method.ts"),
   "utf8"
 );
+const activationSource = fs.readFileSync(
+  path.resolve(__dirname, "../deployments/paymentMethodActivation.ts"),
+  "utf8"
+);
 const bindingSource = fs.readFileSync(
   path.resolve(__dirname, "../deploy/31_deploy_v3_payment_binding_stack.ts"),
   "utf8"
@@ -66,23 +70,20 @@ test("UPI catalogs reflect the executed production registration without staging 
 });
 
 test("UPI activation is tag-only, mutually exclusive, and staging-only", () => {
-  assert.match(laneSource, /network !== "base_staging"/u);
-  assert.match(laneSource, /const EXPECTED_CHAIN_ID = 8453/u);
-  assert.match(
-    laneSource,
-    /const PREPARE_FLAG = "PREPARE_STAGING_UPI_PAYMENT_METHOD"/u
-  );
-  assert.match(
-    laneSource,
-    /const EXECUTE_FLAG = "EXECUTE_STAGING_UPI_PAYMENT_METHOD"/u
-  );
-  assert.match(laneSource, /if \(prepare && execute\)/u);
-  assert.match(laneSource, /process\.env\.DEPLOY_ACTIVE_TAG === TAG/u);
-  assert.match(laneSource, /UPI activation signer or contract owner mismatch/u);
-  assert.match(laneSource, /UPI activation nullifier writer invariant failed/u);
+  assert.match(laneSource, /createStagingPaymentMethodLane\(/u);
+  assert.match(laneSource, /tag: "41_add_upi_payment_method"/u);
+  assert.match(laneSource, /prepareFlag: "PREPARE_STAGING_UPI_PAYMENT_METHOD"/u);
+  assert.match(laneSource, /executeFlag: "EXECUTE_STAGING_UPI_PAYMENT_METHOD"/u);
+  assert.match(laneSource, /\.\.\.UPI_PROVIDER_CONFIG/u);
+  assert.match(activationSource, /process\.env\.DEPLOY_ACTIVE_TAG !== lane\.tag/u);
+  assert.match(activationSource, /getNetworkName\(\) !== "base_staging"/u);
+  assert.match(activationSource, /const EXPECTED_CHAIN_ID = 8453/u);
+  assert.match(activationSource, /if \(prepare === execute\)/u);
+  assert.match(activationSource, /activation signer or contract owner mismatch/u);
+  assert.match(activationSource, /activation nullifier writer invariant failed/u);
   assert.ok(
-    laneSource.lastIndexOf("await addPaymentMethodToUnifiedVerifier(") <
-      laneSource.lastIndexOf("await addPaymentMethodToRegistry(")
+    activationSource.lastIndexOf("await addPaymentMethodToUnifiedVerifier(") <
+      activationSource.lastIndexOf("await addPaymentMethodToRegistry(")
   );
 });
 

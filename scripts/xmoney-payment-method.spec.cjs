@@ -135,17 +135,15 @@ function harness({ mode = "execute", selectedTag = tag, network = "base_staging"
     },
     getUnnamedAccounts: async () => [pinned.governance],
   };
-  dependencies["./31_deploy_v3_payment_binding_stack"] = binding;
-  const lane = loadLane("43_add_xmoney_payment_method.ts", dependencies, env).default;
   const liveLane = loadLane("../deployments/activeDeploymentLanes/31_deploy_v3_payment_binding_stack.ts", {
     "node:assert/strict": assert,
     hardhat: dependencies.hardhat,
     "../../deploy/31_deploy_v3_payment_binding_stack": binding,
     "../../deploy/47_deploy_unified_payment_verifier_v4": { upv4RoutesActive: async () => false },
+    "../../deploy/49_deploy_unified_payment_verifier_v5_stack": { upv5RoutesActive: async () => false },
     "../parameters": parameters,
   }, env).default;
   return {
-    run: () => lane(hre), ready: () => binding.paymentBindingCutoverReady(hre),
     runLive: () => liveLane(hre), skipLive: () => liveLane.skip(hre),
     calls, contracts, provider, hre, registryMethods, verifierMethods, binding, ethers: dependencies.hardhat.ethers,
     actions: () => calls.filter((call) => call !== "read"),
@@ -199,6 +197,7 @@ test("the mounted lane preserves local deployment and skip behavior", async () =
     hardhat: { ethers },
     "../../deploy/31_deploy_v3_payment_binding_stack": { default: historical },
     "../../deploy/47_deploy_unified_payment_verifier_v4": { upv4RoutesActive: async () => false },
+    "../../deploy/49_deploy_unified_payment_verifier_v5_stack": { upv5RoutesActive: async () => false },
     "../parameters": parameters,
   }, {}).default;
   const hre = { deployments: { getNetworkName: () => "localhost" } };
@@ -254,6 +253,7 @@ test("the lane 31 wrapper defers to active UPV4 and preserves frozen live checks
           return bindingReady();
         },
       },
+      "../../deploy/49_deploy_unified_payment_verifier_v5_stack": { upv5RoutesActive: async () => false },
       "../../deploy/47_deploy_unified_payment_verifier_v4": {
         upv4RoutesActive: async (actual) => {
           assert.equal(actual, hre);
@@ -335,9 +335,153 @@ test("lane 31 source is pinned and the runner selects the live wrapper", () => {
   }]);
 });
 
+
+test("the lane 31 wrapper defers to active UPV5 before probing UPV4", async () => {
+  const writerMessage = "NullifierRegistryV2 writers must contain only UnifiedPaymentVerifierV3";
+  const upv5 = "0x5000000000000000000000000000000000000005";
+  for (const network of ["localhost", "base", "base_staging"]) {
+    const h = network === "localhost" ? null : harness({ network, registryHas: true, verifierHas: true });
+    const hre = h?.hre ?? { deployments: {
+      getNetworkName: () => network,
+      get: async () => assert.fail("local deferral must not read deployment records"),
+    } };
+    const abi = ["function owner() view returns (address)"];
+    const iface = new ethers.utils.Interface(abi);
+    if (h) {
+      const get = hre.deployments.get;
+      hre.deployments.get = async (name) => name === "UnifiedPaymentVerifierV5" ? { address: upv5, abi } : get(name);
+      h.contracts.PaymentVerifierRegistry.getVerifier = async () => upv5;
+      h.provider._isProvider = true;
+      h.provider.call = async (request) => {
+        assert.equal((await request.to).toLowerCase(), upv5.toLowerCase());
+        return iface.encodeFunctionResult("owner", [await h.contracts.UnifiedPaymentVerifierV3.owner()]);
+      };
+    }
+    let upv5Checks = 0;
+    const historical = async () => assert.fail("historical deployment must not run");
+    historical.skip = async () => assert.fail("historical skip must not run");
+    const lane = loadLane("../deployments/activeDeploymentLanes/31_deploy_v3_payment_binding_stack.ts", {
+      "node:assert/strict": assert,
+      hardhat: { ethers: h?.ethers ?? { ...ethers, getContractAt: async () => assert.fail("local deferral must not read contracts") } },
+      "../../deploy/31_deploy_v3_payment_binding_stack": {
+        ...h?.binding, default: historical,
+        assertPaymentBindingReady: async () => { throw new Error(writerMessage); },
+      },
+      "../../deploy/47_deploy_unified_payment_verifier_v4": {
+        upv4RoutesActive: async () => assert.fail("UPV4 probe must not run once UPV5 is routed"),
+      },
+      "../../deploy/49_deploy_unified_payment_verifier_v5_stack": {
+        upv5RoutesActive: async (actual) => { assert.equal(actual, hre); upv5Checks++; return true; },
+      },
+      "../parameters": parameters,
+    }, {}).default;
+    assert.equal(await lane.skip(hre), true);
+    await lane(hre);
+    assert.equal(upv5Checks, 2);
+    if (h) {
+      h.contracts.PaymentVerifierRegistry.getVerifier = async () => parameters.UPV4_BASE_RELEASE.unifiedPaymentVerifierV4;
+      await assert.rejects(lane.skip(hre), /verifier route mismatch/);
+      assert.deepEqual(h.actions(), []);
+    }
+  }
+});
+
+const STAGING_PVR = "0x2261416DA54C85f975C73FA56EF4D2D6b0aEF7Cc";
+const STAGING_UPV4 = "0x7Da43ba0F85cfb64733216C4A2288f80dFfe1EAb";
+const STAGING_NRV2 = "0x2eb43d6C7c7Ec4220Aa6B8735BC053824a71778C";
+const STAGING_SIGNER = "0x41123d6419C7b8e44157f6F3b0088442116641eC";
+const STAGING_UPV5 = "0x5000000000000000000000000000000000000005";
+const STAGING_NRV3 = "0x3000000000000000000000000000000000000003";
+
+function activationHarness({ active = "v5", mode = "execute", selectedTag = tag, network = "base_staging",
+  registryHas = false, verifierHas = false, failRegistry = false } = {}) {
+  const calls = [];
+  const env = { DEPLOY_ACTIVE_TAG: selectedTag };
+  if (mode === "prepare" || mode === "both") env.PREPARE_STAGING_XMONEY_PAYMENT_METHOD = "true";
+  if (mode === "execute" || mode === "both") env.EXECUTE_STAGING_XMONEY_PAYMENT_METHOD = "true";
+  const routed = active === "v5" ? STAGING_UPV5 : STAGING_UPV4;
+  const existing = ["venmo", "paypal"].map(hash);
+  const registryMethods = [...existing, ...(registryHas ? [method] : [])];
+  const verifierMethods = [...existing, ...(verifierHas ? [method] : [])];
+  const routes = new Map(registryMethods.map((value) => [value, { verifier: routed, currencies: [hash("USD")] }]));
+  const records = {
+    PaymentVerifierRegistry: { address: STAGING_PVR },
+    UnifiedPaymentVerifierV4: { address: STAGING_UPV4 },
+    UnifiedPaymentVerifierV5: { address: STAGING_UPV5 },
+  };
+  const owner = async () => STAGING_SIGNER;
+  const verifier = {
+    address: routed, owner,
+    nullifierRegistry: async () => active === "v5" ? STAGING_NRV3 : STAGING_NRV2,
+    isPaymentMethod: async (value) => verifierMethods.includes(value),
+    callStatic: { addPaymentMethod: async (...args) => calls.push(["simulate-verifier", ...args]) },
+  };
+  const contracts = {
+    PaymentVerifierRegistry: {
+      address: STAGING_PVR, owner,
+      getPaymentMethods: async () => [...registryMethods],
+      getVerifier: async (value) => routes.get(value)?.verifier ?? ethers.constants.AddressZero,
+      getCurrencies: async (value) => routes.get(value)?.currencies ?? [],
+      isPaymentMethod: async (value) => routes.has(value),
+      callStatic: { addPaymentMethod: async (...args) => calls.push(["simulate-registry", ...args]) },
+    },
+    [active === "v5" ? "UnifiedPaymentVerifierV5" : "UnifiedPaymentVerifierV4"]: verifier,
+    NullifierRegistryV2: { address: STAGING_NRV2, getWriters: async () => active === "v5" ? [] : [STAGING_UPV4] },
+    NullifierRegistryV3: { address: STAGING_NRV3, getWriters: async () => [STAGING_UPV5] },
+  };
+  const provider = { getNetwork: async () => { calls.push("read"); return { chainId: 8453 }; } };
+  const hre = {
+    deployments: {
+      getNetworkName: () => network,
+      get: async (name) => { assert.ok(records[name], `missing ${name}`); return records[name]; },
+      getOrNull: async (name) => records[name] ?? null,
+    },
+    ethers: {
+      provider,
+      getContractAt: async (name, address) => {
+        assert.ok(contracts[name], `unexpected contract ${name}`);
+        assert.equal(address.toLowerCase(), contracts[name].address.toLowerCase());
+        return contracts[name];
+      },
+    },
+    getUnnamedAccounts: async () => [STAGING_SIGNER],
+  };
+  const helpers = {
+    addPaymentMethodToUnifiedVerifier: async (_hre, contract, value) => {
+      assert.equal(contract, verifier);
+      if (!verifierMethods.includes(value)) {
+        calls.push("verifier-write");
+        verifierMethods.push(value);
+      }
+    },
+    addPaymentMethodToRegistry: async (_hre, contract, value, verifierAddress, currencies) => {
+      assert.equal(contract, contracts.PaymentVerifierRegistry);
+      assert.equal(verifierAddress, routed);
+      if (!routes.has(value)) {
+        calls.push("registry-write");
+        if (failRegistry) throw new Error("registry transaction failed");
+        routes.set(value, { verifier: verifierAddress, currencies });
+        registryMethods.push(value);
+      }
+    },
+    savePaymentMethodSnapshot: (...args) => calls.push(["snapshot", ...args]),
+  };
+  const activation = loadLane("../deployments/paymentMethodActivation.ts", { "./helpers": helpers }, env);
+  const lane = loadLane("43_add_xmoney_payment_method.ts", {
+    "module-alias/register": {},
+    "../deployments/paymentMethodActivation": activation,
+    "../deployments/verifiers/xmoney": { XMONEY_PROVIDER_CONFIG },
+  }, env).default;
+  return {
+    run: () => lane(hre), skip: () => lane.skip(hre), activation, calls, contracts, verifier, records, routes,
+    provider, hre, registryMethods, verifierMethods, actions: () => calls.filter((call) => call !== "read"),
+  };
+}
+
 test("untagged and non-staging invocations are inert", async () => {
   for (const config of [{ selectedTag: "" }, { selectedTag: "another-lane" }, { network: "base" }]) {
-    const h = harness(config);
+    const h = activationHarness(config);
+    assert.equal(await h.skip(), true);
     await h.run();
     assert.deepEqual(h.calls, []);
   }
@@ -345,91 +489,114 @@ test("untagged and non-staging invocations are inert", async () => {
 
 test("missing or conflicting mode rejects before RPC", async () => {
   for (const mode of ["none", "both"]) {
-    const h = harness({ mode });
+    const h = activationHarness({ mode });
     await assert.rejects(h.run(), /Set exactly one/);
     assert.deepEqual(h.calls, []);
   }
 });
 
-test("prepare simulates the exact two writes without sending or recording state", async () => {
-  const h = harness({ mode: "prepare" });
-  await h.run();
-  assert.deepEqual(h.actions(), [
-    ["simulate-verifier", method],
-    ["simulate-registry", method, h.contracts.UnifiedPaymentVerifierV3.address, [hash("USD")]],
-  ]);
+test("the active verifier is the one every route uses: UPV5 after its cutover, UPV4 before", async () => {
+  const after = activationHarness({ active: "v5" });
+  assert.deepEqual({ ...await after.activation.resolveActivePaymentVerifier(after.hre) }, {
+    name: "UnifiedPaymentVerifierV5", address: STAGING_UPV5, nullifierRegistryName: "NullifierRegistryV3",
+  });
+  // A recorded but not yet routed UPV5 must not receive new methods: V3 would not let it write.
+  const before = activationHarness({ active: "v4" });
+  assert.ok(before.records.UnifiedPaymentVerifierV5);
+  assert.deepEqual({ ...await before.activation.resolveActivePaymentVerifier(before.hre) }, {
+    name: "UnifiedPaymentVerifierV4", address: STAGING_UPV4, nullifierRegistryName: "NullifierRegistryV2",
+  });
+  delete before.records.UnifiedPaymentVerifierV5;
+  assert.equal((await before.activation.resolveActivePaymentVerifier(before.hre)).address, STAGING_UPV4);
+  const mixed = activationHarness();
+  mixed.routes.get(hash("venmo")).verifier = STAGING_UPV4;
+  await assert.rejects(mixed.activation.resolveActivePaymentVerifier(mixed.hre), /routes to several verifiers/);
+  const unknown = activationHarness();
+  delete unknown.records.UnifiedPaymentVerifierV5;
+  await assert.rejects(unknown.activation.resolveActivePaymentVerifier(unknown.hre), /neither the recorded UPV5 nor UPV4/);
 });
 
-test("activation preserves existing methods and passes ordinary lane-31 readiness", async () => {
-  const h = harness();
-  const before = [...h.registryMethods];
-  await assert.rejects(h.ready(), /payment methods do not match the active method set/);
-  await h.run();
-  assert.deepEqual(h.registryMethods, [...before, method]);
-  assert.deepEqual(h.verifierMethods, [...before, method]);
-  assert.deepEqual(h.actions().slice(2), [
-    "verifier-write", "registry-write",
-    ["snapshot", "base_staging", "xmoney", XMONEY_PROVIDER_CONFIG],
-  ]);
-  assert.equal(await h.ready(), true);
+test("prepare simulates exactly the two writes on the active verifier without sending", async () => {
+  for (const active of ["v4", "v5"]) {
+    const h = activationHarness({ active, mode: "prepare" });
+    await h.run();
+    assert.deepEqual(h.actions(), [
+      ["simulate-verifier", method],
+      ["simulate-registry", method, h.verifier.address, [hash("USD")]],
+    ]);
+  }
+});
+
+test("execution adds the method to the active verifier, then routes it there", async () => {
+  for (const active of ["v4", "v5"]) {
+    const h = activationHarness({ active });
+    await h.run();
+    assert.deepEqual(h.actions().slice(2), [
+      "verifier-write", "registry-write", ["snapshot", "base_staging", "xmoney", XMONEY_PROVIDER_CONFIG],
+    ]);
+    assert.deepEqual(h.routes.get(method), { verifier: h.verifier.address, currencies: [hash("USD")] });
+    assert.deepEqual(h.registryMethods.slice(0, 2), ["venmo", "paypal"].map(hash));
+  }
 });
 
 test("verifier-only activation resumes; an active binding sends no transactions", async () => {
-  const partial = harness({ verifierHas: true });
+  const partial = activationHarness({ verifierHas: true });
   await partial.run();
   assert.deepEqual(partial.actions().map((call) => Array.isArray(call) ? call[0] : call),
     ["simulate-registry", "registry-write", "snapshot"]);
-  const active = harness({ verifierHas: true, registryHas: true });
+  const active = activationHarness({ verifierHas: true, registryHas: true });
   await active.run();
   assert.deepEqual(active.actions(), [["snapshot", "base_staging", "xmoney", XMONEY_PROVIDER_CONFIG]]);
 });
 
 test("registry-before-verifier is rejected before simulation or writes", async () => {
-  const h = harness({ registryHas: true });
-  await assert.rejects(h.run(), /payment binding is not ready/);
+  const h = activationHarness({ registryHas: true });
+  await assert.rejects(h.run(), /contains X Money before UnifiedPaymentVerifierV5/);
   assert.deepEqual(h.actions(), []);
 });
 
-test("chain, signer, owner, bytecode, replay and catalog drift reject before work", async () => {
+test("chain, signer, owner, writer and route drift reject before work", async () => {
   const mutations = [
-    (h) => { h.provider.getNetwork = async () => ({ chainId: 1 }); },
-    (h) => { h.hre.getUnnamedAccounts = async () => [ethers.constants.AddressZero]; },
-    (h) => { h.contracts.PaymentVerifierRegistry.owner = async () => ethers.constants.AddressZero; },
-    (h) => { h.provider.getCode = async () => "0x6001"; },
-    (h) => { h.contracts.NullifierRegistry.getWriters = async () => [ethers.constants.AddressZero]; },
-    (h) => { h.contracts.NullifierRegistryV2.getWriters = async () => []; },
-    (h) => { h.contracts.UnifiedPaymentVerifierV3.nullifierRegistry = async () => ethers.constants.AddressZero; },
-    (h) => { h.registryMethods.reverse(); },
-    (h) => { h.verifierMethods.pop(); },
-    (h) => { h.registryMethods.push(hash("unapproved")); },
-    (h) => { h.contracts.PaymentVerifierRegistry.getCurrencies = async () => [hash("EUR")]; },
-    (h) => { h.contracts.PaymentVerifierRegistry.getVerifier = async () => ethers.constants.AddressZero; },
+    [(h) => { h.provider.getNetwork = async () => ({ chainId: 1 }); }, /chain ID 1/],
+    [(h) => { h.hre.getUnnamedAccounts = async () => [ethers.constants.AddressZero]; }, /signer or contract owner mismatch/],
+    [(h) => { h.contracts.PaymentVerifierRegistry.owner = async () => ethers.constants.AddressZero; }, /signer or contract owner mismatch/],
+    [(h) => { h.verifier.owner = async () => ethers.constants.AddressZero; }, /signer or contract owner mismatch/],
+    [(h) => { h.contracts.NullifierRegistryV3.getWriters = async () => []; }, /nullifier writer invariant failed/],
+    [(h) => { h.routes.get(hash("paypal")).verifier = STAGING_UPV4; }, /routes to several verifiers/],
+    [(h) => { h.hre.deployments.getOrNull = async () => null; }, /neither the recorded UPV5 nor UPV4/],
   ];
-  for (const mutate of mutations) {
-    const h = harness();
+  for (const [mutate, expected] of mutations) {
+    const h = activationHarness();
     mutate(h);
-    await assert.rejects(h.run());
+    await assert.rejects(h.run(), expected);
     assert.deepEqual(h.actions(), []);
   }
+  const elsewhere = activationHarness({ registryHas: true, verifierHas: true });
+  elsewhere.contracts.PaymentVerifierRegistry.getCurrencies = async (value) => value === method ? [hash("EUR")] : [hash("USD")];
+  await assert.rejects(elsewhere.run(), /registry routes it to .* with \[/);
+  assert.deepEqual(elsewhere.actions(), []);
 });
 
 test("simulation or transaction failure cannot record an active snapshot", async () => {
-  const simulation = harness();
+  const simulation = activationHarness();
   simulation.contracts.PaymentVerifierRegistry.callStatic.addPaymentMethod = async () => {
     throw new Error("simulation failed");
   };
   await assert.rejects(simulation.run(), /simulation failed/);
   assert.deepEqual(simulation.actions(), [["simulate-verifier", method]]);
-  const transaction = harness({ failRegistry: true });
+  const transaction = activationHarness({ failRegistry: true });
   await assert.rejects(transaction.run(), /registry transaction failed/);
   assert.equal(transaction.actions().some((call) => Array.isArray(call) && call[0] === "snapshot"), false);
 });
 
 test("post-write drift cannot record an active snapshot", async () => {
-  const h = harness();
+  const h = activationHarness();
   const getVerifier = h.contracts.PaymentVerifierRegistry.getVerifier;
-  h.contracts.PaymentVerifierRegistry.getVerifier = async (value) =>
-    value === method ? ethers.constants.AddressZero : getVerifier(value);
+  let writes = 0;
+  h.contracts.PaymentVerifierRegistry.getVerifier = async (value) => {
+    if (value === method && h.registryMethods.includes(method)) writes++;
+    return value === method && writes > 0 ? ethers.constants.AddressZero : getVerifier(value);
+  };
   await assert.rejects(h.run(), /activation verification failed/);
   assert.equal(h.actions().some((call) => Array.isArray(call) && call[0] === "snapshot"), false);
 });

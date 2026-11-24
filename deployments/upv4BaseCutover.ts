@@ -77,7 +77,8 @@ export interface Upv4ReleasePlan {
 export const UPV4_SAFE_BATCH_FILES: Record<Upv4SafeBatchKind, string> = {
   [Upv4SafeBatchKind.Cutover]: "base_upv4_cutover.json",
   [Upv4SafeBatchKind.Upv3WriterRemoval]: "base_upv4_upv3_writer_removal.json",
-  [Upv4SafeBatchKind.Rollback]: "base_upv4_rollback.json",
+  // Superseded by the UPV5 cutover: once NullifierRegistryV3 takes a write, routing back to UPV3 reopens replay.
+  [Upv4SafeBatchKind.Rollback]: "superseded/base_upv4_rollback.json",
 };
 
 const BATCH_NAMES: Record<Upv4SafeBatchKind, string> = {

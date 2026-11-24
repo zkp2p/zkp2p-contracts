@@ -5,6 +5,29 @@ export const RETIRED_DEPLOYERS: readonly string[] = [
   "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
 ];
 
+// The Base and Base staging deployer, and staging governance. Since 2026-11-12 its key lives only in AWS KMS.
+export const DEPLOYER_SIGNER = "0x41123d6419C7b8e44157f6F3b0088442116641eC";
+
+const KMS_KEY_SETTINGS = { base: "BASE_DEPLOYER_KMS_KEY_ID", base_staging: "STAGING_DEPLOYER_KMS_KEY_ID" } as const;
+const RAW_KEY_SETTINGS = { base: "BASE_DEPLOYER_KEY", base_staging: "STAGING_DEPLOYER_KEY" } as const;
+
+/**
+ * KMS key id, ARN or alias that signs as the deployer on each network. A network takes either a raw key or a KMS
+ * key, never both, so it is always clear which one signs.
+ */
+export function getDeployerKms(env: Record<string, string | undefined>): { base?: string; base_staging?: string } {
+  const keys: { base?: string; base_staging?: string } = {};
+  for (const network of ["base", "base_staging"] as const) {
+    const keyId = env[KMS_KEY_SETTINGS[network]];
+    if (!keyId) continue;
+    if (env[RAW_KEY_SETTINGS[network]]) {
+      throw new Error(`Set ${RAW_KEY_SETTINGS[network]} or ${KMS_KEY_SETTINGS[network]}, not both`);
+    }
+    keys[network] = keyId;
+  }
+  return keys;
+}
+
 /**
  * Fails closed if BASE_DEPLOY_PRIVATE_KEY is defined, even empty, or a configured
  * BASE_DEPLOYER_KEY, STAGING_DEPLOYER_KEY, VANITY_ESCROW_V2_PROD_PRIVATE_KEY,
@@ -37,6 +60,7 @@ export function getDeployerAccounts(
     return [key];
   }
 
+  getDeployerKms(env);
   const base = accounts("BASE_DEPLOYER_KEY");
   const escrowVanity = accounts("VANITY_ESCROW_V2_PROD_PRIVATE_KEY");
   const orchestratorVanity = accounts("VANITY_ORCHESTRATOR_V2_PROD_PRIVATE_KEY");

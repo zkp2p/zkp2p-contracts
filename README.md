@@ -146,8 +146,9 @@ cp .env.default .env
 Fill the relevant environment variables, including the ones used by deployment and verification flows:
 
 - `ALCHEMY_API_KEY`
-- `BASE_DEPLOYER_KEY` (production signer `0x41123d6419C7b8e44157f6F3b0088442116641eC`)
-- `STAGING_DEPLOYER_KEY` (staging signer; no production-key fallback)
+- `BASE_DEPLOYER_KMS_KEY_ID` / `STAGING_DEPLOYER_KMS_KEY_ID`: the AWS KMS key (id, ARN or alias) that signs as
+  `0x41123d6419C7b8e44157f6F3b0088442116641eC`. Its key exists only in KMS, so the older `BASE_DEPLOYER_KEY` /
+  `STAGING_DEPLOYER_KEY` raw keys are unset; a network takes one or the other, never both.
 - `TESTNET_DEPLOY_PRIVATE_KEY`
 - `BASESCAN_API_KEY`
 - `ETHERSCAN_KEY`
@@ -262,6 +263,9 @@ handling and no deployer account when unset. Delete `BASE_DEPLOY_PRIVATE_KEY` fr
 rejects it. Its former signer `0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929` was compromised on 2026-10-28,
 is retired, and must never sign again.
 All configured keys are checked against retired signers; Base vanity accounts are ignored without `BASE_DEPLOYER_KEY`.
+Since 2026-11-12 the signer's key lives only in AWS KMS. Set `STAGING_DEPLOYER_KMS_KEY_ID` / `BASE_DEPLOYER_KMS_KEY_ID`
+instead: Hardhat then signs as the deployer through KMS, after checking that the key derives this exact address and
+no retired one.
 
 Use this signer for future staging deployments and as the owner of every ownable component in the
 current staging stack. Historical contracts outside that stack do not need to migrate.

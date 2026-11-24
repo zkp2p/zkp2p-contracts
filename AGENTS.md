@@ -128,10 +128,12 @@
   (tx `0x5cde17a0c59ba4b606b19b9d09b468af06cd283d256984160e9627aaff4dc451`), so Cash App reads a zero window on both
   networks, the evidence and package manifest carry `0` everywhere, and the lane — immutable and pinned after that
   first execution — stays mounted and skips wherever every retired window already reads zero.
-- Lane `43` adds the X Money payment method on Base staging only. Untagged runs are inert; tagged preparation and
-  execution are mutually exclusive. It reuses lane 31's payment-binding checks, permitting only the pending
-  `xmoney` entry to be absent during preparation. Execution registers it in UPV3 before the registry, requires full
-  readiness, then records the snapshot. Production activation is intentionally outside this lane.
+- Lanes `35`, `41` and `43` add Mercury, UPI and X Money on Base staging. They share
+  `createStagingPaymentMethodLane` (`deployments/paymentMethodActivation.ts`): tag-only, Base staging only, exactly
+  one of the lane's `PREPARE_`/`EXECUTE_` flags. `resolveActivePaymentVerifier` picks the verifier every
+  `PaymentVerifierRegistry` route already uses, which must be the recorded UPV5 or, until the UPV5 cutover, the
+  recorded UPV4. Execution adds the method to that verifier, then routes it there. Production activation is
+  intentionally outside these lanes.
 - Lane `44` deploys `FxRateStore` and two Chainlink-compatible `FxRateFeed`s, INR/USD (`FxRateFeedInrUsd`) and
   CNY/USD (`FxRateFeedCnyUsd`), each `XXX/USD` with 8 decimals. Curator's `fx-rate-push` job writes them from
   ExchangeRate-API.
@@ -187,7 +189,8 @@
       UPV4. UPV3 stays a writer, so rollback still works. It executed at Safe nonce 86 on 2026-10-29 as safeTxHash
       `0x710a…7057` (the Safe UI's MultiSendCallOnly); the repo's default wrapper hashes it to `0xe22b…8c70`.
     - `base_upv4_upv3_writer_removal` (1 call): prepared, not scheduled.
-    - `base_upv4_rollback` (26 calls): routes back to UPV3.
+    - `base_upv4_rollback` (26 calls): routes back to UPV3. Retired to `superseded/` ahead of the UPV5 cutover;
+      once NullifierRegistryV3 takes a write it would reopen replay, so never run it.
   - **Checks:** `yarn verify:upv4-safe-batches` re-derives all three batches byte for byte and checks the cutover
     safeTxHash. `test-foundry/fork/UnifiedPaymentVerifierV4BaseCutover.t.sol` runs the same bytes against the real
     UPV4 on a Base fork.
@@ -195,6 +198,27 @@
     still runs lane 31's frozen readiness checks, accepting only the failure of the final UPV3-only writer check,
     and checks the registry surface against UPV4 and its owner: O3's registry, the PVR, legacy registry and NRV2
     owners, method order, currencies, routes, and no legacy writers.
+- Lane `49` (`deploy/49_deploy_unified_payment_verifier_v5_stack.ts`) deploys `NullifierRegistryV3`,
+  `UnifiedPaymentVerifierV5` and `DisputeVerifierV2` (zkp2p-contracts#395) on Base staging and Base. Runbook:
+  `docs/releases/upv5-cutover.md`.
+  - **Inputs:** read from the live predecessors and asserted against `UPV5_BASE_RELEASE` /
+    `UPV5_BASE_STAGING_RELEASE`. V3's predecessor is the network's NullifierRegistryV2. UPV5 takes UPV4's
+    OrchestratorRegistry and attestation verifier plus V3. DisputeVerifierV2 takes governance as owner (the Safe on
+    Base, the staging signer on staging), V3 and the live DisputeVerifier's attestation verifier.
+  - **Effects:** adds every UPV4 payment method to UPV5. On Base it transfers V3 and UPV5 to the Safe; nothing is
+    left for the Safe to accept. It never changes a writer, route or dispute policy.
+  - **Gating:** live runs need `DEPLOY_ACTIVE_TAG=49_deploy_unified_payment_verifier_v5_stack` and
+    `ENABLE_{STAGING,BASE}_UPV5_STACK_DEPLOYMENT=true` (`yarn deploy:upv5:<network>`). Untagged live runs re-verify
+    complete records read-only and throw on partial ones. They check only bindings that cannot change, governance
+    ownership, and that each attestation verifier is a deployed contract, never a value governance may rotate. Local networks deploy deployer-owned and leave UPV4
+    routed.
+  - **Cutover:** staging runs `yarn upv5:staging-cutover` (direct transactions, dry run by default, journaled).
+    Base runs the single Safe batch `base_upv5_cutover.json` from `yarn write:upv5-safe-batch`.
+    `yarn upv5:postconditions <network>` checks the end state against the lane 49 records and the catalog plan.
+    Before either cutover the runbook gate pins attestation-service and checks the golden vector. The cutover is
+    one-way: once V3 takes a write, routing back to UPV4 reopens replay.
+  - **Lane 31:** its wrapper checks `upv5RoutesActive` before `upv4RoutesActive`, so untagged runs keep working
+    after the cutover.
 - `OrchestratorV4` is not a `deploy/` lane. It is live on Base (`0x74c55679268FAfB493864915aD16A320AB8c40Ba`,
   registered by Safe nonce 87 on 2026-10-30) and Base staging (`0xd03674d06FB9d66C7F1dc9c8D45ADd314B604F2c`).
   OrchestratorV3 is retired as an integration target. Its Base-staging registration was removed on 2026-11-05
@@ -431,8 +455,10 @@ afterward; reject impossible states instead of handling them.
 
 ## Security & Configuration Tips
 
-- Never commit secrets. Configure `.env` (`ALCHEMY_API_KEY`, `BASE_DEPLOYER_KEY`, `STAGING_DEPLOYER_KEY`, `BASESCAN_API_KEY`, etc.).
-- Production uses `BASE_DEPLOYER_KEY` for `0x41123d6419C7b8e44157f6F3b0088442116641eC`. Delete the retired
+- Never commit secrets. Configure `.env` (`ALCHEMY_API_KEY`, `BASESCAN_API_KEY`, etc.).
+- The deployer `0x41123d6419C7b8e44157f6F3b0088442116641eC` signs through AWS KMS since 2026-11-12: set
+  `BASE_DEPLOYER_KMS_KEY_ID` / `STAGING_DEPLOYER_KMS_KEY_ID` (`utils/kmsSigner.ts`, `utils/kmsSigningProvider.ts`),
+  never alongside the old raw `BASE_DEPLOYER_KEY` / `STAGING_DEPLOYER_KEY`. Delete the retired
   `BASE_DEPLOY_PRIVATE_KEY`; its signer `0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929` was compromised on
   2026-10-28 and must never sign again.
 - For local dev: import Hardhat Account #0 into your wallet, then `yarn deploy:localhost`.
