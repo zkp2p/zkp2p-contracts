@@ -63,6 +63,13 @@ export const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
     "contracts/hooks/DisputeProtectionPolicyV2.sol/DisputeProtectionPolicyV2.json",
   UnifiedPaymentVerifierV4:
     "contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol/UnifiedPaymentVerifierV4.json",
+  // UPV5 cutover stack: source ABIs ship before any network records an address.
+  NullifierRegistryV3:
+    "contracts/registries/NullifierRegistryV3.sol/NullifierRegistryV3.json",
+  UnifiedPaymentVerifierV5:
+    "contracts/unifiedVerifier/UnifiedPaymentVerifierV5.sol/UnifiedPaymentVerifierV5.json",
+  DisputeVerifierV2:
+    "contracts/unifiedVerifier/DisputeVerifierV2.sol/DisputeVerifierV2.json",
   OrchestratorV4: "contracts/OrchestratorV4.sol/OrchestratorV4.json",
   ProtocolViewerV4: "contracts/ProtocolViewerV4.sol/ProtocolViewerV4.json",
 };
