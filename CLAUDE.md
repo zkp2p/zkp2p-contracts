@@ -166,7 +166,7 @@ Current numbered lanes include:
   deposit-creation guard;
 - `33`: IntentGuardian fee update;
 - `34`: opt-in dispute stack (immutable, retired; its Base trio is live);
-- `35`: Mercury payment method (Base staging only);
+- `35`: Mercury payment method (Base staging only; routes to the active verifier);
 - `36`: `WhitelistPolicyMethodScoped` (immutable, executed on both networks,
   still mounted behind its canonical-record skip);
 - `37`: method-scoped dispute lifecycle stack (immutable, executed on both
@@ -178,12 +178,12 @@ Current numbered lanes include:
   (deploy-only on live networks; deploys and activates locally);
 - `40` (immutable): dedicated-vault activation (tag-only; staging EOA steps,
   one guarded Base cutover batch, deferred predecessor writer removal);
-- `41`: generic UPI/INR payment method (tag-only, Base staging only);
+- `41`: generic UPI/INR payment method (tag-only, Base staging only; routes to the active verifier);
 - `42` (immutable): dispute risk-window retirement (tag-only on live networks;
   zeroes the `RETIRED_DISPUTABLE_PAYMENT_METHODS` windows on the lane-39
   policy; Base executed via the Safe 2026-08-28, staging via the deployer
   2026-09-02; still mounted, skips while every retired window reads zero).
-- `43`: Base-staging-only X Money payment-method preparation and execution.
+- `43`: Base-staging-only X Money payment-method preparation and execution (routes to the active verifier).
 - `44` (immutable): `FxRateStore` plus the INR/USD and CNY/USD `FxRateFeed`s. It
   is one shared feed set on Base and skips `base_staging`. On Base it runs only
   under its tag with `ENABLE_BASE_FX_RATE_FEEDS_DEPLOYMENT=true`. It seeds both
@@ -197,6 +197,11 @@ Current numbered lanes include:
   batches from the record. It skips `base_staging`, and wires UPV4 fully on local
   networks. See `docs/releases/upv4-base-production-cutover.md`; the O4 release
   that followed is `docs/releases/orchestrator-v4-base-production.md`.
+- `49`: deploys `NullifierRegistryV3`, `UnifiedPaymentVerifierV5` and
+  `DisputeVerifierV2` on Base staging and Base (tag plus
+  `ENABLE_{STAGING,BASE}_UPV5_STACK_DEPLOYMENT`). It is deploy-only: the
+  staging cutover script and the Base Safe batch do the wiring. See
+  `docs/releases/upv5-cutover.md`.
 
 There is no `26` script. Numbered files are identities, not proof that every
 script should execute. A numbered script is immutable after any production
