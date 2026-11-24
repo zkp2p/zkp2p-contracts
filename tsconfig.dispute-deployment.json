@@ -35,6 +35,8 @@
     "deploy/49_deploy_unified_payment_verifier_v5_stack.ts",
     "deployments/upv5Cutover.ts",
     "deployments/upv5Postconditions.ts",
+    "deployments/upv5SafeBatch.ts",
+    "scripts/upv5SafeBatches.ts",
     "scripts/upv5-postconditions.ts",
     "scripts/upv5-staging-cutover.ts",
     "scripts/fx-rate-feeds-deployment.spec.cjs",
