@@ -36,6 +36,7 @@
     "deployments/upv5Cutover.ts",
     "deployments/upv5Postconditions.ts",
     "scripts/upv5-postconditions.ts",
+    "scripts/upv5-staging-cutover.ts",
     "scripts/fx-rate-feeds-deployment.spec.cjs",
     "deploy/deploy_summary.ts",
     "packages/contracts/scripts/extractors/abis.ts",
