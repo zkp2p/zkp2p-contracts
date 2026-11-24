@@ -189,7 +189,8 @@
       UPV4. UPV3 stays a writer, so rollback still works. It executed at Safe nonce 86 on 2026-10-29 as safeTxHash
       `0x710a…7057` (the Safe UI's MultiSendCallOnly); the repo's default wrapper hashes it to `0xe22b…8c70`.
     - `base_upv4_upv3_writer_removal` (1 call): prepared, not scheduled.
-    - `base_upv4_rollback` (26 calls): routes back to UPV3.
+    - `base_upv4_rollback` (26 calls): routes back to UPV3. Retired to `superseded/` ahead of the UPV5 cutover;
+      once NullifierRegistryV3 takes a write it would reopen replay, so never run it.
   - **Checks:** `yarn verify:upv4-safe-batches` re-derives all three batches byte for byte and checks the cutover
     safeTxHash. `test-foundry/fork/UnifiedPaymentVerifierV4BaseCutover.t.sol` runs the same bytes against the real
     UPV4 on a Base fork.

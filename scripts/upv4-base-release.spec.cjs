@@ -334,7 +334,7 @@ test("render shape, conditions, filenames, exact serialization and SHA256 are de
   assert.deepEqual(UPV4_SAFE_BATCH_FILES, {
     cutover: "base_upv4_cutover.json",
     "upv3-writer-removal": "base_upv4_upv3_writer_removal.json",
-    rollback: "base_upv4_rollback.json",
+    rollback: "superseded/base_upv4_rollback.json",
   });
   const names = ["Base UPV4 payment-route cutover", "Base UPV3 NullifierRegistryV2 writer removal", "Base UPV4 payment-route rollback to UPV3"];
   for (const [index, kind] of Object.values(Kind).entries()) {
@@ -430,6 +430,7 @@ function cliFixture(context) {
   copyFileSync(resolve(ROOT, "scripts/upv4SafeBatches.ts"), script);
   const batchFile = (kind) => resolve(root, "deployments/outputs/safe-batches", UPV4_SAFE_BATCH_FILES[kind]);
   function writeBatches() {
+    mkdirSync(resolve(root, "deployments/outputs/safe-batches/superseded"), { recursive: true });
     for (const kind of Object.values(Kind)) {
       const contents = serializeUpv4SafeBatch(render(kind));
       writeFileSync(batchFile(kind), contents);
@@ -473,7 +474,14 @@ test("CLI write requires the pinned record, renders six files, archives changes 
   writeFileSync(recordFile, JSON.stringify({ address: UPV4 }));
   const written = fixture.run(["write"]);
   assert.equal(written.status, 0, written.stderr);
-  assert.equal(readdirSync(batchDirectory).length, 6);
+  // Four maintained files plus superseded/, which holds the retired rollback pair.
+  assert.deepEqual(readdirSync(batchDirectory).sort(), [
+    "base_upv4_cutover.json", "base_upv4_cutover.sha256.json", "base_upv4_upv3_writer_removal.json",
+    "base_upv4_upv3_writer_removal.sha256.json", "superseded",
+  ]);
+  assert.deepEqual(readdirSync(resolve(batchDirectory, "superseded")).sort(), [
+    "base_upv4_rollback.json", "base_upv4_rollback.sha256.json",
+  ]);
   for (const kind of Object.values(Kind)) {
     const contents = readFileSync(fixture.batchFile(kind), "utf8");
     assert.equal(contents, serializeUpv4SafeBatch(render(kind)));
@@ -494,7 +502,7 @@ test("CLI write requires the pinned record, renders six files, archives changes 
   ]);
   assert.ok(checked.stdout.includes(UPV4_BASE_RELEASE.signedCutover.url));
   assert.equal(fixture.run(["write"]).status, 0);
-  assert.equal(existsSync(resolve(batchDirectory, "superseded")), false);
+  assert.equal(readdirSync(resolve(batchDirectory, "superseded")).length, 2, "an unchanged write archives nothing");
   const file = fixture.batchFile(Kind.Cutover);
   const sidecar = file.replace(/\.json$/, ".sha256.json");
   const oldBatch = readFileSync(file, "utf8") + "\n";
@@ -502,7 +510,7 @@ test("CLI write requires the pinned record, renders six files, archives changes 
   writeFileSync(file, oldBatch);
   writeFileSync(sidecar, oldSidecar);
   assert.equal(fixture.run(["write"]).status, 0);
-  const archived = readdirSync(resolve(batchDirectory, "superseded"));
+  const archived = readdirSync(resolve(batchDirectory, "superseded")).filter((name) => !name.startsWith("base_upv4_rollback."));
   assert.equal(archived.length, 2);
   for (const name of archived) {
     assert.equal(readFileSync(resolve(batchDirectory, "superseded", name), "utf8"),
