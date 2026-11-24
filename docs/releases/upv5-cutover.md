@@ -53,10 +53,27 @@ This is Kartik's decision; do not re-raise it in review.
 | `yarn upv5:safe-batches hash <nonce>` | MultiSend data keccak and safeTxHash for a Safe nonce. |
 | `yarn upv5:safe-batches preflight` | Read-only. Checks live Base still matches what the batch assumes, then runs the whole batch as one transaction from the Safe (an `eth_call` with MultiSendCallOnly's code at the Safe's address). |
 
-Both deploys use signer `0x41123d6419C7b8e44157f6F3b0088442116641eC` (`STAGING_DEPLOYER_KEY` on staging,
-`BASE_DEPLOYER_KEY` on Base; see the [UPV4 runbook](upv4-base-production-cutover.md#deployer)). The retired signer
-`0x84e1…1929` must never sign; config loading and lane 49 both refuse it. RPC defaults: hardhat uses
-`ALCHEMY_API_KEY`; the read-only scripts take `--rpc <url>` or `BASE_RPC_URL` / `STAGING_RPC_URL`.
+### Signing: the deployer key is in AWS KMS
+
+Both networks deploy as signer `0x41123d6419C7b8e44157f6F3b0088442116641eC`, which is also staging governance.
+Since 2026-11-12 its key lives only in AWS KMS (`alias/peer-kohai-staging-deployer`, us-east-1); there is no raw
+`STAGING_DEPLOYER_KEY` or `BASE_DEPLOYER_KEY` any more.
+
+- **Configure** `STAGING_DEPLOYER_KMS_KEY_ID` (base_staging) or `BASE_DEPLOYER_KMS_KEY_ID` (base). Each takes a key
+  id, ARN or alias. Credentials come from the standard AWS chain, e.g. `AWS_PROFILE=migration-new`.
+- **Signing path:** lane 49, every Hardhat lane and the staging cutover script sign through KMS.
+  - Hardhat and hardhat-deploy go through `KmsSigningProvider`.
+  - The script uses `KmsSigner`.
+- **Refusals:** both refuse a key whose public key does not derive `0x4112…41eC`, and the retired `0x84e1…1929`.
+- **Key policy:** they sign only DIGEST messages with ECDSA_SHA_256, which is what the key policy allows.
+- **Prerequisite:** the principal running the commands needs `kms:Sign` on that key. The current role cannot sign;
+  Kartik is deciding who gets it. Read-only commands (postconditions, preflight, batch write and verify) need no KMS
+  access.
+- **Rehearsal:** with `yarn chain` running, `KMS_LOCAL_FAKE_PRIVATE_KEY=0x$(openssl rand -hex 32) yarn
+  deploy:localhost:kms` runs the whole localhost deployment through the same provider wrapper, backed by a fake KMS.
+
+RPC defaults: Hardhat uses `ALCHEMY_API_KEY`. The read-only scripts take `--rpc <url>` or `BASE_RPC_URL` /
+`STAGING_RPC_URL`.
 
 What the 16 postcondition checks compare against:
 
@@ -114,7 +131,7 @@ Check both items immediately before the staging cutover (S3) and again before th
 
 Run this order once on staging, then again on Base.
 
-1. **Merge source.** zkp2p-contracts#395 and #396 merge to `main`. Lane 49 is tag-gated, so merging deploys
+1. **Merge source.** zkp2p-contracts#395 (merged as `82069cf1`) and #396 are on `main`. Lane 49 is tag-gated, so merging deploys
    nothing.
 2. **Deploy the contracts** with lane 49 (below).
 3. **Record and publish.** Open a recording PR with the three `deployments/<network>/*.json` records and the
@@ -155,7 +172,8 @@ Base staging governance is the staging signer EOA, so the cutover is direct tran
 ```bash
 git fetch origin && git checkout <approved main SHA>
 yarn install --immutable && yarn compile
-yarn deploy:upv5:base_staging
+AWS_PROFILE=migration-new AWS_REGION=us-east-1 STAGING_DEPLOYER_KMS_KEY_ID=alias/peer-kohai-staging-deployer \
+  yarn deploy:upv5:base_staging
 yarn verify:upv5:base_staging
 yarn upv5:postconditions base_staging --pre
 ```
@@ -188,7 +206,8 @@ Pass the gate, then:
 
 ```bash
 yarn upv5:staging-cutover                      # dry run: prints every call, simulates, prints the pre-check
-yarn upv5:staging-cutover --execute            # STAGING_DEPLOYER_KEY
+AWS_PROFILE=migration-new AWS_REGION=us-east-1 STAGING_DEPLOYER_KMS_KEY_ID=alias/peer-kohai-staging-deployer \
+  yarn upv5:staging-cutover --execute
 yarn upv5:postconditions base_staging          # must exit 0: 16/16
 ```
 
@@ -228,7 +247,8 @@ Base governance is Safe `0x0bC26FF515411396DD588Abd6Ef6846E04470227`.
 ```bash
 git fetch origin && git checkout <approved main SHA>
 yarn install --immutable && yarn compile
-yarn deploy:upv5:base                          # BASE_DEPLOYER_KEY
+AWS_PROFILE=migration-new AWS_REGION=us-east-1 BASE_DEPLOYER_KMS_KEY_ID=alias/peer-kohai-staging-deployer \
+  yarn deploy:upv5:base
 yarn verify:upv5:base
 yarn upv5:postconditions base --pre
 ```
