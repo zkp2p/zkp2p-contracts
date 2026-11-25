@@ -687,6 +687,12 @@ contract DisputeProtectionPolicyV3Test is Test {
         vm.expectRevert(bytes("Ownable: caller is not the owner"));
         policy.setDisputeVerifier(address(next));
 
+        vm.expectRevert(P.ZeroAddress.selector);
+        policy.setDisputeVerifier(address(0));
+        vm.expectRevert(abi.encodeWithSelector(P.InvalidContract.selector, STRANGER));
+        policy.setDisputeVerifier(STRANGER);
+        assertEq(address(policy.disputeVerifier()), address(verifier));
+
         vm.expectEmit(true, true, false, true, address(policy));
         emit DisputeVerifierUpdated(address(verifier), address(next));
         policy.setDisputeVerifier(address(next));
@@ -698,9 +704,19 @@ contract DisputeProtectionPolicyV3Test is Test {
         policy.renounceOwnership();
     }
 
-    function test_ConstructorRejectsZeroOwner() public {
+    function test_ConstructorRejectsZeroOwnerAndMissingVerifiers() public {
         vm.expectRevert(P.ZeroAddress.selector);
         new DisputeProtectionPolicyV3(address(0), vault, verifier, receipts, disputes, orchestrators);
+
+        vm.expectRevert(P.ZeroAddress.selector);
+        new DisputeProtectionPolicyV3(address(this), vault, DisputeVerifierV2(address(0)), receipts, disputes, orchestrators);
+        vm.expectRevert(abi.encodeWithSelector(P.InvalidContract.selector, STRANGER));
+        new DisputeProtectionPolicyV3(address(this), vault, DisputeVerifierV2(STRANGER), receipts, disputes, orchestrators);
+
+        vm.expectRevert(P.ZeroAddress.selector);
+        new DisputeProtectionPolicyV3(address(this), vault, verifier, ReceiptVerifier(address(0)), disputes, orchestrators);
+        vm.expectRevert(abi.encodeWithSelector(P.InvalidContract.selector, STRANGER));
+        new DisputeProtectionPolicyV3(address(this), vault, verifier, ReceiptVerifier(STRANGER), disputes, orchestrators);
     }
 
     function test_Views() public view {

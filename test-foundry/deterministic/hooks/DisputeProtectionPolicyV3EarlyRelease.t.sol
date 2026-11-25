@@ -184,6 +184,18 @@ contract DisputeProtectionPolicyV3EarlyReleaseTest is Test {
         dispute.signatures = _sign(WITNESS_KEY, disputeVerifier.hashDisputeAttestation(dispute));
     }
 
+    /// @dev A full dispute (fiat currency) with its own dispute id, as filed after a reversal of the paid part.
+    function _reversal(bytes32 id) internal view returns (IDisputeVerifier.DisputeAttestation memory dispute) {
+        bytes32[] memory candidates = new bytes32[](1);
+        candidates[0] = _nullifier(id);
+        bytes memory data = abi.encode(
+            IDisputeVerifier.DisputeDetails(METHOD, keccak256("payment-id"), keccak256(abi.encode("reversal", id)), 1, keccak256("USD")),
+            candidates
+        );
+        dispute = IDisputeVerifier.DisputeAttestation(id, keccak256(data), new bytes[](0), data);
+        dispute.signatures = _sign(WITNESS_KEY, disputeVerifier.hashDisputeAttestation(dispute));
+    }
+
     function _ids(bytes32 id) internal pure returns (bytes32[] memory ids) {
         ids = new bytes32[](1);
         ids[0] = id;
@@ -480,19 +492,66 @@ contract DisputeProtectionPolicyV3EarlyReleaseTest is Test {
         _assertNothingStranded();
     }
 
-    /// @dev After a share dispute, a fresh receipt can confirm the relocked remainder like any open protection.
-    function test_ReceiptAfterShareDisputeReleasesTheRemainderEarly() public {
+    /// @dev After a share dispute the remainder releases only at maturity: a fresh receipt is skipped unverified.
+    function test_ReceiptAfterShareDisputeIsSkipped() public {
         _settleStaked(ID);
         policy.submitDispute(_dispute(ID, 24e6));
         IReceiptVerifier.ReceiptAttestation[] memory receipts = _batch(_receipt(ID, START + 2 days));
+
+        vm.recordLogs();
         policy.confirmReceipts(receipts);
-        assertEq(_releaseAt(ID), START + 2 days);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(logs.length, 1);
+        assertEq(logs[0].topics[0], ReceiptSkipped.selector);
+        assertEq(logs[0].topics[1], ID);
+        assertEq(abi.decode(logs[0].data, (uint8)), uint8(P.SkipReason.PARTIALLY_DISPUTED));
+        assertEq(_releaseAt(ID), 0);
 
         vm.warp(START + 2 days);
+        vm.expectRevert(abi.encodeWithSelector(P.NotMatured.selector, MATURES_AT, START + 2 days));
+        policy.release(_ids(ID));
+        vm.warp(MATURES_AT);
         policy.release(_ids(ID));
         assertEq(vault.freeStake(TAKER), GROSS - 24e6);
-        assertEq(vault.claimable(DEPOSITOR), 24e6);
         assertFalse(_isOpen(ID));
+    }
+
+    /// @dev Review round 2: receipts carry no nonce, so the receipt confirmed before a share dispute is public
+    /// calldata. Resubmitting the same bytes after the dispute must not free the relocked remainder early, which would
+    /// leave a later reversal of the paid part undisputable.
+    function test_ReplayedReceiptAfterShareDisputeKeepsRemainderLocked() public {
+        _settleDeferred(ID, RECIPIENT);
+        IReceiptVerifier.ReceiptAttestation[] memory receipts = _batch(_receipt(ID, START + 3 days));
+        bytes memory confirmCall = abi.encodeCall(DisputeProtectionPolicyV3.confirmReceipts, (receipts));
+        (bool confirmed,) = address(policy).call(confirmCall);
+        assertTrue(confirmed);
+        assertEq(_releaseAt(ID), START + 3 days);
+
+        vm.warp(START + 2 days);
+        policy.submitDispute(_dispute(ID, 50e6));
+        uint256 remainder = NET - vault.claimable(DEPOSITOR);
+        assertEq(_releaseAt(ID), 0);
+
+        vm.expectEmit(true, false, false, true, address(policy));
+        emit ReceiptSkipped(ID, P.SkipReason.PARTIALLY_DISPUTED);
+        (bool replayed,) = address(policy).call(confirmCall);
+        assertTrue(replayed);
+        assertEq(_releaseAt(ID), 0);
+        (address lockOwner, uint256 lockAmount, uint64 maturesAt) = vault.locks(ID);
+        assertEq(lockOwner, RECIPIENT);
+        assertEq(lockAmount, remainder);
+        assertEq(maturesAt, MATURES_AT);
+
+        vm.warp(START + 3 days);
+        vm.expectRevert(abi.encodeWithSelector(P.NotMatured.selector, MATURES_AT, START + 3 days));
+        policy.release(_ids(ID));
+
+        vm.warp(START + 5 days);
+        policy.submitDispute(_reversal(ID));
+        assertEq(vault.claimable(DEPOSITOR), NET);
+        assertFalse(_isOpen(ID));
+        assertEq(token.balanceOf(RECIPIENT), 0);
+        _assertNothingStranded();
     }
 
     /// @dev Review focus: one recipient the vault cannot pay never sinks a keeper's batch. Its releaseAt is kept and
@@ -609,6 +668,12 @@ contract DisputeProtectionPolicyV3EarlyReleaseTest is Test {
         vm.prank(STRANGER);
         vm.expectRevert(bytes("Ownable: caller is not the owner"));
         policy.setReceiptVerifier(address(next));
+
+        vm.expectRevert(P.ZeroAddress.selector);
+        policy.setReceiptVerifier(address(0));
+        vm.expectRevert(abi.encodeWithSelector(P.InvalidContract.selector, STRANGER));
+        policy.setReceiptVerifier(STRANGER);
+        assertEq(address(policy.receiptVerifier()), address(receiptVerifier));
 
         vm.expectEmit(true, true, false, true, address(policy));
         emit ReceiptVerifierUpdated(address(receiptVerifier), address(next));

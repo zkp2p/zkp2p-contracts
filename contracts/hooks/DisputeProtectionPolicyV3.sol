@@ -73,8 +73,8 @@ contract DisputeProtectionPolicyV3 is IDisputeProtectionPolicyV3, Ownable2Step, 
      * @notice Creates the policy; authorize it as a vault controller and a dispute-nullifier writer before use.
      * @param _owner Governance owner for policy and dependency configuration.
      * @param _stakeVault Vault holding and locking taker collateral.
-     * @param _disputeVerifier Verifier for signed dispute evidence, used by no other policy.
-     * @param _receiptVerifier Verifier for signed receipt confirmations.
+     * @param _disputeVerifier Deployed verifier for signed dispute evidence, used by no other policy.
+     * @param _receiptVerifier Deployed verifier for signed receipt confirmations.
      * @param _disputeNullifierRegistry Dedicated registry that rejects reused dispute nullifiers.
      * @param _orchestratorRegistry Registry of orchestrators allowed to call the settlement callbacks.
      */
@@ -87,6 +87,8 @@ contract DisputeProtectionPolicyV3 is IDisputeProtectionPolicyV3, Ownable2Step, 
         IOrchestratorRegistry _orchestratorRegistry
     ) {
         if (_owner == address(0)) revert ZeroAddress();
+        _validateDependency(address(_disputeVerifier));
+        _validateDependency(address(_receiptVerifier));
         stakeVault = _stakeVault;
         disputeVerifier = _disputeVerifier;
         receiptVerifier = _receiptVerifier;
@@ -202,9 +204,10 @@ contract DisputeProtectionPolicyV3 is IDisputeProtectionPolicyV3, Ownable2Step, 
     /**
      * @notice GOVERNANCE ONLY: Replaces the verifier used for future dispute submissions. Never share it with
      * another policy (see `disputeVerifier`).
-     * @param _verifier New dispute verifier.
+     * @param _verifier New non-zero deployed dispute verifier.
      */
     function setDisputeVerifier(address _verifier) external onlyOwner {
+        _validateDependency(_verifier);
         address previousVerifier = address(disputeVerifier);
         disputeVerifier = IDisputeVerifier(_verifier);
         emit DisputeVerifierUpdated(previousVerifier, _verifier);
@@ -213,9 +216,10 @@ contract DisputeProtectionPolicyV3 is IDisputeProtectionPolicyV3, Ownable2Step, 
     /**
      * @notice GOVERNANCE ONLY: Replaces the verifier used for future receipt confirmations. Rotating it invalidates
      * confirmations signed for the previous verifier but not yet submitted.
-     * @param _verifier New receipt verifier.
+     * @param _verifier New non-zero deployed receipt verifier.
      */
     function setReceiptVerifier(address _verifier) external onlyOwner {
+        _validateDependency(_verifier);
         address previousVerifier = address(receiptVerifier);
         receiptVerifier = IReceiptVerifier(_verifier);
         emit ReceiptVerifierUpdated(previousVerifier, _verifier);
@@ -264,13 +268,17 @@ contract DisputeProtectionPolicyV3 is IDisputeProtectionPolicyV3, Ownable2Step, 
         emit ProtectionReleased(_intentHash);
     }
 
-    /// @dev Skips stale and repeated entries so one never sinks a keeper's batch; a payout already due is made now
-    /// instead of stored, unless the vault cannot make it.
+    /// @dev Skips stale, partially disputed and repeated entries so one never sinks a keeper's batch; a payout already
+    /// due is made now instead of stored, unless the vault cannot make it.
     function _confirmReceipt(IReceiptVerifier.ReceiptAttestation calldata _receipt) internal {
         bytes32 intentHash = _receipt.intentHash;
         ProtectionRecord storage protection = protections[intentHash];
         if (protection.depositor == address(0)) {
             emit ReceiptSkipped(intentHash, SkipReason.STALE);
+            return;
+        }
+        if (protection.partiallyDisputed) {
+            emit ReceiptSkipped(intentHash, SkipReason.PARTIALLY_DISPUTED);
             return;
         }
         if (protection.releaseAt != 0) {
@@ -322,5 +330,10 @@ contract DisputeProtectionPolicyV3 is IDisputeProtectionPolicyV3, Ownable2Step, 
 
     function _maturity(uint64 _window) internal view returns (uint64) {
         return uint64(block.timestamp) + _window;
+    }
+
+    function _validateDependency(address _dependency) internal view {
+        if (_dependency == address(0)) revert ZeroAddress();
+        if (_dependency.code.length == 0) revert InvalidContract(_dependency);
     }
 }

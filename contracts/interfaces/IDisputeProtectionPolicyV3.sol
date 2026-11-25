@@ -24,7 +24,8 @@ interface IDisputeProtectionPolicyV3 is IIntentSettlementPolicy {
     /// @notice Why `confirmReceipts` skipped an entry instead of confirming it. Skipped entries are not verified.
     enum SkipReason {
         STALE,                    // no open protection: never opened, already released or disputed in full
-        ALREADY_CONFIRMED         // the protection already holds a confirmed releaseAt
+        ALREADY_CONFIRMED,        // the protection already holds a confirmed releaseAt
+        PARTIALLY_DISPUTED        // a share dispute relocked the remainder until maturity; no receipt releases it
     }
 
     event ProtectionOpened(bytes32 indexed intentHash, address indexed depositor);
@@ -38,6 +39,7 @@ interface IDisputeProtectionPolicyV3 is IIntentSettlementPolicy {
     event ReceiptVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
 
     error ZeroAddress();
+    error InvalidContract(address dependency);
     error UnauthorizedOrchestrator(address caller);
     error ProtectionNotFound(bytes32 intentHash);
     /// @dev `maturesAt` is the protection's due time, min(lock maturity, confirmed releaseAt).
@@ -68,8 +70,10 @@ interface IDisputeProtectionPolicyV3 is IIntentSettlementPolicy {
     /**
      * @notice Records enclave-signed receipt confirmations so their protections release early, and pays out at once
      * each one whose signed releaseAt has passed.
-     * @dev Per entry: no open protection emits `ReceiptSkipped(STALE)`; one already holding a releaseAt emits
-     * `ReceiptSkipped(ALREADY_CONFIRMED)`; neither is verified, so a skip is not evidence of anything. Otherwise the
+     * @dev Per entry: no open protection emits `ReceiptSkipped(STALE)`; a partially disputed one emits
+     * `ReceiptSkipped(PARTIALLY_DISPUTED)`, because its remainder releases only at maturity and a receipt signed before
+     * the dispute could otherwise be replayed; one already holding a releaseAt emits `ReceiptSkipped(ALREADY_CONFIRMED)`.
+     * Skipped entries are not verified, so a skip is not evidence of anything. Otherwise the
      * receipt is verified against the protection's payment method, and an invalid signature, a wrong method or an
      * unbound payment reverts the whole call. A due payout the vault cannot make keeps the releaseAt and emits
      * `ReceiptPayoutFailed` instead of reverting. A confirmed receipt never blocks a dispute; the batch size is the
@@ -83,7 +87,8 @@ interface IDisputeProtectionPolicyV3 is IIntentSettlementPolicy {
      * @dev A share dispute (`paymentCurrency == RELEASE_SHARE_CURRENCY`) signs the maker's claim in release-amount
      * units in `paymentAmount` and pays ⌈lock × min(claim, releaseAmount) ÷ releaseAmount⌉. The paid remainder is
      * relocked for the lock owner until the original maturity, so a later reversal of the paid part can still be
-     * disputed; the protection stays open, marked partially disputed, with any confirmed releaseAt cleared. A share
+     * disputed; the protection stays open, marked partially disputed, with any confirmed releaseAt cleared, and no
+     * receipt can release it early. A share
      * dispute that leaves a remainder must land before maturity, and a protection takes one share dispute only. Any
      * other currency pays the whole remaining lock and closes the protection, until it is released.
      * @param _attestation Signed dispute evidence for a settled intent.
