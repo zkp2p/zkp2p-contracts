@@ -18,64 +18,13 @@ import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol"
 import {NullifierRegistryV3} from "contracts/registries/NullifierRegistryV3.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 import {DisputeVerifierV2} from "contracts/unifiedVerifier/DisputeVerifierV2.sol";
+import {ReceiptVerifier} from "contracts/unifiedVerifier/ReceiptVerifier.sol";
 import {AttestationVerifierMock} from "../../mocks/AttestationVerifierMock.sol";
+import {PayoutHookTokenMock} from "../../mocks/PayoutHookTokenMock.sol";
+import {ReentrantPayoutRecipientMock} from "../../mocks/ReentrantPayoutRecipientMock.sol";
 
 /// @notice A payout recipient with no code path into the vault.
 contract VaultUnawareRecipient {}
-
-/// @notice Calls a receiver hook after every transfer to the armed target, like an ERC777-style token.
-contract PayoutHookToken is ERC20 {
-    address public hookTarget;
-
-    constructor() ERC20("Hook USDC", "hUSDC") {
-        _mint(msg.sender, 100_000e6);
-    }
-
-    function decimals() public pure override returns (uint8) {
-        return 6;
-    }
-
-    function setHookTarget(address _target) external {
-        hookTarget = _target;
-    }
-
-    function _afterTokenTransfer(address, address _to, uint256 _amount) internal override {
-        if (_to == hookTarget) ReentrantPayoutRecipient(_to).onTokenReceived(_amount);
-    }
-}
-
-/// @notice Re-enters the policy from the token hook and records how each attempt ended.
-contract ReentrantPayoutRecipient {
-    address internal target;
-    bytes[] internal payloads;
-    bytes[] internal failures;
-    uint256 public reentrySuccesses;
-    uint256 public hookCalls;
-
-    function arm(address _target, bytes[] memory _payloads) external {
-        target = _target;
-        payloads = _payloads;
-    }
-
-    function onTokenReceived(uint256) external {
-        hookCalls++;
-        bytes[] memory pending = payloads;
-        delete payloads;
-        for (uint256 index; index < pending.length; ++index) {
-            (bool success, bytes memory returnData) = target.call(pending[index]);
-            if (success) reentrySuccesses++;
-            else failures.push(returnData);
-        }
-    }
-
-    function failure(uint256 _index) external view returns (bytes memory) {
-        return failures[_index];
-    }
-
-    function failureCount() external view returns (uint256) {
-        return failures.length;
-    }
-}
 
 /// @notice Burns 1% of every transfer, so a vault payout arrives short.
 contract ClaimFeeToken is ERC20 {
@@ -121,6 +70,7 @@ contract DisputeProtectionPolicyV3Test is Test {
     StakeVaultV2 internal vault;
     DisputeProtectionPolicyV3 internal policy;
     DisputeVerifierV2 internal verifier;
+    ReceiptVerifier internal receipts;
     NullifierRegistry internal disputes;
     NullifierRegistryV3 internal payments;
     OrchestratorRegistry internal orchestrators;
@@ -139,9 +89,10 @@ contract DisputeProtectionPolicyV3Test is Test {
         payments.addWritePermission(address(this));
         disputes = new NullifierRegistry();
         verifier = new DisputeVerifierV2(address(this), payments, new AttestationVerifierMock());
+        receipts = new ReceiptVerifier(address(this), payments, new AttestationVerifierMock());
         orchestrators = new OrchestratorRegistry();
         orchestrators.addOrchestrator(address(this));
-        policy = new DisputeProtectionPolicyV3(address(this), vault, verifier, disputes, orchestrators);
+        policy = new DisputeProtectionPolicyV3(address(this), vault, verifier, receipts, disputes, orchestrators);
         disputes.addWritePermission(address(policy));
         vault.setController(address(policy), true);
     }
@@ -487,9 +438,9 @@ contract DisputeProtectionPolicyV3Test is Test {
     /// @dev The recipient re-enters through a token hook during the remainder transfer; every attempt fails on the
     /// guard, and each party is paid exactly once.
     function test_ReentrantRemainderTransferCannotDoublePay() public {
-        PayoutHookToken hookToken = new PayoutHookToken();
+        PayoutHookTokenMock hookToken = new PayoutHookTokenMock();
         _deploy(hookToken);
-        ReentrantPayoutRecipient recipient = new ReentrantPayoutRecipient();
+        ReentrantPayoutRecipientMock recipient = new ReentrantPayoutRecipientMock();
         _settleDeferred(ID, address(recipient));
         _settleDeferred(ID2, address(recipient));
         IDisputeVerifier.DisputeAttestation memory attestation = _dispute(ID, 24e6, SHARE);
@@ -619,7 +570,7 @@ contract DisputeProtectionPolicyV3Test is Test {
 
     function test_ConstructorRejectsZeroOwner() public {
         vm.expectRevert(P.ZeroAddress.selector);
-        new DisputeProtectionPolicyV3(address(0), vault, verifier, disputes, orchestrators);
+        new DisputeProtectionPolicyV3(address(0), vault, verifier, receipts, disputes, orchestrators);
     }
 
     function test_Views() public view {
@@ -627,6 +578,7 @@ contract DisputeProtectionPolicyV3Test is Test {
         assertEq(policy.MAX_DISPUTE_WINDOW(), 180 days);
         assertEq(address(policy.stakeVault()), address(vault));
         assertEq(address(policy.disputeVerifier()), address(verifier));
+        assertEq(address(policy.receiptVerifier()), address(receipts));
         assertEq(address(policy.disputeNullifierRegistry()), address(disputes));
         assertEq(address(policy.orchestratorRegistry()), address(orchestrators));
         assertEq(policy.owner(), address(this));
