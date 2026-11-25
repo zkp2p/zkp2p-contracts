@@ -396,7 +396,7 @@ test('publish workflow consumes the version-derived channel without RC-only path
   const workflow = fs.readFileSync(releaseWorkflowPath, 'utf8');
 
   assert.match(workflow, /^  LATEST_BASELINE: 0\.4\.4$/m);
-  assert.match(workflow, /^  RC_BASELINE: 0\.4\.4-rc\.14$/m);
+  assert.match(workflow, /^  RC_BASELINE: 0\.4\.5-rc\.1$/m);
   assert.match(workflow, /^\s{2}policy:\s*$/m);
   assert.match(workflow, /node scripts\/npm-release\.mjs resolve "\$PACKAGE_JSON" "\$RELEASE_VERSION"/);
   assert.match(workflow, /DIST_TAG:\s*\$\{\{ needs\.policy\.outputs\.dist_tag \}\}/);
