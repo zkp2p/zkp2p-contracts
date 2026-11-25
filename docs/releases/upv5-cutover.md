@@ -292,6 +292,18 @@ once.
 Expected pre-check: `12/16 true`. The catalog-plan check already passes against the pins. The four TODOs are
 NullifierRegistryV2 writers, V3 writer, routes and dispute verifier.
 
+**Executed 2026-11-25** from main `55acc864a`, signed by `0x4112…41eC` through KMS (deployer nonces 249–266):
+
+| Contract | Address | Deploy tx |
+| --- | --- | --- |
+| NullifierRegistryV3 | `0x082a0BfbA45767E9ceae9477ac93220320391A4c` | `0x69edb3e28d1b98965ae3fde9927049b493cf6652df72aa1ab1fc4445ac3af10b` |
+| UnifiedPaymentVerifierV5 | `0xeBF99d9acD577B548faac0324238ED787c87579B` | `0x4725967e204266ae5dfb30c13f8f1ee4c47802657231a1da2e6900aca7400d6b` |
+| DisputeVerifierV2 | `0x5CB92c837910F3a449303d051cAE1bdbde0CF6A8` | `0x8d27887f4bcbcb709537d8fb3b914b14ed62d3073b873abd3438e4c0ba65b2e0` |
+
+UPV5 copied UPV4's 13 methods; NullifierRegistryV3 and UPV5 were handed to the Safe, and DisputeVerifierV2 was
+Safe-owned from construction with no pending owner. Pre-check after the deploy: `12/16 true`, the four TODOs above.
+The Base catalog freeze is in force from this deploy until the Safe batch executes.
+
 ### P2. Record, publish, bump consumers
 
 The recording PR contains:
