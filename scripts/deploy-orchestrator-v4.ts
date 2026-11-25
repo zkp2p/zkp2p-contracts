@@ -30,8 +30,9 @@ export type ReleaseConfig = {
   legacyDrainCheckpoints: Array<{ contract: string; intentCounter: string; indexedBlock: number }>;
   legacyWhitelistCheckpoint: { indexedBlock: number; enabled: Array<{ escrow: string; depositId: string; paymentMethod: string }> };
 };
-/** Reviewed staging changes made after activation: the bonded-release signal policy and arbitrator, added witnesses, and retired predecessor. */
-export type StagingAllowance = { signalPolicy: { address: string; runtimeCodeHash: string }; arbitrator: { address: string; runtimeCodeHash: string }; attestationWitnesses: string[]; retiredPredecessor: { address: string } };
+const UPV5_CUTOVER_PINS = ["nullifierRegistryV3", "unifiedPaymentVerifierV5", "disputeVerifierV2"] as const;
+/** Reviewed staging changes made after activation: the bonded-release signal policy and arbitrator, added witnesses, retired predecessor, and the UPV5 cutover stack pinned by runtime code. */
+export type StagingAllowance = { signalPolicy: { address: string; runtimeCodeHash: string }; arbitrator: { address: string; runtimeCodeHash: string }; attestationWitnesses: string[]; retiredPredecessor: { address: string }; upv5Cutover: Record<typeof UPV5_CUTOVER_PINS[number], { address: string; runtimeCodeHash: string }> };
 type Receipt = { blockNumber: number; blockHash: string; transactionHash: string; gasUsed: string; effectiveGasPrice: string };
 type Transaction = { step: string; hash: string; nonce: number; to: string | null; data: string; value: string; receipt: Receipt | null };
 type NewContract = { address: string; artifact: string; constructorArguments: unknown[]; transactionHash: string; deploymentBlock: number; runtimeCodeHash: string };
@@ -107,6 +108,42 @@ export function validateStagingAllowance(value: unknown, c: ReleaseConfig): asse
   check(Array.isArray(witnesses) && witnesses.every((w) => utils.isAddress(w) && !same(w, ZERO)) && new Set(witnesses.map((w) => w.toLowerCase())).size === witnesses.length, "Invalid staging allowance witnesses");
   const predecessor = allowance.retiredPredecessor;
   check(predecessor && utils.isAddress(predecessor.address) && !same(predecessor.address, ZERO) && same(predecessor.address, c.existing.OrchestratorV3.address), "Invalid staging allowance retired predecessor");
+  const cutover = allowance.upv5Cutover;
+  check(typeof cutover === "object" && cutover !== null && UPV5_CUTOVER_PINS.every((name) => {
+    const pin = cutover[name];
+    return pin && utils.isAddress(pin.address) && !same(pin.address, ZERO) && /^0x[\da-f]{64}$/i.test(pin.runtimeCodeHash);
+  }) && new Set(UPV5_CUTOVER_PINS.map((name) => cutover[name].address.toLowerCase())).size === UPV5_CUTOVER_PINS.length, "Invalid staging allowance UPV5 cutover pins");
+}
+
+/**
+ * Staging's UPV5 cutover moved every route from UPV4 to UPV5, the sole payment-writer role from UPV4 on
+ * NullifierRegistryV2 to UPV5 on NullifierRegistryV3, and DisputeProtectionPolicyV2 to DisputeVerifierV2.
+ * All or nothing: false while none of it has happened, so the release checks apply exactly; true only for the
+ * complete cutover onto the pinned, correctly wired stack; any partial state fails.
+ */
+async function assertStagingUpv5Cutover(hre: HardhatRuntimeEnvironment, m: Manifest, pins: StagingAllowance["upv5Cutover"], live: Awaited<ReturnType<typeof inspect>>): Promise<boolean> {
+  const c = m.configuration, provider = hre.ethers.provider, at = { blockTag: live.blockNumber };
+  for (const name of UPV5_CUTOVER_PINS)
+    check(same(utils.keccak256(await provider.getCode(pins[name].address, live.blockNumber)), pins[name].runtimeCodeHash), `Staging allowance ${name} bytecode differs from its pin`);
+  const policy = m.contracts.DisputeProtectionPolicyV2; check(policy, "Missing deployed DisputeProtectionPolicyV2");
+  const owned = ["function owner() view returns(address)"], verifiers = ["function nullifierRegistry() view returns(address)", "function attestationVerifier() view returns(address)"];
+  const registry = new Contract(pins.nullifierRegistryV3.address, [...owned, "function predecessor() view returns(address)", "function getWriters() view returns(address[])"], provider);
+  const upv5 = new Contract(pins.unifiedPaymentVerifierV5.address, [...owned, ...verifiers, "function orchestratorRegistry() view returns(address)", "function getPaymentMethods() view returns(bytes32[])"], provider);
+  const disputeVerifier = new Contract(pins.disputeVerifierV2.address, [...owned, ...verifiers, "function pendingOwner() view returns(address)"], provider);
+  const writers: string[] = await registry.getWriters(at);
+  const routed = live.paymentMethods.filter((route) => same(route.verifier, upv5.address)).length;
+  const selected = same(await new Contract(policy.address, ["function disputeVerifier() view returns(address)"], provider).disputeVerifier(at), disputeVerifier.address);
+  if (live.nullifierWriters.length > 0 && writers.length === 0 && routed === 0 && !selected) return false;
+  check(live.nullifierWriters.length === 0 && writers.some((writer) => same(writer, upv5.address)) && routed === live.paymentMethods.length && selected, "Staging UPV5 cutover is incomplete");
+  check(writers.length === 1, "UPV5 must be the only NullifierRegistryV3 writer");
+  const expectedFields: Array<[Contract, string, string]> = [
+    [registry, "predecessor", c.existing.NullifierRegistryV2.address], [registry, "owner", c.governance],
+    [upv5, "nullifierRegistry", registry.address], [upv5, "orchestratorRegistry", c.existing.OrchestratorRegistry.address], [upv5, "attestationVerifier", c.existing.MultiAttestationVerifier.address], [upv5, "owner", c.governance],
+    [disputeVerifier, "nullifierRegistry", registry.address], [disputeVerifier, "attestationVerifier", c.existing.MultiAttestationVerifier.address], [disputeVerifier, "owner", c.governance], [disputeVerifier, "pendingOwner", ZERO],
+  ];
+  for (const [contract, field, expected] of expectedFields) check(same(await contract[field](at), expected), `${contract.address} ${field} mismatch`);
+  check(equal(await upv5.getPaymentMethods(at), c.paymentMethods.map((method) => method.method)), "UPV5 method catalog mismatch");
+  return true;
 }
 
 async function existing(hre: HardhatRuntimeEnvironment, c: ReleaseConfig, name: string): Promise<Contract> {
@@ -513,12 +550,17 @@ export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: Trans
   const live = await inspect(hre, c);
   if (allowance) for (const name of ["signalPolicy", "arbitrator"] as const)
     check(same(utils.keccak256(await hre.ethers.provider.getCode(allowance[name].address, live.blockNumber)), allowance[name].runtimeCodeHash), `Staging allowance ${name} bytecode differs from its pin`);
+  const upv4 = m.contracts.UnifiedPaymentVerifierV4?.address;
+  const cutover = allowance && upv4 && await assertStagingUpv5Cutover(hre, m, allowance.upv5Cutover, live) ? allowance.upv5Cutover : undefined;
   // Normalize only reviewed staging differences; every other baseline field must still match exactly.
   const snapshot = allowance ? {
     ...live,
     // The validated predecessor may be unregistered; its pause state and lifecycle hook stay exact.
     predecessor: { ...live.predecessor, registered: live.predecessor.registered === false ? true : live.predecessor.registered },
-    nullifierWriters: live.nullifierWriters.filter((writer) => !same(writer, allowance.arbitrator.address)),
+    // After the complete cutover UPV5 holds UPV4's routes and sole writer role. Map both back to UPV4 so the checks
+    // below still pin the catalog, its currency order and every other writer exactly.
+    paymentMethods: cutover && upv4 ? live.paymentMethods.map((route) => ({ ...route, verifier: upv4 })) : live.paymentMethods,
+    nullifierWriters: cutover && upv4 ? [upv4] : live.nullifierWriters.filter((writer) => !same(writer, allowance.arbitrator.address)),
     attestation: { ...live.attestation, witnesses: live.attestation.witnesses.filter((witness: string) => !allowance.attestationWitnesses.some((added) => same(witness, added))) },
   } : live;
   if (active || c.environment === "base") assertRegistryOwnership(snapshot);
@@ -540,7 +582,7 @@ export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: Trans
     [o, "escrowRegistry", c.existing.EscrowRegistry.address], [o, "paymentVerifierRegistry", c.existing.PaymentVerifierRegistry.address],
     [policy, "gatingService", c.gatingService], [policy, "whitelistPolicy", contracts.WhitelistPolicyV2.address],
     [o, "protocolFeeRecipient", c.protocolFeeRecipient], [vault, "stakeToken", c.stakeToken], [p, "stakeVault", vault.address],
-    [p, "disputeVerifier", c.existing.DisputeVerifier.address], [p, "disputeNullifierRegistry", c.existing.DisputeNullifierRegistry.address], [p, "orchestratorRegistry", c.existing.OrchestratorRegistry.address],
+    [p, "disputeVerifier", cutover ? cutover.disputeVerifierV2.address : c.existing.DisputeVerifier.address], [p, "disputeNullifierRegistry", c.existing.DisputeNullifierRegistry.address], [p, "orchestratorRegistry", c.existing.OrchestratorRegistry.address],
     [v, "orchestratorRegistry", c.existing.OrchestratorRegistry.address], [v, "nullifierRegistry", c.existing.NullifierRegistryV2.address], [v, "attestationVerifier", c.existing.MultiAttestationVerifier.address],
     [contracts.WhitelistPolicyV2, "groupRegistry", contracts.AddressGroupRegistryV4.address],
   ];

@@ -32,6 +32,37 @@ async function createPrivateDeposit(f, retainOnEmpty = true) {
   return { escrow: escrow.address, depositId: id, paymentMethod: method };
 }
 
+// Lane 49 records, byte copies from main: the real UPV5 stack, which this branch does not compile.
+const UPV5_RECORDS = Object.fromEntries(["NullifierRegistryV3", "UnifiedPaymentVerifierV5", "DisputeVerifierV2"].map((name) => [name, require(`../deployments/base_staging/${name}.json`)]));
+
+async function upv5Stack(f, predecessor = f.deployed.NullifierRegistryV2.address, disputeRegistry) {
+  const deploy = async (name, args) => (await new ContractFactory(UPV5_RECORDS[name].abi, UPV5_RECORDS[name].bytecode, wallet).deploy(...args)).deployed();
+  const pin = async (contract) => ({ address: contract.address, runtimeCodeHash: utils.keccak256(await hre.ethers.provider.getCode(contract.address)) });
+  const attestor = f.deployed.MultiAttestationVerifier.address;
+  const registry = await deploy("NullifierRegistryV3", [predecessor]);
+  const verifier = await deploy("UnifiedPaymentVerifierV5", [f.deployed.OrchestratorRegistry.address, registry.address, attestor]);
+  for (const { method } of f.config.paymentMethods) await (await verifier.addPaymentMethod(method)).wait();
+  const disputeVerifier = await deploy("DisputeVerifierV2", [wallet.address, disputeRegistry ?? registry.address, attestor]);
+  return { registry, verifier, disputeVerifier, pins: { nullifierRegistryV3: await pin(registry), unifiedPaymentVerifierV5: await pin(verifier), disputeVerifierV2: await pin(disputeVerifier) } };
+}
+
+/** Rebuild every route on one verifier, removing from the tail so the swap-and-pop registry keeps the given order. */
+async function reroute(f, verifier, routes = f.config.paymentMethods) {
+  const registry = f.deployed.PaymentVerifierRegistry;
+  for (const method of [...await registry.getPaymentMethods()].reverse()) await (await registry.removePaymentMethod(method)).wait();
+  for (const { method, currencies } of routes) await (await registry.addPaymentMethod(method, verifier, currencies)).wait();
+}
+
+/** The staging cutover: retire NullifierRegistryV2 writers, authorize UPV5 on V3, move every route, then the dispute verifier. */
+async function cutOver(f, stack) {
+  const writers = f.deployed.NullifierRegistryV2;
+  for (const writer of await writers.getWriters()) await (await writers.removeWritePermission(writer)).wait();
+  if (!await stack.registry.isWriter(stack.verifier.address)) await (await stack.registry.addWritePermission(stack.verifier.address)).wait();
+  await reroute(f, stack.verifier.address);
+  const policy = await hre.ethers.getContractAt("DisputeProtectionPolicyV2", f.manifest.contracts.DisputeProtectionPolicyV2.address, wallet);
+  await (await policy.setDisputeVerifier(stack.disputeVerifier.address)).wait();
+}
+
 async function fixture() {
   await hre.network.provider.send("hardhat_reset");
   const chainId = (await hre.ethers.provider.getNetwork()).chainId;
@@ -442,6 +473,103 @@ test("staging allowance requires the exact configured retired predecessor", () =
   assert.throws(() => validateStagingAllowance(allowance, { ...config, existing: { ...config.existing, OrchestratorV3: { ...config.existing.OrchestratorV3, address: other } } }), /Invalid staging allowance retired predecessor/);
 });
 
+test("staging allowance pins the recorded UPV5 stack and refuses malformed cutover pins", () => {
+  const config = JSON.parse(readFileSync("deployments/orchestrator-v4/base_staging.json"));
+  const allowance = JSON.parse(readFileSync("deployments/orchestrator-v4/base_staging.allowance.json"));
+  const pins = allowance.upv5Cutover;
+  assert.deepEqual(Object.keys(pins), ["nullifierRegistryV3", "unifiedPaymentVerifierV5", "disputeVerifierV2"]);
+  assert.deepEqual(Object.values(pins).map((pin) => pin.address), Object.values(UPV5_RECORDS).map((record) => record.address));
+  assert.doesNotThrow(() => validateStagingAllowance(allowance, config));
+  for (const upv5Cutover of [undefined, null, {}, { ...pins, disputeVerifierV2: undefined }, { ...pins, nullifierRegistryV3: { ...pins.nullifierRegistryV3, address: "invalid" } }, { ...pins, unifiedPaymentVerifierV5: { ...pins.unifiedPaymentVerifierV5, address: constants.AddressZero } }, { ...pins, disputeVerifierV2: { ...pins.disputeVerifierV2, runtimeCodeHash: "0x" } }, { ...pins, disputeVerifierV2: pins.unifiedPaymentVerifierV5 }])
+    assert.throws(() => validateStagingAllowance({ ...allowance, upv5Cutover }, config), /Invalid staging allowance UPV5 cutover pins/);
+});
+
+test("staging verification accepts only the complete UPV5 cutover onto the pinned stack; deploy, activation and production stay exact", async () => {
+  const f = await fixture();
+  try {
+    await deploySuite(hre, f.journal);
+    await activate(hre, f.journal);
+    const writers = f.deployed.NullifierRegistryV2, routes = f.deployed.PaymentVerifierRegistry, upv4 = f.manifest.contracts.UnifiedPaymentVerifierV4.address;
+    const policy = await hre.ethers.getContractAt("DisputeProtectionPolicyV2", f.manifest.contracts.DisputeProtectionPolicyV2.address, wallet);
+    const pin = async (address) => ({ address, runtimeCodeHash: utils.keccak256(await hre.ethers.provider.getCode(address)) });
+    const stack = await upv5Stack(f), unused = await upv5Stack(f);
+    const allowance = { signalPolicy: await pin(f.manifest.contracts.IntentSignalPolicy.address), arbitrator: await pin(f.manifest.contracts.AddressGroupRegistryV4.address), attestationWitnesses: [], retiredPredecessor: { address: f.config.existing.OrchestratorV3.address }, upv5Cutover: stack.pins };
+    const readonly = () => new TransactionJournal(`${f.path}.verification`, JSON.parse(readFileSync(f.path)), new VoidSigner(wallet.address, hre.ethers.provider));
+    const verify = (value = allowance) => verifySuite(hre, readonly(), true, value);
+    const zelle = f.config.paymentMethods[2];
+    // Allowed, not required: the untouched release suite still verifies.
+    await verify();
+    // The dispute verifier alone, and every step short of the whole cutover, is a partial state.
+    await (await policy.setDisputeVerifier(stack.disputeVerifier.address)).wait();
+    await assert.rejects(verify(), /Staging UPV5 cutover is incomplete/);
+    await (await policy.setDisputeVerifier(f.config.existing.DisputeVerifier.address)).wait();
+    await verify();
+    await (await stack.registry.addWritePermission(stack.verifier.address)).wait();
+    await assert.rejects(verify(), /Staging UPV5 cutover is incomplete/);
+    await (await writers.removeWritePermission(upv4)).wait();
+    await assert.rejects(verify(), /Staging UPV5 cutover is incomplete/);
+    await reroute(f, stack.verifier.address);
+    await (await routes.removePaymentMethod(zelle.method)).wait();
+    await (await routes.addPaymentMethod(zelle.method, upv4, zelle.currencies)).wait();
+    await assert.rejects(verify(), /Staging UPV5 cutover is incomplete/);
+    await reroute(f, stack.verifier.address);
+    await assert.rejects(verify(), /Staging UPV5 cutover is incomplete/);
+    await (await policy.setDisputeVerifier(stack.disputeVerifier.address)).wait();
+    // Complete: only the allowance admits it, and only staging read-only verification takes the allowance.
+    await assert.rejects(verifySuite(hre, readonly(), true), /Unrecognized payment verifier/);
+    await verify();
+    assert.equal(JSON.parse(readFileSync(`${f.path}.verification`)).verification.active, true);
+    const production = readonly(); production.manifest.configuration.environment = "base";
+    await assert.rejects(verifySuite(hre, production, true, allowance), /Staging allowance is staging-only/);
+    await assert.rejects(verifySuite(hre, production, true), /Unrecognized payment verifier/);
+    const cutoverSnapshot = await inspect(hre, f.config);
+    assert.throws(() => assertFreshDeploymentPreflight(f.config, cutoverSnapshot), /Unrecognized payment verifier/);
+    const nonce = await wallet.getTransactionCount();
+    await assert.rejects(deploySuite(hre, f.journal), /Unrecognized payment verifier/);
+    await assert.rejects(activate(hre, f.journal), /Payment registry differs from the confirmed activation prefix/);
+    assert.equal(await wallet.getTransactionCount(), nonce);
+    // Each pin binds address and runtime: another real stack, or the right address with other bytecode, is refused.
+    for (const name of Object.keys(stack.pins)) {
+      await assert.rejects(verify({ ...allowance, upv5Cutover: { ...stack.pins, [name]: unused.pins[name] } }), /Staging UPV5 cutover is incomplete/);
+      await assert.rejects(verify({ ...allowance, upv5Cutover: { ...stack.pins, [name]: { ...stack.pins[name], runtimeCodeHash: utils.id("other runtime") } } }), new RegExp(`Staging allowance ${name} bytecode differs from its pin`));
+    }
+    // No extra writer on either registry.
+    await (await stack.registry.addWritePermission(other)).wait();
+    await assert.rejects(verify(), /UPV5 must be the only NullifierRegistryV3 writer/);
+    await (await stack.registry.removeWritePermission(other)).wait();
+    await (await writers.addWritePermission(upv4)).wait();
+    await assert.rejects(verify(), /Staging UPV5 cutover is incomplete/);
+    await (await writers.removeWritePermission(upv4)).wait();
+    // The catalog, its currencies and their order stay exact on the registry and on UPV5.
+    const [paypal, venmo] = f.config.paymentMethods;
+    for (const changed of [[paypal, venmo, { ...zelle, currencies: [...zelle.currencies].reverse() }], [paypal, venmo, { ...zelle, currencies: zelle.currencies.slice(1) }], [venmo, paypal, zelle], [paypal, venmo]]) {
+      await reroute(f, stack.verifier.address, changed);
+      await assert.rejects(verify(), /Payment catalog or currency order changed/);
+    }
+    await reroute(f, stack.verifier.address);
+    await (await stack.verifier.removePaymentMethod(zelle.method)).wait();
+    await assert.rejects(verify(), /UPV5 method catalog mismatch/);
+    await (await stack.verifier.addPaymentMethod(zelle.method)).wait();
+    await verify();
+    // The stack must be wired to itself and chained to NullifierRegistryV2.
+    const crossed = await upv5Stack(f, undefined, unused.registry.address);
+    await (await policy.setDisputeVerifier(crossed.disputeVerifier.address)).wait();
+    await assert.rejects(verify({ ...allowance, upv5Cutover: { ...stack.pins, disputeVerifierV2: crossed.pins.disputeVerifierV2 } }), /nullifierRegistry mismatch/);
+    const detached = await upv5Stack(f, f.deployed.NullifierRegistry.address);
+    await cutOver(f, detached);
+    await assert.rejects(verify({ ...allowance, upv5Cutover: detached.pins }), /predecessor mismatch/);
+    await cutOver(f, stack);
+    await verify();
+    // Governance keeps the stack.
+    await (await stack.disputeVerifier.transferOwnership(other)).wait();
+    await assert.rejects(verify(), /pendingOwner mismatch/);
+    await (await stack.disputeVerifier.transferOwnership(constants.AddressZero)).wait();
+    await verify();
+    await (await stack.registry.transferOwnership(other)).wait();
+    await assert.rejects(verify(), /owner mismatch/);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
 test("staging verification admits only the pinned post-activation changes; production refuses the allowance", async () => {
   const f = await fixture();
   try {
@@ -455,7 +583,8 @@ test("staging verification admits only the pinned post-activation changes; produ
     // IntentSignalPolicyV2 shares these getters; any contract stands in for the arbitrator's pinned bytecode.
     const bondedPolicy = await deploy("IntentSignalPolicy", [f.config.gatingService, whitelist]);
     const arbitrator = await deploy("AddressGroupRegistry"), otherArbitrator = await deploy("AddressGroupRegistry");
-    const allowance = { signalPolicy: await pin(bondedPolicy), arbitrator: await pin(arbitrator), attestationWitnesses: [witness], retiredPredecessor: { address: f.config.existing.OrchestratorV3.address } };
+    // The UPV5 stack stays uncut here, so every check below runs on the release routes and writers.
+    const allowance = { signalPolicy: await pin(bondedPolicy), arbitrator: await pin(arbitrator), attestationWitnesses: [witness], retiredPredecessor: { address: f.config.existing.OrchestratorV3.address }, upv5Cutover: (await upv5Stack(f)).pins };
     const readonly = () => new TransactionJournal(`${f.path}.verification`, JSON.parse(readFileSync(f.path)), new VoidSigner(wallet.address, hre.ethers.provider));
     for (const value of [null, { ...allowance, arbitrator: undefined }, { ...allowance, signalPolicy: { ...allowance.signalPolicy, address: constants.AddressZero } }, { ...allowance, arbitrator: { ...allowance.arbitrator, runtimeCodeHash: "0x" } }, { ...allowance, attestationWitnesses: undefined }, { ...allowance, attestationWitnesses: [witness, witness.toLowerCase()] }])
       assert.throws(() => validateStagingAllowance(value, f.config), /Invalid staging allowance|must be an object/);

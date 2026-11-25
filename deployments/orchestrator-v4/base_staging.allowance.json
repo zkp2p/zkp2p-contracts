@@ -12,5 +12,19 @@
   ],
   "retiredPredecessor": {
     "address": "0x2b5E8Ab562e45fA89D73802605E145ED3E3EeF4f"
+  },
+  "upv5Cutover": {
+    "nullifierRegistryV3": {
+      "address": "0x301f236d276343BdBf82605Dd48a9298472aADdA",
+      "runtimeCodeHash": "0x0128d1bb73390762fe1a0eba86feae7fff1396f4fcfeae4d5d8fe57e4ad7abdf"
+    },
+    "unifiedPaymentVerifierV5": {
+      "address": "0x4f29Ca5c9c4DBB35381cc39eAb620453eFBCF4AF",
+      "runtimeCodeHash": "0xeac2b7521b17afe4b7de909c3782eb12ca94108c8636ef18531c853e5e680021"
+    },
+    "disputeVerifierV2": {
+      "address": "0xa78bFd7582c9E6a03E42f91d72924B0d5A8D313b",
+      "runtimeCodeHash": "0xcb15f430ac64405687d6e55cf6f14665fc61e38cce1006e4dc88bebd14cd9da1"
+    }
   }
 }

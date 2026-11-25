@@ -270,3 +270,46 @@ to the configured `existing.OrchestratorV3.address`. Staging `verify` and
 and retain the configured `predecessorHook`. Registration remains required
 without the allowance, including on `base`, and deployment and activation
 checks are unchanged. This allowance change requires a new `executionToolCommit`.
+
+## UPV5 cutover allowance, 2026-11-25
+
+On 2026-11-25 (blocks 62024194 to 62026360) staging moved off UPV4. The plan is
+journaled in contracts #399 (`deployments/outputs/upv5-cutover-base_staging.json`):
+
+- NullifierRegistryV2 lost both writers, UPV4
+  `0x7Da43ba0F85cfb64733216C4A2288f80dFfe1EAb` and `BondedArbitrator`
+  `0x3CC27551f5722b88CbB8f84a17b05b751039F3c3`.
+- NullifierRegistryV3 `0x301f236d276343BdBf82605Dd48a9298472aADdA` made
+  UnifiedPaymentVerifierV5 `0x4f29Ca5c9c4DBB35381cc39eAb620453eFBCF4AF` its
+  writer.
+- All 14 routes were removed and re-added on UPV5 with the same order and
+  currencies.
+- DisputeProtectionPolicyV2 selected DisputeVerifierV2
+  `0xa78bFd7582c9E6a03E42f91d72924B0d5A8D313b`.
+
+Active `verify` then failed at `Unrecognized payment verifier`, and would also
+have failed on the payment writers and the policy's dispute verifier.
+
+The allowance's required `upv5Cutover` field pins the three contracts by address
+and live runtime code hash. The addresses match the lane 49 records from main
+`7554e41`; this branch carries byte copies of those records so its tests can
+deploy the real stack. With the allowance, staging `verify` and `verify-source`
+treat the cutover as all or nothing:
+
+- Before any step lands, every release check applies unchanged.
+- The complete cutover is accepted only when every condition below holds:
+  - every route selects the pinned UPV5;
+  - NullifierRegistryV2 has no writers;
+  - UPV5 is the pinned NullifierRegistryV3's only writer;
+  - DisputeProtectionPolicyV2 selects the pinned DisputeVerifierV2;
+  - V3's `predecessor` is NullifierRegistryV2;
+  - UPV5 and DisputeVerifierV2 read V3 and the configured MultiAttestationVerifier;
+  - UPV5 also reads the configured OrchestratorRegistry, and its method list
+    equals the configured catalog;
+  - governance owns all three, and DisputeVerifierV2 has no pending owner.
+- Any other state, including a partial cutover, fails.
+- The registry's catalog, order and currencies must still equal the
+  configuration, and every other check is unchanged.
+
+Deploy, activation and `base` stay exact. This allowance change requires a new
+`executionToolCommit`.
