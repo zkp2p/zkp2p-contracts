@@ -19,6 +19,7 @@ import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.so
 import {DisputeVerifierV2} from "contracts/unifiedVerifier/DisputeVerifierV2.sol";
 import {MultiAttestationVerifier} from "contracts/unifiedVerifier/MultiAttestationVerifier.sol";
 import {ReceiptVerifier} from "contracts/unifiedVerifier/ReceiptVerifier.sol";
+import {BlacklistTokenMock} from "../../mocks/BlacklistTokenMock.sol";
 import {PayoutHookTokenMock} from "../../mocks/PayoutHookTokenMock.sol";
 import {ReentrantPayoutRecipientMock} from "../../mocks/ReentrantPayoutRecipientMock.sol";
 
@@ -35,6 +36,8 @@ contract DisputeProtectionPolicyV3EarlyReleaseTest is Test {
     event ReceiptConfirmed(bytes32 indexed intentHash, uint64 releaseAt);
     event ReceiptSkipped(bytes32 indexed intentHash, P.SkipReason reason);
     event ReceiptVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
+    event ReceiptPayoutFailed(bytes32 indexed intentHash);
+    event RemainderRelocked(bytes32 indexed intentHash, address indexed owner, uint256 amount, uint64 maturesAt);
 
     uint64 internal constant START = 1_000_000;
     uint64 internal constant WINDOW = 14 days;
@@ -447,7 +450,9 @@ contract DisputeProtectionPolicyV3EarlyReleaseTest is Test {
 
     /* ============ Disputes and early release ============ */
 
-    function test_DisputeAfterConfirmedFutureReleaseAtSucceeds() public {
+    /// @dev A share dispute after a confirmed future releaseAt pays the maker's share, clears the releaseAt and
+    /// relocks the remainder until maturity, so the confirmation no longer releases it early.
+    function test_ShareDisputeAfterConfirmedReleaseAtClearsIt() public {
         _settleDeferred(ID, RECIPIENT);
         policy.confirmReceipts(_batch(_receipt(ID, START + 3 days)));
         vm.warp(START + 3 days - 1);
@@ -455,14 +460,106 @@ contract DisputeProtectionPolicyV3EarlyReleaseTest is Test {
         IDisputeVerifier.DisputeAttestation memory dispute = _dispute(ID, 24e6);
         vm.expectEmit(true, true, true, true, address(policy));
         emit DisputeResolved(ID, RECIPIENT, DEPOSITOR, 23_772_000, keccak256(abi.encode("dispute", ID)));
+        vm.expectEmit(true, true, false, true, address(policy));
+        emit RemainderRelocked(ID, RECIPIENT, NET - 23_772_000, MATURES_AT);
         policy.submitDispute(dispute);
 
-        assertFalse(_isOpen(ID));
         assertEq(vault.claimable(DEPOSITOR), 23_772_000);
-        assertEq(token.balanceOf(RECIPIENT), NET - 23_772_000);
-        vm.expectRevert(abi.encodeWithSelector(P.ProtectionNotFound.selector, ID));
+        assertEq(token.balanceOf(RECIPIENT), 0);
+        assertEq(_releaseAt(ID), 0);
+        assertTrue(policy.getProtection(ID).partiallyDisputed);
+
+        vm.warp(START + 3 days);
+        vm.expectRevert(abi.encodeWithSelector(P.NotMatured.selector, MATURES_AT, START + 3 days));
         policy.release(_ids(ID));
+
+        vm.warp(MATURES_AT);
+        policy.release(_ids(ID));
+        assertEq(token.balanceOf(RECIPIENT), NET - 23_772_000);
+        assertFalse(_isOpen(ID));
         _assertNothingStranded();
+    }
+
+    /// @dev After a share dispute, a fresh receipt can confirm the relocked remainder like any open protection.
+    function test_ReceiptAfterShareDisputeReleasesTheRemainderEarly() public {
+        _settleStaked(ID);
+        policy.submitDispute(_dispute(ID, 24e6));
+        IReceiptVerifier.ReceiptAttestation[] memory receipts = _batch(_receipt(ID, START + 2 days));
+        policy.confirmReceipts(receipts);
+        assertEq(_releaseAt(ID), START + 2 days);
+
+        vm.warp(START + 2 days);
+        policy.release(_ids(ID));
+        assertEq(vault.freeStake(TAKER), GROSS - 24e6);
+        assertEq(vault.claimable(DEPOSITOR), 24e6);
+        assertFalse(_isOpen(ID));
+    }
+
+    /// @dev Review focus: one recipient the vault cannot pay never sinks a keeper's batch. Its releaseAt is kept and
+    /// `ReceiptPayoutFailed` emitted; `release` still reverts for it, as on V2, and a full dispute still works.
+    function test_DueReceiptWithFailingPayoutDoesNotSinkTheBatch() public {
+        BlacklistTokenMock blacklistToken = new BlacklistTokenMock();
+        _deploy(blacklistToken);
+        address blocked = address(0xB10C);
+        _settleDeferred(ID, blocked);
+        _settleDeferred(ID2, RECIPIENT);
+        _settleDeferred(ID3, RECIPIENT);
+        blacklistToken.setBlacklisted(blocked, true);
+        IReceiptVerifier.ReceiptAttestation[] memory receipts =
+            _batch(_receipt(ID, START), _receipt(ID2, START), _receipt(ID3, START + 1 days));
+
+        vm.expectEmit(true, false, false, true, address(policy));
+        emit ReceiptConfirmed(ID, START);
+        vm.expectEmit(true, false, false, true, address(policy));
+        emit ReceiptPayoutFailed(ID);
+        vm.expectEmit(true, false, false, true, address(policy));
+        emit ReceiptConfirmed(ID2, START);
+        vm.expectEmit(true, false, false, true, address(policy));
+        emit ProtectionReleased(ID2);
+        vm.expectEmit(true, false, false, true, address(policy));
+        emit ReceiptConfirmed(ID3, START + 1 days);
+        policy.confirmReceipts(receipts);
+
+        P.Protection memory failed = policy.getProtection(ID);
+        assertEq(failed.depositor, DEPOSITOR);
+        assertTrue(failed.deferredPayout);
+        assertEq(failed.paymentMethod, METHOD);
+        assertEq(failed.releaseAt, START);
+        assertEq(failed.releaseAmount, GROSS);
+        (address lockOwner, uint256 lockAmount,) = vault.locks(ID);
+        assertEq(lockOwner, blocked);
+        assertEq(lockAmount, NET);
+        assertEq(blacklistToken.balanceOf(RECIPIENT), NET);
+        assertFalse(_isOpen(ID2));
+        assertEq(_releaseAt(ID3), START + 1 days);
+
+        vm.expectRevert(bytes("Blacklistable: account is blacklisted"));
+        policy.release(_ids(ID));
+        vm.expectEmit(true, false, false, true, address(policy));
+        emit ReceiptSkipped(ID, P.SkipReason.ALREADY_CONFIRMED);
+        policy.confirmReceipts(_batch(_receipt(ID, START)));
+
+        policy.submitDispute(_dispute(ID, GROSS));
+        assertEq(vault.claimable(DEPOSITOR), NET);
+        assertFalse(_isOpen(ID));
+        _assertNothingStranded();
+    }
+
+    /// @dev A failed stake unlock (the policy lost its vault controller role) is likewise kept, not fatal.
+    function test_DueReceiptWithFailingStakeUnlockKeepsTheProtection() public {
+        _settleStaked(ID);
+        IReceiptVerifier.ReceiptAttestation[] memory receipts = _batch(_receipt(ID, START));
+        vault.setController(address(policy), false);
+
+        vm.expectEmit(true, false, false, true, address(policy));
+        emit ReceiptPayoutFailed(ID);
+        policy.confirmReceipts(receipts);
+        assertEq(_releaseAt(ID), START);
+        assertEq(vault.lockedStake(TAKER), GROSS);
+
+        vault.setController(address(policy), true);
+        policy.release(_ids(ID));
+        assertEq(vault.freeStake(TAKER), GROSS);
     }
 
     /// @dev A dispute stays possible after releaseAt until the protection is paid out.

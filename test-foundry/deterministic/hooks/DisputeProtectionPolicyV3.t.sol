@@ -3,14 +3,12 @@ pragma solidity ^0.8.18;
 
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {DisputeProtectionPolicyV3} from "contracts/hooks/DisputeProtectionPolicyV3.sol";
 import {IDisputeProtectionPolicyV3 as P} from "contracts/interfaces/IDisputeProtectionPolicyV3.sol";
 import {IDisputeVerifier} from "contracts/interfaces/IDisputeVerifier.sol";
 import {IIntentSettlementPolicy as S} from "contracts/interfaces/IIntentSettlementPolicy.sol";
-import {IStakeVaultV2} from "contracts/interfaces/IStakeVaultV2.sol";
 import {StakeVaultV2} from "contracts/StakeVaultV2.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
@@ -20,24 +18,12 @@ import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.so
 import {DisputeVerifierV2} from "contracts/unifiedVerifier/DisputeVerifierV2.sol";
 import {ReceiptVerifier} from "contracts/unifiedVerifier/ReceiptVerifier.sol";
 import {AttestationVerifierMock} from "../../mocks/AttestationVerifierMock.sol";
+import {BlacklistTokenMock} from "../../mocks/BlacklistTokenMock.sol";
 import {PayoutHookTokenMock} from "../../mocks/PayoutHookTokenMock.sol";
 import {ReentrantPayoutRecipientMock} from "../../mocks/ReentrantPayoutRecipientMock.sol";
 
 /// @notice A payout recipient with no code path into the vault.
 contract VaultUnawareRecipient {}
-
-/// @notice Burns 1% of every transfer, so a vault payout arrives short.
-contract ClaimFeeToken is ERC20 {
-    constructor() ERC20("Fee USDC", "fUSDC") {
-        _mint(msg.sender, 100_000e6);
-    }
-
-    function _transfer(address _from, address _to, uint256 _amount) internal override {
-        uint256 fee = _amount / 100;
-        super._transfer(_from, _to, _amount - fee);
-        _burn(_from, fee);
-    }
-}
 
 contract DisputeProtectionPolicyV3Test is Test {
     event ProtectionOpened(bytes32 indexed intentHash, address indexed depositor);
@@ -49,22 +35,27 @@ contract DisputeProtectionPolicyV3Test is Test {
         uint256 compensatedAmount,
         bytes32 disputeId
     );
-    event RemainderPaid(bytes32 indexed intentHash, address indexed recipient, uint256 amount);
+    event RemainderRelocked(bytes32 indexed intentHash, address indexed owner, uint256 amount, uint64 maturesAt);
     event DisputeVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
 
+    uint64 internal constant START = 1000;
     uint64 internal constant WINDOW = 14 days;
+    uint64 internal constant MATURES_AT = START + WINDOW;
     uint256 internal constant GROSS = 100e6;
     uint256 internal constant NET = 99.05e6;
+    uint256 internal constant DEFERRED_SHARE = 23_772_000; // ⌈99.05 × 24 ÷ 100⌉ USDC, exact
     bytes32 internal constant METHOD = keccak256("paypal");
     bytes32 internal constant USD = keccak256("USD");
     bytes32 internal constant SHARE = keccak256("PEER_RELEASE_SHARE");
     bytes32 internal constant ID = keccak256("intent");
     bytes32 internal constant ID2 = keccak256("second");
+    bytes32 internal constant REVERSAL_ID = keccak256("reversal-case");
     address internal constant TAKER = address(0x11);
     address internal constant RECIPIENT = address(0x22);
     address internal constant DEPOSITOR = address(0x33);
     address internal constant STRANGER = address(0x44);
     string internal constant REENTRANT_CALL = "ReentrancyGuard: reentrant call";
+    string internal constant BLACKLISTED = "Blacklistable: account is blacklisted";
 
     IERC20 internal token;
     StakeVaultV2 internal vault;
@@ -76,7 +67,7 @@ contract DisputeProtectionPolicyV3Test is Test {
     OrchestratorRegistry internal orchestrators;
 
     function setUp() public {
-        vm.warp(1000);
+        vm.warp(START);
         _deploy(new USDCMock(100_000e6, "USDC", "USDC"));
     }
 
@@ -152,6 +143,16 @@ contract DisputeProtectionPolicyV3Test is Test {
         assertEq(policy.getProtection(id).depositor != address(0), open);
     }
 
+    function _assertPartiallyDisputed(bytes32 id, bool deferredPayout) internal view {
+        P.Protection memory protection = policy.getProtection(id);
+        assertEq(protection.depositor, DEPOSITOR);
+        assertEq(protection.deferredPayout, deferredPayout);
+        assertEq(protection.paymentMethod, METHOD);
+        assertEq(protection.releaseAt, 0);
+        assertEq(protection.releaseAmount, GROSS);
+        assertTrue(protection.partiallyDisputed);
+    }
+
     function _assertLock(bytes32 id, address owner, uint256 amount, uint256 maturesAt) internal view {
         (address lockOwner, uint256 lockAmount, uint64 lockMaturity) = vault.locks(id);
         assertEq(lockOwner, owner);
@@ -159,7 +160,7 @@ contract DisputeProtectionPolicyV3Test is Test {
         assertEq(lockMaturity, maturesAt);
     }
 
-    /// @dev The vault holds exactly its liabilities and the policy keeps nothing between calls.
+    /// @dev The vault holds exactly its liabilities and the policy holds nothing.
     function _assertNothingStranded() internal view {
         assertEq(token.balanceOf(address(vault)), vault.totalAccounted());
         assertEq(token.balanceOf(address(policy)), 0);
@@ -182,10 +183,11 @@ contract DisputeProtectionPolicyV3Test is Test {
         P.Protection memory protection = policy.getProtection(ID);
         assertEq(protection.depositor, DEPOSITOR);
         assertFalse(protection.deferredPayout);
-        assertEq(protection.releaseAt, 0);
         assertEq(protection.paymentMethod, METHOD);
+        assertEq(protection.releaseAt, 0);
         assertEq(protection.releaseAmount, GROSS);
-        _assertLock(ID, TAKER, GROSS, block.timestamp + WINDOW);
+        assertFalse(protection.partiallyDisputed);
+        _assertLock(ID, TAKER, GROSS, MATURES_AT);
     }
 
     function test_SettleStoresReleaseAmountOnDeferredPayout() public {
@@ -201,10 +203,24 @@ contract DisputeProtectionPolicyV3Test is Test {
         P.Protection memory protection = policy.getProtection(ID);
         assertEq(protection.depositor, DEPOSITOR);
         assertTrue(protection.deferredPayout);
-        assertEq(protection.releaseAt, 0);
         assertEq(protection.paymentMethod, METHOD);
+        assertEq(protection.releaseAt, 0);
         assertEq(protection.releaseAmount, GROSS);
-        _assertLock(ID, RECIPIENT, NET, block.timestamp + WINDOW);
+        assertFalse(protection.partiallyDisputed);
+        _assertLock(ID, RECIPIENT, NET, MATURES_AT);
+    }
+
+    /// @dev A reader that decodes V2's `(depositor, deferredPayout, paymentMethod)` positionally stays correct.
+    function test_GetProtectionKeepsV2LeadingOrder() public {
+        _settleDeferred(ID, RECIPIENT);
+        (bool success, bytes memory returned) =
+            address(policy).staticcall(abi.encodeWithSignature("getProtection(bytes32)", ID));
+        assertTrue(success);
+        assertEq(returned.length, 6 * 32);
+        (address depositor, bool deferredPayout, bytes32 paymentMethod) = abi.decode(returned, (address, bool, bytes32));
+        assertEq(depositor, DEPOSITOR);
+        assertTrue(deferredPayout);
+        assertEq(paymentMethod, METHOD);
     }
 
     function test_SettlementZeroWindowCreatesNoRecord() public {
@@ -238,7 +254,7 @@ contract DisputeProtectionPolicyV3Test is Test {
         _stake(TAKER, GROSS);
         context.settlementData = abi.encode(uint256(180 days));
         policy.settleIntent(context);
-        _assertLock(ID, TAKER, GROSS, block.timestamp + 180 days);
+        _assertLock(ID, TAKER, GROSS, START + 180 days);
     }
 
     function test_LifecycleEntrypointsRequireAuthorizedOrchestrator() public {
@@ -251,7 +267,7 @@ contract DisputeProtectionPolicyV3Test is Test {
         vm.stopPrank();
     }
 
-    /* ============ Fiat disputes: whole lock (V2 parity) ============ */
+    /* ============ Full disputes: whole lock (V2 parity) ============ */
 
     function test_FiatDisputeOnStakePaysWholeLock() public {
         _settleStaked(ID);
@@ -270,39 +286,55 @@ contract DisputeProtectionPolicyV3Test is Test {
 
     function test_FiatDisputeOnDeferredPaysWholeLock() public {
         _settleDeferred(ID, RECIPIENT);
+        IDisputeVerifier.DisputeAttestation memory attestation = _dispute(ID, 1, USD);
         vm.recordLogs();
-        policy.submitDispute(_dispute(ID, 1, USD));
+        policy.submitDispute(attestation);
 
         assertEq(vault.claimable(DEPOSITOR), NET);
         assertEq(vault.stakeBalance(RECIPIENT), 0);
         assertEq(token.balanceOf(RECIPIENT), 0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 index; index < logs.length; ++index) {
-            assertTrue(logs[index].topics[0] != RemainderPaid.selector);
+            assertTrue(logs[index].topics[0] != RemainderRelocked.selector);
         }
+        _assertOpen(ID, false);
         _assertNothingStranded();
+    }
+
+    /// @dev A full dispute stays possible after maturity until the protection is released.
+    function test_FiatDisputeAfterMaturityBeforeReleaseSucceeds() public {
+        _settleDeferred(ID, RECIPIENT);
+        IDisputeVerifier.DisputeAttestation memory attestation = _dispute(ID, 1, USD);
+        vm.warp(MATURES_AT + 1 days);
+        policy.submitDispute(attestation);
+        assertEq(vault.claimable(DEPOSITOR), NET);
+        _assertOpen(ID, false);
     }
 
     /* ============ Share disputes ============ */
 
-    function test_ShareDisputeOnStakePaysShareAndFreesTheRest() public {
+    function test_ShareDisputeOnStakePaysShareAndRelocksTheRest() public {
         _settleStaked(ID);
         IDisputeVerifier.DisputeAttestation memory attestation = _dispute(ID, 24e6, SHARE);
         vm.expectEmit(true, true, true, true, address(policy));
         emit DisputeResolved(ID, TAKER, DEPOSITOR, 24e6, _disputeId(ID));
+        vm.expectEmit(true, true, false, true, address(policy));
+        emit RemainderRelocked(ID, TAKER, GROSS - 24e6, MATURES_AT);
         policy.submitDispute(attestation);
 
         assertEq(vault.claimable(DEPOSITOR), 24e6);
         assertEq(vault.stakeBalance(TAKER), GROSS - 24e6);
-        assertEq(vault.lockedStake(TAKER), 0);
-        assertEq(vault.freeStake(TAKER), GROSS - 24e6);
+        assertEq(vault.lockedStake(TAKER), GROSS - 24e6);
+        assertEq(vault.freeStake(TAKER), 0);
         assertEq(token.balanceOf(TAKER), 0);
-        _assertOpen(ID, false);
-        _assertLock(ID, address(0), 0, 0);
+        _assertLock(ID, TAKER, GROSS - 24e6, MATURES_AT);
+        _assertPartiallyDisputed(ID, false);
+        assertTrue(disputes.isNullified(keccak256(abi.encodePacked(METHOD, _disputeId(ID)))));
         _assertNothingStranded();
     }
 
     /// @dev Spec example: ₹8,000 order, 96 USDC locked, ₹6,000 arrived; the enclave signs ⌈96 × 2,000 ÷ 8,000⌉ = 24.
+    /// The other 72 stays locked until maturity, then returns to the stake owner.
     function test_SpecExampleHonestPartialPaymentPaysMakerTwentyFour() public {
         _stake(TAKER, 96e6);
         S.SettlementContext memory context = _context(ID, RECIPIENT);
@@ -310,41 +342,66 @@ contract DisputeProtectionPolicyV3Test is Test {
         policy.settleIntent(context);
 
         policy.submitDispute(_dispute(ID, 24e6, SHARE));
-
         assertEq(vault.claimable(DEPOSITOR), 24e6);
+        assertEq(vault.freeStake(TAKER), 0);
+        _assertLock(ID, TAKER, 72e6, MATURES_AT);
+
+        vm.warp(MATURES_AT);
+        policy.release(_ids(ID));
         assertEq(vault.freeStake(TAKER), 72e6);
+        _assertOpen(ID, false);
     }
 
-    function test_ShareDisputeOnDeferredPaysDepositorAndRemainderToEoaRecipient() public {
+    function test_ShareDisputeOnDeferredRelocksRemainderForRecipient() public {
         _stake(RECIPIENT, 10e6);
         _settleDeferred(ID, RECIPIENT);
-        uint256 compensation = 23_772_000; // ⌈99.05 × 24 ÷ 100⌉ USDC, exact
         IDisputeVerifier.DisputeAttestation memory attestation = _dispute(ID, 24e6, SHARE);
         vm.expectEmit(true, true, true, true, address(policy));
-        emit DisputeResolved(ID, RECIPIENT, DEPOSITOR, compensation, _disputeId(ID));
+        emit DisputeResolved(ID, RECIPIENT, DEPOSITOR, DEFERRED_SHARE, _disputeId(ID));
         vm.expectEmit(true, true, false, true, address(policy));
-        emit RemainderPaid(ID, RECIPIENT, NET - compensation);
+        emit RemainderRelocked(ID, RECIPIENT, NET - DEFERRED_SHARE, MATURES_AT);
         vm.prank(STRANGER);
         policy.submitDispute(attestation);
 
-        assertEq(vault.claimable(DEPOSITOR), compensation);
-        assertEq(token.balanceOf(RECIPIENT), NET - compensation);
-        assertEq(vault.stakeBalance(RECIPIENT), 10e6);
+        assertEq(vault.claimable(DEPOSITOR), DEFERRED_SHARE);
+        assertEq(token.balanceOf(RECIPIENT), 0);
+        assertEq(vault.stakeBalance(RECIPIENT), 10e6 + NET - DEFERRED_SHARE);
         assertEq(vault.freeStake(RECIPIENT), 10e6);
+        _assertLock(ID, RECIPIENT, NET - DEFERRED_SHARE, MATURES_AT);
+        _assertPartiallyDisputed(ID, true);
+        _assertNothingStranded();
+
+        vm.warp(MATURES_AT);
+        policy.release(_ids(ID));
+        assertEq(token.balanceOf(RECIPIENT), NET - DEFERRED_SHARE);
+        assertEq(vault.stakeBalance(RECIPIENT), 10e6);
         _assertOpen(ID, false);
-        _assertLock(ID, address(0), 0, 0);
         _assertNothingStranded();
     }
 
-    function test_ShareDisputeOnDeferredPaysRemainderToVaultUnawareContract() public {
+    function test_ReleaseAfterShareDisputePaysOnlyRemainderAtMaturity() public {
         address recipient = address(new VaultUnawareRecipient());
         _settleDeferred(ID, recipient);
-
+        _settleStaked(ID2);
         policy.submitDispute(_dispute(ID, 24e6, SHARE));
+        policy.submitDispute(_dispute(ID2, 24e6, SHARE));
+        bytes32[] memory ids = new bytes32[](2);
+        ids[0] = ID;
+        ids[1] = ID2;
 
-        assertEq(vault.claimable(DEPOSITOR), 23_772_000);
-        assertEq(token.balanceOf(recipient), NET - 23_772_000);
+        vm.warp(MATURES_AT - 1);
+        vm.expectRevert(abi.encodeWithSelector(P.NotMatured.selector, MATURES_AT, MATURES_AT - 1));
+        policy.release(ids);
+
+        vm.warp(MATURES_AT);
+        policy.release(ids);
+        assertEq(token.balanceOf(recipient), NET - DEFERRED_SHARE);
         assertEq(vault.stakeBalance(recipient), 0);
+        assertEq(vault.freeStake(TAKER), GROSS - 24e6);
+        assertEq(vault.lockedStake(TAKER), 0);
+        assertEq(vault.claimable(DEPOSITOR), DEFERRED_SHARE + 24e6);
+        _assertOpen(ID, false);
+        _assertOpen(ID2, false);
         _assertNothingStranded();
     }
 
@@ -353,12 +410,12 @@ contract DisputeProtectionPolicyV3Test is Test {
         _settleDeferred(ID, RECIPIENT);
         policy.submitDispute(_dispute(ID, 33_333_333, SHARE));
         assertEq(vault.claimable(DEPOSITOR), 33_016_667);
-        assertEq(token.balanceOf(RECIPIENT), NET - 33_016_667);
+        _assertLock(ID, RECIPIENT, NET - 33_016_667, MATURES_AT);
 
         _settleDeferred(ID2, RECIPIENT);
         policy.submitDispute(_dispute(ID2, 1, SHARE));
         assertEq(vault.claimable(DEPOSITOR), 33_016_667 + 1);
-        assertEq(token.balanceOf(RECIPIENT), 2 * NET - 33_016_667 - 1);
+        _assertLock(ID2, RECIPIENT, NET - 1, MATURES_AT);
         _assertNothingStranded();
     }
 
@@ -374,11 +431,83 @@ contract DisputeProtectionPolicyV3Test is Test {
             policy.submitDispute(_dispute(stakedId, shares[index], SHARE));
             assertEq(vault.claimable(DEPOSITOR) - claimableBefore, GROSS);
             assertEq(vault.stakeBalance(TAKER), 0);
+            _assertOpen(stakedId, false);
 
             policy.submitDispute(_dispute(deferredId, shares[index], SHARE));
             assertEq(vault.claimable(DEPOSITOR) - claimableBefore, GROSS + NET);
+            _assertOpen(deferredId, false);
+            _assertLock(deferredId, address(0), 0, 0);
         }
         assertEq(token.balanceOf(RECIPIENT), 0);
+        _assertNothingStranded();
+    }
+
+    /// @dev Maturity bars only a share dispute that must relock a remainder; a share claim of the whole lock leaves
+    /// nothing to relock and is allowed until release, like a full dispute.
+    function test_PartialShareDisputeAtOrAfterMaturityReverts() public {
+        _settleDeferred(ID, RECIPIENT);
+        IDisputeVerifier.DisputeAttestation memory partialClaim = _dispute(ID, 24e6, SHARE);
+
+        vm.warp(MATURES_AT);
+        vm.expectRevert(abi.encodeWithSelector(P.ProtectionMatured.selector, ID, MATURES_AT));
+        policy.submitDispute(partialClaim);
+        vm.warp(MATURES_AT + 30 days);
+        vm.expectRevert(abi.encodeWithSelector(P.ProtectionMatured.selector, ID, MATURES_AT));
+        policy.submitDispute(partialClaim);
+        _assertLock(ID, RECIPIENT, NET, MATURES_AT);
+
+        policy.submitDispute(_dispute(ID, GROSS, SHARE, keccak256("whole")));
+        assertEq(vault.claimable(DEPOSITOR), NET);
+        _assertOpen(ID, false);
+    }
+
+    function test_PartialShareDisputeOneSecondBeforeMaturitySucceeds() public {
+        _settleStaked(ID);
+        IDisputeVerifier.DisputeAttestation memory partialClaim = _dispute(ID, 24e6, SHARE);
+        vm.warp(MATURES_AT - 1);
+        policy.submitDispute(partialClaim);
+        _assertLock(ID, TAKER, GROSS - 24e6, MATURES_AT);
+    }
+
+    function test_SecondShareDisputeReverts() public {
+        _settleDeferred(ID, RECIPIENT);
+        policy.submitDispute(_dispute(ID, 24e6, SHARE));
+
+        IDisputeVerifier.DisputeAttestation memory another = _dispute(ID, 10e6, SHARE, keccak256("another-scan"));
+        vm.expectRevert(abi.encodeWithSelector(P.AlreadyPartiallyDisputed.selector, ID));
+        policy.submitDispute(another);
+        IDisputeVerifier.DisputeAttestation memory whole = _dispute(ID, GROSS, SHARE, keccak256("whole"));
+        vm.expectRevert(abi.encodeWithSelector(P.AlreadyPartiallyDisputed.selector, ID));
+        policy.submitDispute(whole);
+
+        assertEq(vault.claimable(DEPOSITOR), DEFERRED_SHARE);
+        _assertLock(ID, RECIPIENT, NET - DEFERRED_SHARE, MATURES_AT);
+    }
+
+    /// @dev The paid part is reversed later (a card-funded payment charged back, a pending row that failed): a full
+    /// dispute takes the whole remaining lock, also after maturity, until release.
+    function test_ShareDisputeThenReversalFullDisputeTakesRemainingLock() public {
+        _settleDeferred(ID, RECIPIENT);
+        _settleStaked(ID2);
+        policy.submitDispute(_dispute(ID, 24e6, SHARE));
+        policy.submitDispute(_dispute(ID2, 24e6, SHARE));
+        IDisputeVerifier.DisputeAttestation memory deferredReversal = _dispute(ID, 1, USD, REVERSAL_ID);
+        IDisputeVerifier.DisputeAttestation memory stakedReversal = _dispute(ID2, 1, USD, keccak256("reversal-2"));
+
+        vm.expectEmit(true, true, true, true, address(policy));
+        emit DisputeResolved(ID, RECIPIENT, DEPOSITOR, NET - DEFERRED_SHARE, REVERSAL_ID);
+        policy.submitDispute(deferredReversal);
+        vm.warp(MATURES_AT + 1 days);
+        policy.submitDispute(stakedReversal);
+
+        assertEq(vault.claimable(DEPOSITOR), NET + GROSS);
+        assertEq(vault.stakeBalance(RECIPIENT), 0);
+        assertEq(vault.stakeBalance(TAKER), 0);
+        assertEq(token.balanceOf(RECIPIENT), 0);
+        _assertOpen(ID, false);
+        _assertOpen(ID2, false);
+        _assertLock(ID, address(0), 0, 0);
+        _assertLock(ID2, address(0), 0, 0);
         _assertNothingStranded();
     }
 
@@ -390,7 +519,7 @@ contract DisputeProtectionPolicyV3Test is Test {
         policy.submitDispute(attestation);
 
         _assertOpen(ID, true);
-        _assertLock(ID, RECIPIENT, NET, block.timestamp + WINDOW);
+        _assertLock(ID, RECIPIENT, NET, MATURES_AT);
         assertFalse(disputes.isNullified(keccak256(abi.encodePacked(METHOD, _disputeId(ID)))));
     }
 
@@ -400,8 +529,11 @@ contract DisputeProtectionPolicyV3Test is Test {
         policy.submitDispute(attestation);
         assertTrue(disputes.isNullified(keccak256(abi.encodePacked(METHOD, _disputeId(ID)))));
 
-        vm.expectRevert(abi.encodeWithSelector(P.ProtectionNotFound.selector, ID));
+        vm.expectRevert(abi.encodeWithSelector(P.AlreadyPartiallyDisputed.selector, ID));
         policy.submitDispute(attestation);
+        IDisputeVerifier.DisputeAttestation memory sameIdFull = _dispute(ID, 1, USD, _disputeId(ID));
+        vm.expectRevert(bytes("Nullifier already exists"));
+        policy.submitDispute(sameIdFull);
 
         _settleDeferred(ID2, RECIPIENT);
         IDisputeVerifier.DisputeAttestation memory reused = _dispute(ID2, 24e6, SHARE, _disputeId(ID));
@@ -418,43 +550,60 @@ contract DisputeProtectionPolicyV3Test is Test {
 
     function test_DisputeAfterReleaseReverts() public {
         _settleDeferred(ID, RECIPIENT);
-        vm.warp(block.timestamp + WINDOW);
+        vm.warp(MATURES_AT);
         policy.release(_ids(ID));
-        IDisputeVerifier.DisputeAttestation memory attestation = _dispute(ID, 24e6, SHARE);
+        IDisputeVerifier.DisputeAttestation memory attestation = _dispute(ID, 1, USD);
         vm.expectRevert(abi.encodeWithSelector(P.ProtectionNotFound.selector, ID));
         policy.submitDispute(attestation);
     }
 
-    /// @dev Disputes stay possible until a protection is paid out, maturity included.
-    function test_DisputeAfterMaturityBeforeReleaseSucceeds() public {
+    /* ============ Recipients that cannot receive ============ */
+
+    /// @dev A dispute never transfers to the recipient, so a blacklisted recipient cannot block the maker's share or
+    /// a later full dispute. Releasing to it still reverts, as on V2.
+    function test_ShareDisputeSucceedsForBlacklistedRecipient() public {
+        BlacklistTokenMock blacklistToken = new BlacklistTokenMock();
+        _deploy(blacklistToken);
         _settleDeferred(ID, RECIPIENT);
-        vm.warp(block.timestamp + WINDOW + 1 days);
+        blacklistToken.setBlacklisted(RECIPIENT, true);
+
         policy.submitDispute(_dispute(ID, 24e6, SHARE));
-        assertEq(vault.claimable(DEPOSITOR), 23_772_000);
+        assertEq(vault.claimable(DEPOSITOR), DEFERRED_SHARE);
+        vm.prank(DEPOSITOR);
+        vault.claim();
+        assertEq(blacklistToken.balanceOf(DEPOSITOR), DEFERRED_SHARE);
+
+        vm.warp(MATURES_AT);
+        vm.expectRevert(bytes(BLACKLISTED));
+        policy.release(_ids(ID));
+
+        policy.submitDispute(_dispute(ID, 1, USD, REVERSAL_ID));
+        assertEq(vault.claimable(DEPOSITOR), NET - DEFERRED_SHARE);
+        _assertOpen(ID, false);
+        _assertNothingStranded();
     }
 
-    /* ============ Remainder transfer safety ============ */
-
-    /// @dev The recipient re-enters through a token hook during the remainder transfer; every attempt fails on the
-    /// guard, and each party is paid exactly once.
-    function test_ReentrantRemainderTransferCannotDoublePay() public {
+    /// @dev The recipient re-enters through a token hook while `release` pays the relocked remainder; every attempt
+    /// fails on the guard and each party is paid exactly once.
+    function test_ReentrantRemainderPayoutCannotDoublePay() public {
         PayoutHookTokenMock hookToken = new PayoutHookTokenMock();
         _deploy(hookToken);
         ReentrantPayoutRecipientMock recipient = new ReentrantPayoutRecipientMock();
         _settleDeferred(ID, address(recipient));
         _settleDeferred(ID2, address(recipient));
-        IDisputeVerifier.DisputeAttestation memory attestation = _dispute(ID, 24e6, SHARE);
-        IDisputeVerifier.DisputeAttestation memory second = _dispute(ID2, 24e6, SHARE);
-        vm.warp(block.timestamp + WINDOW);
+        policy.submitDispute(_dispute(ID, 24e6, SHARE));
+        IDisputeVerifier.DisputeAttestation memory reversal = _dispute(ID, 1, USD, REVERSAL_ID);
+        IDisputeVerifier.DisputeAttestation memory second = _dispute(ID2, 1, USD);
+        vm.warp(MATURES_AT);
 
         bytes[] memory payloads = new bytes[](3);
-        payloads[0] = abi.encodeCall(DisputeProtectionPolicyV3.submitDispute, (attestation));
+        payloads[0] = abi.encodeCall(DisputeProtectionPolicyV3.submitDispute, (reversal));
         payloads[1] = abi.encodeCall(DisputeProtectionPolicyV3.submitDispute, (second));
         payloads[2] = abi.encodeCall(DisputeProtectionPolicyV3.release, (_ids(ID2)));
         recipient.arm(address(policy), payloads);
         hookToken.setHookTarget(address(recipient));
 
-        policy.submitDispute(attestation);
+        policy.release(_ids(ID));
 
         assertEq(recipient.hookCalls(), 1);
         assertEq(recipient.reentrySuccesses(), 0);
@@ -462,39 +611,20 @@ contract DisputeProtectionPolicyV3Test is Test {
         for (uint256 index; index < 3; ++index) {
             assertEq(recipient.failure(index), abi.encodeWithSignature("Error(string)", REENTRANT_CALL));
         }
-        assertEq(vault.claimable(DEPOSITOR), 23_772_000);
-        assertEq(hookToken.balanceOf(address(recipient)), NET - 23_772_000);
+        assertEq(vault.claimable(DEPOSITOR), DEFERRED_SHARE);
+        assertEq(hookToken.balanceOf(address(recipient)), NET - DEFERRED_SHARE);
         _assertOpen(ID, false);
         _assertOpen(ID2, true);
-        _assertLock(ID2, address(recipient), NET, 1000 + WINDOW);
+        _assertLock(ID2, address(recipient), NET, MATURES_AT);
         _assertNothingStranded();
-    }
-
-    /// @dev A stake token that delivers less than the vault releases leaves the policy short of the remainder.
-    function test_ShortRemainderDeliveryReverts() public {
-        _deploy(new ClaimFeeToken());
-        S.SettlementContext memory context = _context(ID, RECIPIENT);
-        policy.settleIntent(context);
-        token.transfer(address(vault), 2 * NET);
-        policy.onDeferredPayoutFunded(context);
-        IDisputeVerifier.DisputeAttestation memory attestation = _dispute(ID, 24e6, SHARE);
-        uint256 remainder = NET - 23_772_000;
-
-        vm.expectRevert(
-            abi.encodeWithSelector(P.RemainderTransferFailed.selector, remainder, remainder - remainder / 100)
-        );
-        policy.submitDispute(attestation);
-        _assertOpen(ID, true);
     }
 
     /* ============ Release ============ */
 
     function test_ReleaseBeforeMaturityReverts() public {
         _settleDeferred(ID, RECIPIENT);
-        vm.warp(block.timestamp + WINDOW - 1);
-        vm.expectRevert(
-            abi.encodeWithSelector(P.NotMatured.selector, uint64(1000 + WINDOW), uint64(vm.getBlockTimestamp()))
-        );
+        vm.warp(MATURES_AT - 1);
+        vm.expectRevert(abi.encodeWithSelector(P.NotMatured.selector, MATURES_AT, MATURES_AT - 1));
         policy.release(_ids(ID));
     }
 
@@ -505,7 +635,7 @@ contract DisputeProtectionPolicyV3Test is Test {
 
     function test_ReleaseAtMaturityPaysDeferredPayoutToRecipient() public {
         _settleDeferred(ID, RECIPIENT);
-        vm.warp(block.timestamp + WINDOW);
+        vm.warp(MATURES_AT);
         vm.expectEmit(true, false, false, true, address(policy));
         emit ProtectionReleased(ID);
         vm.prank(STRANGER);
@@ -520,7 +650,7 @@ contract DisputeProtectionPolicyV3Test is Test {
 
     function test_ReleaseAtMaturityUnlocksStake() public {
         _settleStaked(ID);
-        vm.warp(block.timestamp + WINDOW);
+        vm.warp(MATURES_AT);
         policy.release(_ids(ID));
 
         assertEq(vault.lockedStake(TAKER), 0);
@@ -530,18 +660,18 @@ contract DisputeProtectionPolicyV3Test is Test {
 
     function test_BatchReleaseIsAtomic() public {
         _settleStaked(ID);
-        vm.warp(block.timestamp + 1);
+        vm.warp(START + 1);
         _settleDeferred(ID2, RECIPIENT);
-        vm.warp(1000 + WINDOW);
+        vm.warp(MATURES_AT);
         bytes32[] memory ids = new bytes32[](2);
         ids[0] = ID;
         ids[1] = ID2;
 
-        vm.expectRevert(abi.encodeWithSelector(P.NotMatured.selector, uint64(1001 + WINDOW), uint64(1000 + WINDOW)));
+        vm.expectRevert(abi.encodeWithSelector(P.NotMatured.selector, MATURES_AT + 1, MATURES_AT));
         policy.release(ids);
         _assertOpen(ID, true);
 
-        vm.warp(1001 + WINDOW);
+        vm.warp(MATURES_AT + 1);
         policy.release(ids);
         _assertOpen(ID, false);
         _assertOpen(ID2, false);

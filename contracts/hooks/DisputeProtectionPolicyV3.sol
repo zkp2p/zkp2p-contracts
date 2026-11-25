@@ -4,8 +4,6 @@ pragma solidity ^0.8.18;
 
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {IDisputeProtectionPolicyV3} from "../interfaces/IDisputeProtectionPolicyV3.sol";
@@ -22,12 +20,24 @@ import {IStakeVaultV2} from "../interfaces/IStakeVaultV2.sol";
  * A proven dispute pays the maker only the unpaid share of the release, and an enclave-signed receipt confirmation
  * releases the hold early.
  * @dev DisputeProtectionPolicyV2 plus the settled release amount, which makes share disputes possible, and a confirmed
- * releaseAt per protection, which makes it due at min(lock maturity, releaseAt). A dispute stays possible until the
- * protection is paid out. The StakeVaultV2 lock under the intent hash holds owner, amount and maturity. Canonical
- * USDC only.
+ * releaseAt per protection, which makes it due at min(lock maturity, releaseAt). A share dispute pays the maker's
+ * share and relocks the paid remainder until maturity, so the paid part stays disputable; a full dispute stays
+ * possible until the protection is paid out. The StakeVaultV2 lock under the intent hash holds owner, amount and
+ * maturity. Canonical USDC only.
  */
 contract DisputeProtectionPolicyV3 is IDisputeProtectionPolicyV3, Ownable2Step, ReentrancyGuard {
-    using SafeERC20 for IERC20;
+    /* ============ Structs ============ */
+
+    /// @dev Storage layout of a protection; the first four fields share one slot, so confirming a receipt rewrites a
+    /// warm slot instead of initializing a new one. `getProtection` returns it in V2's leading order.
+    struct ProtectionRecord {
+        address depositor;
+        bool deferredPayout;
+        bool partiallyDisputed;
+        uint64 releaseAt;
+        bytes32 paymentMethod;
+        uint256 releaseAmount;
+    }
 
     /* ============ Constants ============ */
 
@@ -47,14 +57,15 @@ contract DisputeProtectionPolicyV3 is IDisputeProtectionPolicyV3, Ownable2Step, 
     /// @notice Orchestrators allowed to call the settlement callbacks.
     IOrchestratorRegistry public immutable orchestratorRegistry;
 
-    /// @notice Verifier used to validate signed dispute evidence.
+    /// @notice Verifier used to validate signed dispute evidence. Must be an instance no other policy uses, because a
+    /// share claim verified for this policy would pay a whole lock on a policy that ignores the claimed amount.
     IDisputeVerifier public disputeVerifier;
 
     /// @notice Verifier used to validate signed receipt confirmations.
     IReceiptVerifier public receiptVerifier;
 
-    /// @dev Open protections keyed by globally unique intent hash; deleted on release or dispute.
-    mapping(bytes32 => Protection) internal protections;
+    /// @dev Open protections keyed by globally unique intent hash; deleted on release or a whole-lock dispute.
+    mapping(bytes32 => ProtectionRecord) internal protections;
 
     /* ============ Constructor ============ */
 
@@ -62,7 +73,7 @@ contract DisputeProtectionPolicyV3 is IDisputeProtectionPolicyV3, Ownable2Step, 
      * @notice Creates the policy; authorize it as a vault controller and a dispute-nullifier writer before use.
      * @param _owner Governance owner for policy and dependency configuration.
      * @param _stakeVault Vault holding and locking taker collateral.
-     * @param _disputeVerifier Verifier for signed dispute evidence.
+     * @param _disputeVerifier Verifier for signed dispute evidence, used by no other policy.
      * @param _receiptVerifier Verifier for signed receipt confirmations.
      * @param _disputeNullifierRegistry Dedicated registry that rejects reused dispute nullifiers.
      * @param _orchestratorRegistry Registry of orchestrators allowed to call the settlement callbacks.
@@ -105,9 +116,10 @@ contract DisputeProtectionPolicyV3 is IDisputeProtectionPolicyV3, Ownable2Step, 
 
         address stakeOwner = stakeVault.stakeOwnerOf(_context.taker);
         bool staked = stakeVault.freeStake(stakeOwner) >= _context.releaseAmount;
-        protections[_context.intentHash] = Protection({
+        protections[_context.intentHash] = ProtectionRecord({
             depositor: _context.depositor,
             deferredPayout: !staked,
+            partiallyDisputed: false,
             releaseAt: 0,
             paymentMethod: _context.paymentMethod,
             releaseAmount: _context.releaseAmount
@@ -145,10 +157,11 @@ contract DisputeProtectionPolicyV3 is IDisputeProtectionPolicyV3, Ownable2Step, 
     /// @inheritdoc IDisputeProtectionPolicyV3
     /// @dev Reads the claim from the `DisputeDetails` head of the evidence data. The verifier has already checked
     /// that data against the signed hash, and `DisputeDetails` is static, so it is the head of every layout a
-    /// DisputeVerifier accepts.
+    /// DisputeVerifier accepts. Right after `resolveLock` the remainder is the lock owner's free stake (the taker's
+    /// stake owner, or the payout recipient that `fundLock` credited), so relocking it cannot fail for lack of stake.
     function submitDispute(IDisputeVerifier.DisputeAttestation calldata _attestation) external override nonReentrant {
         bytes32 intentHash = _attestation.intentHash;
-        Protection memory protection = protections[intentHash];
+        ProtectionRecord memory protection = protections[intentHash];
         if (protection.depositor == address(0)) revert ProtectionNotFound(intentHash);
 
         (bytes32 disputeId, bytes32 disputeNullifier) =
@@ -156,28 +169,39 @@ contract DisputeProtectionPolicyV3 is IDisputeProtectionPolicyV3, Ownable2Step, 
         IDisputeVerifier.DisputeDetails memory details =
             abi.decode(_attestation.data, (IDisputeVerifier.DisputeDetails));
 
-        (address stakeOwner, uint256 lockAmount,) = stakeVault.locks(intentHash);
-        uint256 compensatedAmount = _compensation(lockAmount, protection.releaseAmount, details);
-        if (compensatedAmount == 0) revert ZeroClaim();
+        (address lockOwner, uint256 lockAmount, uint64 maturesAt) = stakeVault.locks(intentHash);
+        uint256 compensatedAmount = lockAmount;
+        if (details.paymentCurrency == RELEASE_SHARE_CURRENCY) {
+            if (protection.partiallyDisputed) revert AlreadyPartiallyDisputed(intentHash);
+            compensatedAmount = _shareOf(lockAmount, protection.releaseAmount, details.paymentAmount);
+            if (compensatedAmount == 0) revert ZeroClaim();
+        }
+        uint256 remainder = lockAmount - compensatedAmount;
+        if (remainder != 0 && block.timestamp >= maturesAt) revert ProtectionMatured(intentHash, maturesAt);
 
         disputeNullifierRegistry.addNullifier(disputeNullifier);
-        delete protections[intentHash];
+        if (remainder == 0) {
+            delete protections[intentHash];
+        } else {
+            ProtectionRecord storage record = protections[intentHash];
+            record.partiallyDisputed = true;
+            record.releaseAt = 0;
+        }
 
-        uint256 remainder = lockAmount - compensatedAmount;
-        bool forwardRemainder = protection.deferredPayout && remainder != 0;
-        IStakeVaultV2.Claim[] memory claims = new IStakeVaultV2.Claim[](forwardRemainder ? 2 : 1);
+        IStakeVaultV2.Claim[] memory claims = new IStakeVaultV2.Claim[](1);
         claims[0] = IStakeVaultV2.Claim({beneficiary: protection.depositor, amount: compensatedAmount});
-        if (forwardRemainder) claims[1] = IStakeVaultV2.Claim({beneficiary: address(this), amount: remainder});
         stakeVault.resolveLock(intentHash, claims);
+        if (remainder != 0) stakeVault.lockStake(lockOwner, intentHash, remainder, maturesAt);
 
-        emit DisputeResolved(intentHash, stakeOwner, protection.depositor, compensatedAmount, disputeId);
-        if (forwardRemainder) _payRemainder(intentHash, stakeOwner, remainder);
+        emit DisputeResolved(intentHash, lockOwner, protection.depositor, compensatedAmount, disputeId);
+        if (remainder != 0) emit RemainderRelocked(intentHash, lockOwner, remainder, maturesAt);
     }
 
     /* ============ Governance Functions ============ */
 
     /**
-     * @notice GOVERNANCE ONLY: Replaces the verifier used for future dispute submissions.
+     * @notice GOVERNANCE ONLY: Replaces the verifier used for future dispute submissions. Never share it with
+     * another policy (see `disputeVerifier`).
      * @param _verifier New dispute verifier.
      */
     function setDisputeVerifier(address _verifier) external onlyOwner {
@@ -208,13 +232,21 @@ contract DisputeProtectionPolicyV3 is IDisputeProtectionPolicyV3, Ownable2Step, 
 
     /// @inheritdoc IDisputeProtectionPolicyV3
     function getProtection(bytes32 _intentHash) external view override returns (Protection memory) {
-        return protections[_intentHash];
+        ProtectionRecord storage protection = protections[_intentHash];
+        return Protection({
+            depositor: protection.depositor,
+            deferredPayout: protection.deferredPayout,
+            paymentMethod: protection.paymentMethod,
+            releaseAt: protection.releaseAt,
+            releaseAmount: protection.releaseAmount,
+            partiallyDisputed: protection.partiallyDisputed
+        });
     }
 
     /* ============ Internal Functions ============ */
 
     function _release(bytes32 _intentHash) internal {
-        Protection storage protection = protections[_intentHash];
+        ProtectionRecord storage protection = protections[_intentHash];
         if (protection.depositor == address(0)) revert ProtectionNotFound(_intentHash);
 
         (,, uint64 maturesAt) = stakeVault.locks(_intentHash);
@@ -222,14 +254,21 @@ contract DisputeProtectionPolicyV3 is IDisputeProtectionPolicyV3, Ownable2Step, 
         uint64 dueAt = releaseAt != 0 && releaseAt < maturesAt ? releaseAt : maturesAt;
         if (block.timestamp < dueAt) revert NotMatured(dueAt, uint64(block.timestamp));
 
-        _payOut(_intentHash, protection.deferredPayout);
+        bool deferredPayout = protection.deferredPayout;
+        delete protections[_intentHash];
+        if (deferredPayout) {
+            stakeVault.payOutLock(_intentHash);
+        } else {
+            stakeVault.unlockStake(_intentHash);
+        }
+        emit ProtectionReleased(_intentHash);
     }
 
     /// @dev Skips stale and repeated entries so one never sinks a keeper's batch; a payout already due is made now
-    /// instead of stored.
+    /// instead of stored, unless the vault cannot make it.
     function _confirmReceipt(IReceiptVerifier.ReceiptAttestation calldata _receipt) internal {
         bytes32 intentHash = _receipt.intentHash;
-        Protection storage protection = protections[intentHash];
+        ProtectionRecord storage protection = protections[intentHash];
         if (protection.depositor == address(0)) {
             emit ReceiptSkipped(intentHash, SkipReason.STALE);
             return;
@@ -242,52 +281,43 @@ contract DisputeProtectionPolicyV3 is IDisputeProtectionPolicyV3, Ownable2Step, 
         uint64 releaseAt = receiptVerifier.verifyReceipt(_receipt, protection.paymentMethod);
         emit ReceiptConfirmed(intentHash, releaseAt);
         if (block.timestamp >= releaseAt) {
-            _payOut(intentHash, protection.deferredPayout);
-        } else {
-            protection.releaseAt = releaseAt;
+            if (_tryPayOut(intentHash)) return;
+            emit ReceiptPayoutFailed(intentHash);
         }
+        protection.releaseAt = releaseAt;
     }
 
-    /// @dev Closes the protection and hands the whole lock to its owner.
-    function _payOut(bytes32 _intentHash, bool _deferredPayout) internal {
+    /**
+     * @dev Closes the protection and hands the whole lock to its owner. If the vault call fails, for example because
+     * the payout recipient cannot receive the token, the protection is restored and false returned.
+     */
+    function _tryPayOut(bytes32 _intentHash) internal returns (bool paid) {
+        ProtectionRecord memory protection = protections[_intentHash];
         delete protections[_intentHash];
-        if (_deferredPayout) {
-            stakeVault.payOutLock(_intentHash);
+        if (protection.deferredPayout) {
+            try stakeVault.payOutLock(_intentHash) {
+                paid = true;
+            } catch {}
         } else {
-            stakeVault.unlockStake(_intentHash);
+            try stakeVault.unlockStake(_intentHash) {
+                paid = true;
+            } catch {}
         }
-        emit ProtectionReleased(_intentHash);
+
+        if (paid) {
+            emit ProtectionReleased(_intentHash);
+        } else {
+            protections[_intentHash] = protection;
+        }
     }
 
     /**
-     * @dev The maker's compensation out of a lock. A share dispute's claim is capped at the release amount, so the
-     * rounded-up result never exceeds the lock; any other currency claims the whole lock. An open protection always
-     * has a nonzero release amount, because the vault rejects zero-amount locks.
+     * @dev The maker's share of a lock for a share dispute. The claim is capped at the release amount, so the
+     * rounded-up result never exceeds the lock. An open protection always has a nonzero release amount, because the
+     * vault rejects zero-amount locks.
      */
-    function _compensation(
-        uint256 _lockAmount,
-        uint256 _releaseAmount,
-        IDisputeVerifier.DisputeDetails memory _details
-    ) internal pure returns (uint256) {
-        if (_details.paymentCurrency != RELEASE_SHARE_CURRENCY) return _lockAmount;
-        uint256 claimedShare = Math.min(_details.paymentAmount, _releaseAmount);
-        return Math.mulDiv(_lockAmount, claimedShare, _releaseAmount, Math.Rounding.Up);
-    }
-
-    /**
-     * @dev Withdraws the remainder the vault just credited to this policy and forwards it to the payout recipient,
-     * which may be a contract that cannot call the vault. This policy holds no claim or token balance between calls,
-     * so the withdrawal must deliver exactly the remainder.
-     */
-    function _payRemainder(bytes32 _intentHash, address _recipient, uint256 _amount) internal {
-        IERC20 token = stakeVault.stakeToken();
-        uint256 balanceBefore = token.balanceOf(address(this));
-        stakeVault.claim();
-        uint256 received = token.balanceOf(address(this)) - balanceBefore;
-        if (received != _amount) revert RemainderTransferFailed(_amount, received);
-
-        emit RemainderPaid(_intentHash, _recipient, _amount);
-        token.safeTransfer(_recipient, _amount);
+    function _shareOf(uint256 _lockAmount, uint256 _releaseAmount, uint256 _claim) internal pure returns (uint256) {
+        return Math.mulDiv(_lockAmount, Math.min(_claim, _releaseAmount), _releaseAmount, Math.Rounding.Up);
     }
 
     function _maturity(uint64 _window) internal view returns (uint64) {
