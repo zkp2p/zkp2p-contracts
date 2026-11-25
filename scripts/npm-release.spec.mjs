@@ -364,9 +364,9 @@ test('derives a future RC release line from the package version', () => {
   );
 });
 
-test('commits the UPV5 staging RC candidate', () => {
+test('commits the UPV5 Base RC candidate', () => {
   const packageManifest = JSON.parse(fs.readFileSync(packageManifestPath, 'utf8'));
-  assert.equal(packageManifest.version, '0.4.5-rc.1');
+  assert.equal(packageManifest.version, '0.4.5-rc.2');
   assert.deepEqual(
     resolveReleasePolicy({
       release: packageManifest.version,

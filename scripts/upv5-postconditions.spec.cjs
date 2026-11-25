@@ -200,7 +200,12 @@ const BASE_RECORDS = {
 
 test("addresses come from deployment records and must equal the pins on pinned networks", (context) => {
   assert.deepEqual(readUpv5Addresses(recordRoot(context, "base", BASE_RECORDS), "base"), ADDRESSES);
-  assert.equal(readUpv5Deployed(ROOT, "base"), null, "Base has no UPV5 records before its deployment");
+  // Lane 49 ran on Base on 2026-11-25 (runbook P1); the committed records are that deployment.
+  assert.deepEqual(readUpv5Deployed(ROOT, "base"), {
+    nullifierRegistryV3: "0x082a0BfbA45767E9ceae9477ac93220320391A4c",
+    unifiedPaymentVerifierV5: "0xeBF99d9acD577B548faac0324238ED787c87579B",
+    disputeVerifierV2: "0x5CB92c837910F3a449303d051cAE1bdbde0CF6A8",
+  });
   assert.throws(() => readUpv5Addresses(recordRoot(context, "base", { ...BASE_RECORDS, DisputeVerifier: ADDRESSES.disputeVerifierV2 }), "base"),
     /disputeVerifier record differs from the release pin/);
   const { DisputeVerifierV2: _dropped, ...partial } = BASE_RECORDS;
@@ -240,9 +245,11 @@ test("the CLI fails closed on usage errors and missing records before any RPC", 
   const usage = run([]);
   assert.equal(usage.status, 1);
   assert.match(usage.stderr, /Usage: upv5-postconditions.ts <network>/);
-  const missing = run(["base", "--pre"]);
-  assert.equal(missing.status, 1);
-  assert.match(missing.stderr, /base: UPV5 deployment records missing; run lane 49 first/);
+  // Base's lane 49 records are committed, so `base --pre` gets past the records check and stops at the
+  // unreachable RPC; the missing-records refusal is covered by readUpv5Addresses above.
+  const recorded = run(["base", "--pre"]);
+  assert.equal(recorded.status, 1);
+  assert.match(recorded.stderr, /could not detect network|ECONNREFUSED|missing response/);
   const unpinned = run(["localhost"]);
   assert.equal(unpinned.status, 1);
   assert.match(unpinned.stderr, /records missing|--governance is required/);
