@@ -233,6 +233,20 @@ The script sends, in order:
 Writers go first, so NullifierRegistryV2 stops accepting writes before V3 accepts any. Each removed route is
 unroutable until its re-add, one to two minutes across the 28 route transactions.
 
+**Executed 2026-11-25** from main `7554e41c750f95aece1dd089e702773fe065940f`, signed by `0x4112…41eC` through KMS,
+plan journaled at block 62024133 in `deployments/outputs/upv5-cutover-base_staging.json`. The first writer removal
+landed at block 62024194 (08:26:54Z), the first route removal at 62024253 (08:27:06Z), the last re-add at 62026330
+(08:34:01Z) and `setDisputeVerifier` at 62026360 (08:34:07Z). Routes were unroutable for up to 7 minutes, not two.
+`yarn upv5:postconditions base_staging` passed 16/16 afterwards.
+
+The script stopped twice before call 21 and call 22. hardhat-ethers estimates gas at its default fee, which assumes
+a ~1.5 gwei tip, so a deployer holding ~0.0004 ETH could not estimate a call above ~120k gas, though Base charged
+~0.006 gwei. Routes with long currency lists need far more: Revolut 1.24M gas, Wise 1.57M, PayPal 433k. Calls 22–31
+were sent with `cast send --aws` (same KMS key, same calldata as the plan) at the network fee, and a rerun of
+`--execute` then reported all 32 calls done and kept the journal. Before a rerun, hold at least ~0.006 ETH in the
+deployer, or the estimate cap will stop the route calls again. The Base batch runs through the Safe and is not
+affected.
+
 Safety rules:
 
 - **Start conditions:** the script refuses to start unless every deployment check passes, the signer owns
