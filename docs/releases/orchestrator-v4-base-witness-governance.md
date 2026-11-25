@@ -134,6 +134,73 @@ manifest and refresh its digest. Any consumer that independently checks protecte
 source paths must apply the same exact README exception; a contracts tool pin alone
 cannot bypass a consumer's earlier source check.
 
+## Verification across the UPV5 cutover
+
+Contracts #400 (main `99a3895f`) recorded the Base UPV5 stack, all owned by the Safe:
+
+| Contract | Address | Runtime code hash |
+| --- | --- | --- |
+| NullifierRegistryV3 | `0x082a0BfbA45767E9ceae9477ac93220320391A4c` | `0xacf0e33a6a0d9c33ddca833fb6277a858face770fef0806c28af3770552dc1b7` |
+| UnifiedPaymentVerifierV5 | `0xeBF99d9acD577B548faac0324238ED787c87579B` | `0xcff132596e166d2df1080d4520b42784b57244adcc526349de75ce332fd158cf` |
+| DisputeVerifierV2 | `0x5CB92c837910F3a449303d051cAE1bdbde0CF6A8` | `0xae1ba87559b3649ba4ff76c488729d853a5ba9f6a05512ed2ddd6aa76daf7296` |
+
+The hashes were read from Base at block 62075821. Each contract's creation
+transaction carries its record's bytecode and constructor arguments. The Safe
+batch in `docs/releases/upv5-cutover.md` (P3) makes 30 calls in one transaction:
+
+1. It removes NullifierRegistryV2 writers UPV3 and UPV4.
+2. It grants UPV5 write access on V3.
+3. It removes all 13 routes and re-adds them on UPV5 with the same currencies.
+4. It points DisputeProtectionPolicyV2 at DisputeVerifierV2.
+
+Without help, active `verify` would reject that state at `Unrecognized payment
+verifier`.
+
+`deployments/orchestrator-v4/base.upv5-cutover.json` pins the three contracts by
+address and runtime code hash, and pins the retired writers `[UPV3, UPV4]`, which
+must equal the configured pins in that order. It is an execution path, so it binds
+to the tool commit. Base `verify` and active `verify-source` always load it; a
+missing file is an error. The pinned code must match at the inspection block. The
+cutover is classified as all or nothing:
+
+- **Untouched:** NullifierRegistryV2 still has writers, V3 has none, no route
+  selects UPV5, and the policy still selects DisputeVerifier
+  `0x30d4947f005653637005eed991005119D9eB2f34`. Every release check then applies
+  unchanged.
+- **Complete:** all of the following hold:
+  - NullifierRegistryV2 has no writers, and UPV5 is V3's only writer;
+  - every route selects UPV5;
+  - the policy selects DisputeVerifierV2;
+  - V3's `predecessor` is NullifierRegistryV2;
+  - UPV5 and DisputeVerifierV2 read V3 and the configured MultiAttestationVerifier;
+  - UPV5 reads the configured OrchestratorRegistry, and its method list equals the
+    configured catalog;
+  - the Safe owns all three, and DisputeVerifierV2 has no pending owner.
+
+  For the release checks, routes are mapped back to UPV4 and NullifierRegistryV2's
+  writers back to `[UPV3, UPV4]`. The registry catalog, its order and currencies,
+  and every other check stay exact. The policy's dispute-verifier check and the
+  active "all routes" check expect DisputeVerifierV2 and UPV5.
+- **Any other state fails**, including:
+  - any partial cutover;
+  - an extra writer on either registry;
+  - another stack or other code at a pinned address.
+
+The batch's first call alone, which removes UPV3 and keeps UPV4, leaves a writer
+set the release checks already accept. It verifies as untouched. Every longer
+prefix short of the full batch fails.
+
+The `.verification` receipt gains `verification.upv5Cutover`. It holds `state`
+(`untouched` or `complete`) followed by the pins file's fields: `version`,
+`environment`, `chainId`, `nullifierRegistryV3`, `unifiedPaymentVerifierV5`,
+`disputeVerifierV2` and `retiredNullifierWriters`. An untouched receipt is
+otherwise identical to the previous tool's. Deploy, governance preparation and
+staging stay exact. `yarn test:orchestrator-v4-base-upv5-fork`, with
+`O4_UPV5_FORK_RPC_URL` set to a local anvil fork of Base, replays the batch as the
+Safe. Its calls must hash to main's MultiSend data keccak
+`0xdceb80fb748ee77ca6ff949f1f4fab60b88ce2495238c0f4d023d715d4341e14`. The spec
+classifies every prefix, then runs the whole gate on the complete state.
+
 ## Other witness pins found
 
 - `deploy/31_deploy_v3_payment_binding_stack.ts` pins both old witnesses and

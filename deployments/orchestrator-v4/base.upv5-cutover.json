@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "environment": "base",
+  "chainId": 8453,
+  "nullifierRegistryV3": {
+    "address": "0x082a0BfbA45767E9ceae9477ac93220320391A4c",
+    "runtimeCodeHash": "0xacf0e33a6a0d9c33ddca833fb6277a858face770fef0806c28af3770552dc1b7"
+  },
+  "unifiedPaymentVerifierV5": {
+    "address": "0xeBF99d9acD577B548faac0324238ED787c87579B",
+    "runtimeCodeHash": "0xcff132596e166d2df1080d4520b42784b57244adcc526349de75ce332fd158cf"
+  },
+  "disputeVerifierV2": {
+    "address": "0x5CB92c837910F3a449303d051cAE1bdbde0CF6A8",
+    "runtimeCodeHash": "0xae1ba87559b3649ba4ff76c488729d853a5ba9f6a05512ed2ddd6aa76daf7296"
+  },
+  "retiredNullifierWriters": [
+    "0xC6F4a193576C60892a47e111Bb5706c30162502B",
+    "0x7bE50E6206a9b3AdF36dbEAFac0e45Cc03A72048"
+  ]
+}

@@ -855,7 +855,7 @@ test("unavailable or inconsistent priority fee quotes reject before signing with
 });
 
 const { verifyBaseWitnessChange } = require("./orchestrator-v4-governance.ts");
-const { BASE_GOVERNANCE_CHANGES, releasePaths, assertReleaseProvenance } = require("./orchestrator-v4-provenance.ts");
+const { BASE_GOVERNANCE_CHANGES, BASE_UPV5_CUTOVER, releasePaths, assertReleaseProvenance } = require("./orchestrator-v4-provenance.ts");
 const { releaseToolCommit } = require("./deploy-orchestrator-v4.ts");
 
 function witnessGovernanceFixture() {
@@ -1002,8 +1002,11 @@ test("Base governance code and record are bound to the reviewed tool while base.
   const directory = mkdtempSync(join(tmpdir(), "o4-base-governance-provenance-")), previous = process.cwd();
   const git = (...args) => execFileSync("git", args, { cwd: directory, encoding: "utf8", stdio: "pipe" }).trim();
   const write = (path, value) => { mkdirSync(require("node:path").dirname(join(directory, path)), { recursive: true }); writeFileSync(join(directory, path), value); };
-  const protectedPaths = [BASE_GOVERNANCE_CHANGES, "scripts/orchestrator-v4-governance.ts"];
+  const protectedPaths = [BASE_GOVERNANCE_CHANGES, BASE_UPV5_CUTOVER, "scripts/orchestrator-v4-governance.ts"];
   assert.ok(releasePaths("base").deployed.includes("deployments/orchestrator-v4/base.json"));
+  // The UPV5 pins bind to the tool commit only: never to the deployed source, and never to staging.
+  assert.ok(!releasePaths("base").deployed.some((path) => BASE_UPV5_CUTOVER === path || BASE_UPV5_CUTOVER.startsWith(`${path}/`)));
+  assert.ok(!releasePaths("base_staging").execution.includes(BASE_UPV5_CUTOVER));
   for (const path of protectedPaths) assert.ok(releasePaths("base").execution.includes(path));
   try {
     git("init"); git("config", "user.name", "Fixture"); git("config", "user.email", "fixture@example.test");
@@ -1020,4 +1023,201 @@ test("Base governance code and record are bound to the reviewed tool while base.
     write("deployments/orchestrator-v4/base.json", "rewritten history"); git("add", "."); git("commit", "-m", "source drift");
     assert.throws(() => assertReleaseProvenance(source, git("rev-parse", "HEAD"), "base"));
   } finally { process.chdir(previous); rmSync(directory, { recursive: true, force: true }); }
+});
+
+const { validateBaseUpv5Cutover } = require("./deploy-orchestrator-v4.ts");
+// Byte copies of main's Base records (contracts #400): the real UPV5 stack, which this branch does not compile.
+const BASE_UPV5_RECORDS = Object.fromEntries(["NullifierRegistryV3", "UnifiedPaymentVerifierV5", "DisputeVerifierV2"].map((name) => [name, require(`../deployments/base/${name}.json`)]));
+const stranger = Wallet.fromMnemonic("test test test test test test test test test test test junk", "m/44'/60'/0'/0/2").connect(hre.ethers.provider);
+
+/** Lane 49's shape on the fixture: V3 chained to NullifierRegistryV2, UPV5 listing the catalog, governance owning all three. */
+async function baseUpv5Stack(f, { predecessor = f.deployed.NullifierRegistryV2.address, orchestratorRegistry = f.deployed.OrchestratorRegistry.address, verifierRegistry, disputeRegistry } = {}) {
+  const deploy = async (name, args) => (await new ContractFactory(BASE_UPV5_RECORDS[name].abi, BASE_UPV5_RECORDS[name].bytecode, wallet).deploy(...args)).deployed();
+  const pin = async (contract) => ({ address: contract.address, runtimeCodeHash: utils.keccak256(await hre.ethers.provider.getCode(contract.address)) });
+  const attestor = f.deployed.MultiAttestationVerifier.address;
+  const registry = await deploy("NullifierRegistryV3", [predecessor]);
+  const verifier = await deploy("UnifiedPaymentVerifierV5", [orchestratorRegistry, verifierRegistry ?? registry.address, attestor]);
+  for (const { method } of f.config.paymentMethods) await (await verifier.addPaymentMethod(method)).wait();
+  const disputeVerifier = await deploy("DisputeVerifierV2", [f.governance.address, disputeRegistry ?? registry.address, attestor]);
+  for (const contract of [registry, verifier]) await (await contract.transferOwnership(f.governance.address)).wait();
+  return {
+    registry: registry.connect(f.governance), verifier: verifier.connect(f.governance), disputeVerifier: disputeVerifier.connect(f.governance),
+    pins: { version: 1, environment: "base", chainId: f.config.chainId, nullifierRegistryV3: await pin(registry), unifiedPaymentVerifierV5: await pin(verifier), disputeVerifierV2: await pin(disputeVerifier), retiredNullifierWriters: [f.deployed.UnifiedPaymentVerifierV3.address, f.deployed.UnifiedPaymentVerifierV4.address] },
+  };
+}
+
+/** Main's Base Safe batch (scripts/upv5SafeBatches.ts), call by call, sent by governance. */
+async function baseUpv5Batch(f, stack) {
+  const writers = f.deployed.NullifierRegistryV2, routes = f.deployed.PaymentVerifierRegistry;
+  const policy = await hre.ethers.getContractAt("DisputeProtectionPolicyV2", f.manifest.contracts.DisputeProtectionPolicyV2.address, f.governance);
+  return [
+    ...[f.deployed.UnifiedPaymentVerifierV3.address, f.deployed.UnifiedPaymentVerifierV4.address].map((writer) => () => writers.removeWritePermission(writer)),
+    () => stack.registry.addWritePermission(stack.verifier.address),
+    ...[...f.config.paymentMethods].reverse().map(({ method }) => () => routes.removePaymentMethod(method)),
+    ...f.config.paymentMethods.map(({ method, currencies }) => () => routes.addPaymentMethod(method, stack.verifier.address, currencies)),
+    () => policy.setDisputeVerifier(stack.disputeVerifier.address),
+  ];
+}
+
+/** Move a completed cutover onto another stack: its writer, every route, then the dispute verifier. */
+async function moveBaseUpv5(f, stack, routes = f.config.paymentMethods) {
+  const registry = f.deployed.PaymentVerifierRegistry;
+  if (!await stack.registry.isWriter(stack.verifier.address)) await (await stack.registry.addWritePermission(stack.verifier.address)).wait();
+  for (const method of [...await registry.getPaymentMethods()].reverse()) await (await registry.removePaymentMethod(method)).wait();
+  for (const { method, currencies } of routes) await (await registry.addPaymentMethod(method, stack.verifier.address, currencies)).wait();
+  const policy = await hre.ethers.getContractAt("DisputeProtectionPolicyV2", f.manifest.contracts.DisputeProtectionPolicyV2.address, f.governance);
+  await (await policy.setDisputeVerifier(stack.disputeVerifier.address)).wait();
+}
+
+async function activeBaseUpv5Fixture() {
+  const f = await baseFixture();
+  await deploySuite(f.hre, f.journal);
+  await prepareGovernance(f.hre, new TransactionJournal(f.path, f.manifest, new VoidSigner(wallet.address, hre.ethers.provider)));
+  for (const { to, data, value } of f.manifest.governanceTransactions) await (await f.governance.sendTransaction({ to, data, value })).wait();
+  const stack = await baseUpv5Stack(f);
+  const readonly = () => new TransactionJournal(`${f.path}.verification`, JSON.parse(readFileSync(f.path)), new VoidSigner(wallet.address, hre.ethers.provider));
+  const verify = (pins = stack.pins) => verifySuite(f.hre, readonly(), true, undefined, pins);
+  const receipt = () => JSON.parse(readFileSync(`${f.path}.verification`));
+  /** Run a change against the current state, then restore it exactly. */
+  const within = async (change) => {
+    const id = await hre.network.provider.send("evm_snapshot");
+    try { await change(); } finally { await hre.network.provider.send("evm_revert", [id]); }
+  };
+  return { ...f, stack, readonly, verify, receipt, within };
+}
+
+test("Base UPV5 pins name the recorded stack and the retired writers; malformed pins and staging are refused", () => {
+  const config = JSON.parse(readFileSync("deployments/orchestrator-v4/base.json"));
+  const pins = JSON.parse(readFileSync(BASE_UPV5_CUTOVER));
+  assert.doesNotThrow(() => validateBaseUpv5Cutover(pins, config));
+  assert.deepEqual(Object.keys(pins), ["version", "environment", "chainId", "nullifierRegistryV3", "unifiedPaymentVerifierV5", "disputeVerifierV2", "retiredNullifierWriters"]);
+  assert.deepEqual([pins.nullifierRegistryV3, pins.unifiedPaymentVerifierV5, pins.disputeVerifierV2].map((pin) => pin.address), Object.values(BASE_UPV5_RECORDS).map((record) => record.address));
+  assert.deepEqual(pins.retiredNullifierWriters, [config.existing.UnifiedPaymentVerifierV3.address, config.existing.UnifiedPaymentVerifierV4.address]);
+  // Lane 49 bound the recorded stack to the configured registries, attestor and Safe.
+  const { NullifierRegistryV3: registry, UnifiedPaymentVerifierV5: verifier, DisputeVerifierV2: disputeVerifier } = BASE_UPV5_RECORDS;
+  assert.deepEqual(registry.args, [config.existing.NullifierRegistryV2.address]);
+  assert.deepEqual(verifier.args, [config.existing.OrchestratorRegistry.address, registry.address, config.existing.MultiAttestationVerifier.address]);
+  assert.deepEqual(disputeVerifier.args, [config.governance, registry.address, config.existing.MultiAttestationVerifier.address]);
+  const writers = pins.retiredNullifierWriters;
+  for (const value of [undefined, null, "pins", { ...pins, version: 2 }, { ...pins, environment: "base_staging" }, { ...pins, chainId: 84532 }, { ...pins, extra: true },
+    { ...pins, nullifierRegistryV3: undefined }, { ...pins, unifiedPaymentVerifierV5: { ...pins.unifiedPaymentVerifierV5, address: "invalid" } },
+    { ...pins, disputeVerifierV2: { ...pins.disputeVerifierV2, address: constants.AddressZero } }, { ...pins, nullifierRegistryV3: { ...pins.nullifierRegistryV3, runtimeCodeHash: "0x" } },
+    { ...pins, disputeVerifierV2: pins.unifiedPaymentVerifierV5 }, { ...pins, unifiedPaymentVerifierV5: { ...pins.unifiedPaymentVerifierV5, address: config.existing.UnifiedPaymentVerifierV4.address } }])
+    assert.throws(() => validateBaseUpv5Cutover(value, config), /Invalid Base UPV5 cutover pins/);
+  for (const retiredNullifierWriters of [undefined, [], [writers[1], writers[0]], [writers[1]], [...writers, other], [writers[0], writers[0]]])
+    assert.throws(() => validateBaseUpv5Cutover({ ...pins, retiredNullifierWriters }, config), /must retire exactly UPV3 and UPV4/);
+  const staging = JSON.parse(readFileSync("deployments/orchestrator-v4/base_staging.json"));
+  assert.throws(() => validateBaseUpv5Cutover(pins, staging), /Base UPV5 cutover pins are Base-only/);
+});
+
+test("Base UPV5 pins apply only to active Base verification", async () => {
+  const manifest = JSON.parse(readFileSync("deployments/outputs/orchestrator-v4-base.json"));
+  const pins = JSON.parse(readFileSync(BASE_UPV5_CUTOVER));
+  for (const [environment, active] of [["base_staging", true], ["base", false]])
+    await assert.rejects(verifySuite(hre, { manifest: { ...manifest, configuration: { ...manifest.configuration, environment } } }, active, undefined, pins), /UPV5 cutover verification requires active Base/);
+});
+
+test("Base verification accepts the untouched and the complete UPV5 cutover and rejects every partial batch prefix", async () => {
+  const f = await activeBaseUpv5Fixture();
+  try {
+    // Untouched: the release checks apply unchanged and only the classification is added to the receipt.
+    await verifySuite(f.hre, f.readonly(), true);
+    const plain = f.receipt();
+    await f.verify();
+    const untouched = f.receipt();
+    assert.deepEqual(untouched.verification.upv5Cutover, { state: "untouched", ...f.stack.pins });
+    delete untouched.verification.upv5Cutover;
+    assert.deepEqual(untouched, plain);
+    const batch = await baseUpv5Batch(f, f.stack);
+    assert.equal(batch.length, 2 + 1 + 2 * f.config.paymentMethods.length + 1);
+    for (const [index, call] of batch.entries()) {
+      await (await call()).wait();
+      // Removing only UPV3 is the state the release checks already admit (UPV4 still writes); every later prefix fails.
+      if (index === 0) { await f.verify(); assert.equal(f.receipt().verification.upv5Cutover.state, "untouched"); }
+      else if (index < batch.length - 1) await assert.rejects(f.verify(), /Base UPV5 cutover is incomplete/, `prefix ${index + 1}`);
+    }
+    await f.verify();
+    const complete = f.receipt();
+    assert.deepEqual(complete.verification.upv5Cutover, { state: "complete", ...f.stack.pins });
+    for (const field of ["active", "bytecode", "constructors", "wiring", "newContractOwnership", "governance", "paymentCatalog", "escrowCompatible", "predecessorPreserved"])
+      assert.equal(complete.verification[field], true, field);
+    assert.deepEqual(await f.deployed.NullifierRegistryV2.getWriters(), []);
+    assert.deepEqual(await f.stack.registry.getWriters(), [f.stack.verifier.address]);
+    assert.deepEqual(await f.deployed.PaymentVerifierRegistry.getPaymentMethods(), f.config.paymentMethods.map(({ method }) => method));
+    // Without the pins, and outside read-only verification, the cutover stays unrecognized.
+    await assert.rejects(verifySuite(f.hre, f.readonly(), true), /Unrecognized payment verifier/);
+    const live = await inspect(f.hre, f.config);
+    assert.throws(() => assertFreshDeploymentPreflight(f.config, live), /Unrecognized payment verifier/);
+    const nonce = await wallet.getTransactionCount();
+    await assert.rejects(deploySuite(f.hre, f.journal), /Unrecognized payment verifier/);
+    await assert.rejects(prepareGovernance(f.hre, new TransactionJournal(f.path, f.manifest, new VoidSigner(wallet.address, hre.ethers.provider))), /Unrecognized payment verifier/);
+    assert.equal(await wallet.getTransactionCount(), nonce);
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
+});
+
+test("Base UPV5 verification rejects extra writers, other stacks, other code, catalog drift, miswiring and ownership drift", async () => {
+  const f = await activeBaseUpv5Fixture();
+  try {
+    const { stack, verify, within } = f, pins = stack.pins, v2 = f.deployed.NullifierRegistryV2, upv4 = f.deployed.UnifiedPaymentVerifierV4.address;
+    const unused = await baseUpv5Stack(f);
+    const policy = await hre.ethers.getContractAt("DisputeProtectionPolicyV2", f.manifest.contracts.DisputeProtectionPolicyV2.address, f.governance);
+    // Untouched: the new pins are still bound to their code, and the release writer checks still apply.
+    for (const name of ["nullifierRegistryV3", "unifiedPaymentVerifierV5", "disputeVerifierV2"])
+      await assert.rejects(verify({ ...pins, [name]: { ...pins[name], runtimeCodeHash: utils.id("other runtime") } }), new RegExp(`Base UPV5 cutover ${name} bytecode differs from its pin`));
+    await within(async () => { await (await v2.addWritePermission(stranger.address)).wait(); await assert.rejects(verify(), /Unexpected payment nullifier writer/); });
+    await within(async () => { await (await stack.registry.addWritePermission(stranger.address)).wait(); await assert.rejects(verify(), /Base UPV5 cutover is incomplete/); });
+    await within(async () => { await (await policy.setDisputeVerifier(stack.disputeVerifier.address)).wait(); await assert.rejects(verify(), /Base UPV5 cutover is incomplete/); });
+    await within(async () => { await (await policy.setDisputeVerifier(unused.disputeVerifier.address)).wait(); await assert.rejects(verify(), /Base UPV5 cutover is incomplete/); });
+    await within(async () => {
+      await rebuildRoutes(f, [upv4, stack.verifier.address, upv4]);
+      await assert.rejects(verify(), /Base UPV5 cutover is incomplete/);
+    });
+    for (const call of await baseUpv5Batch(f, stack)) await (await call()).wait();
+    await verify();
+    // An extra writer on either registry.
+    await within(async () => { await (await stack.registry.addWritePermission(stranger.address)).wait(); await assert.rejects(verify(), /UPV5 must be the only NullifierRegistryV3 writer/); });
+    for (const writer of [upv4, f.deployed.UnifiedPaymentVerifierV3.address, stranger.address])
+      await within(async () => { await (await v2.addWritePermission(writer)).wait(); await assert.rejects(verify(), /Base UPV5 cutover is incomplete/); });
+    // A route left behind, or the dispute verifier switched back.
+    await within(async () => { await rebuildRoutes(f, [stack.verifier.address, stack.verifier.address, upv4]); await assert.rejects(verify(), /Base UPV5 cutover is incomplete/); });
+    await within(async () => { await (await policy.setDisputeVerifier(f.config.existing.DisputeVerifier.address)).wait(); await assert.rejects(verify(), /Base UPV5 cutover is incomplete/); });
+    // Each pin binds address and runtime: another real stack, or the right address with other bytecode, is refused.
+    for (const name of ["nullifierRegistryV3", "unifiedPaymentVerifierV5", "disputeVerifierV2"]) {
+      await assert.rejects(verify({ ...pins, [name]: unused.pins[name] }), /Base UPV5 cutover is incomplete/);
+      await assert.rejects(verify({ ...pins, [name]: { ...pins[name], runtimeCodeHash: utils.id("other runtime") } }), new RegExp(`Base UPV5 cutover ${name} bytecode differs from its pin`));
+    }
+    // The whole cutover onto another, unpinned stack.
+    await within(async () => { await moveBaseUpv5(f, unused); await assert.rejects(verify(), /Base UPV5 cutover is incomplete/); });
+    // Registry catalog, currencies and their order stay exact; so does UPV5's own catalog.
+    const [first, second, third] = f.config.paymentMethods;
+    for (const changed of [[first, second, { ...third, currencies: [...third.currencies].reverse() }], [first, second, { ...third, currencies: third.currencies.slice(1) }], [second, first, third], [first, second]])
+      await within(async () => { await moveBaseUpv5(f, stack, changed); await assert.rejects(verify(), /Payment catalog or currency order changed/); });
+    await within(async () => { await (await stack.verifier.removePaymentMethod(third.method)).wait(); await assert.rejects(verify(), /UPV5 method catalog mismatch/); });
+    await within(async () => { await (await stack.verifier.addPaymentMethod(utils.id("unreviewed"))).wait(); await assert.rejects(verify(), /UPV5 method catalog mismatch/); });
+    // The stack must chain to NullifierRegistryV2 and be wired to itself, the configured registry and attestor.
+    const mismatch = (contract, field) => new RegExp(`${contract.address} ${field} mismatch`);
+    for (const [options, contract, field] of [
+      [{ predecessor: f.deployed.NullifierRegistry.address }, "registry", "predecessor"],
+      [{ verifierRegistry: unused.registry.address }, "verifier", "nullifierRegistry"],
+      [{ disputeRegistry: unused.registry.address }, "disputeVerifier", "nullifierRegistry"],
+      [{ orchestratorRegistry: f.deployed.EscrowRegistry.address }, "verifier", "orchestratorRegistry"],
+    ]) {
+      const miswired = await baseUpv5Stack(f, options);
+      await within(async () => { await moveBaseUpv5(f, miswired); await assert.rejects(verify(miswired.pins), mismatch(miswired[contract], field)); });
+    }
+    const attestor = await (await hre.ethers.getContractFactory("MultiAttestationVerifier", wallet)).deploy([other], 1);
+    for (const contract of [stack.verifier, stack.disputeVerifier])
+      await within(async () => { await (await contract.setAttestationVerifier(attestor.address)).wait(); await assert.rejects(verify(), mismatch(contract, "attestationVerifier")); });
+    // Governance keeps all three, with nothing pending on DisputeVerifierV2.
+    for (const contract of [stack.registry, stack.verifier])
+      await within(async () => { await (await contract.transferOwnership(stranger.address)).wait(); await assert.rejects(verify(), mismatch(contract, "owner")); });
+    await within(async () => { await (await stack.disputeVerifier.transferOwnership(stranger.address)).wait(); await assert.rejects(verify(), mismatch(stack.disputeVerifier, "pendingOwner")); });
+    await within(async () => {
+      await (await stack.disputeVerifier.transferOwnership(stranger.address)).wait(); await (await stack.disputeVerifier.connect(stranger).acceptOwnership()).wait();
+      await assert.rejects(verify(), mismatch(stack.disputeVerifier, "owner"));
+    });
+    // Every restored change leaves the complete cutover verifiable.
+    await verify();
+    assert.equal(f.receipt().verification.upv5Cutover.state, "complete");
+  } finally { rmSync(f.directory, { recursive: true, force: true }); }
 });

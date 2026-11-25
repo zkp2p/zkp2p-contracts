@@ -6,7 +6,7 @@ import { BigNumber, Contract, ContractFactory, VoidSigner, Wallet, constants, pr
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
 import { SourceVerificationError, verifySources } from "./verify-orchestrator-v4-source";
 import { zeroImmutableValues } from "../deployments/canonicalDeployment";
-import { BASE_GOVERNANCE_CHANGES, assertReleaseProvenance, releasePaths } from "./orchestrator-v4-provenance";
+import { BASE_GOVERNANCE_CHANGES, BASE_UPV5_CUTOVER, assertReleaseProvenance, releasePaths } from "./orchestrator-v4-provenance";
 import { verifyBaseO3Retirement, verifyBaseWitnessChange } from "./orchestrator-v4-governance";
 import { RETIRED_DEPLOYERS } from "../utils/deployerKeys";
 
@@ -608,16 +608,75 @@ function assertLegacyDrained(c: ReleaseConfig, snapshot: Awaited<ReturnType<type
   }
 }
 
-export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: TransactionJournal, active: boolean, baseWitnessChange?: unknown): Promise<void> {
+const UPV5_CUTOVER_PINS = ["nullifierRegistryV3", "unifiedPaymentVerifierV5", "disputeVerifierV2"] as const;
+/** Base UPV5 stack recorded by contracts #400, pinned by runtime code, and the NullifierRegistryV2 writers its Safe batch retires. */
+export type BaseUpv5Cutover = { version: 1; environment: "base"; chainId: number; retiredNullifierWriters: string[] } & Record<typeof UPV5_CUTOVER_PINS[number], { address: string; runtimeCodeHash: string }>;
+export enum Upv5CutoverState { Untouched = "untouched", Complete = "complete" }
+export type BaseUpv5CutoverReceipt = { state: Upv5CutoverState } & BaseUpv5Cutover;
+
+export function validateBaseUpv5Cutover(value: unknown, c: ReleaseConfig): asserts value is BaseUpv5Cutover {
+  check(c.environment === "base", "Base UPV5 cutover pins are Base-only");
+  check(typeof value === "object" && value !== null, "Invalid Base UPV5 cutover pins");
+  const pins = value as BaseUpv5Cutover;
+  check(equal(Object.keys(pins).sort(), ["chainId", "environment", "retiredNullifierWriters", "version", ...UPV5_CUTOVER_PINS].sort()) && pins.version === 1 && pins.environment === "base" && pins.chainId === c.chainId, "Invalid Base UPV5 cutover pins");
+  check(UPV5_CUTOVER_PINS.every((name) => {
+    const pin = pins[name];
+    return typeof pin === "object" && pin !== null && typeof pin.address === "string" && utils.isAddress(pin.address) && !same(pin.address, ZERO) && typeof pin.runtimeCodeHash === "string" && /^0x[\da-f]{64}$/i.test(pin.runtimeCodeHash);
+  }), "Invalid Base UPV5 cutover pins");
+  const stack = UPV5_CUTOVER_PINS.map((name) => pins[name].address.toLowerCase());
+  check(new Set(stack).size === stack.length && !Object.values(c.existing).some((pin) => stack.includes(pin.address.toLowerCase())), "Invalid Base UPV5 cutover pins");
+  check(Array.isArray(pins.retiredNullifierWriters) && equal(pins.retiredNullifierWriters, [c.existing.UnifiedPaymentVerifierV3.address, c.existing.UnifiedPaymentVerifierV4.address]), "Base UPV5 cutover must retire exactly UPV3 and UPV4");
+}
+
+/**
+ * Base's UPV5 Safe batch retires UPV3 and UPV4 as NullifierRegistryV2 writers, makes UPV5 the only NullifierRegistryV3
+ * writer, rebuilds every route on UPV5 in the same order with the same currencies, and moves DisputeProtectionPolicyV2
+ * to DisputeVerifierV2. All or nothing: untouched while none of it has happened, so every release check applies
+ * exactly; complete only for the whole cutover onto the pinned, correctly wired stack; any other state fails.
+ */
+export async function verifyBaseUpv5Cutover(hre: HardhatRuntimeEnvironment, m: Manifest, value: unknown, live: Awaited<ReturnType<typeof inspect>>): Promise<BaseUpv5CutoverReceipt> {
+  const c = m.configuration, provider = hre.ethers.provider, at = { blockTag: live.blockNumber };
+  validateBaseUpv5Cutover(value, c);
+  for (const name of UPV5_CUTOVER_PINS)
+    check(same(utils.keccak256(await provider.getCode(value[name].address, live.blockNumber)), value[name].runtimeCodeHash), `Base UPV5 cutover ${name} bytecode differs from its pin`);
+  const policy = m.contracts.DisputeProtectionPolicyV2; check(policy, "Missing deployed DisputeProtectionPolicyV2");
+  const owned = ["function owner() view returns(address)"], verifiers = ["function nullifierRegistry() view returns(address)", "function attestationVerifier() view returns(address)"];
+  const registry = new Contract(value.nullifierRegistryV3.address, [...owned, "function predecessor() view returns(address)", "function getWriters() view returns(address[])"], provider);
+  const upv5 = new Contract(value.unifiedPaymentVerifierV5.address, [...owned, ...verifiers, "function orchestratorRegistry() view returns(address)", "function getPaymentMethods() view returns(bytes32[])"], provider);
+  const disputeVerifier = new Contract(value.disputeVerifierV2.address, [...owned, ...verifiers, "function pendingOwner() view returns(address)"], provider);
+  const writers: string[] = await registry.getWriters(at);
+  const selected: string = await new Contract(policy.address, ["function disputeVerifier() view returns(address)"], provider).disputeVerifier(at);
+  const routed = live.paymentMethods.filter((route) => same(route.verifier, upv5.address)).length;
+  if (live.nullifierWriters.length > 0 && writers.length === 0 && routed === 0 && same(selected, c.existing.DisputeVerifier.address))
+    return { state: Upv5CutoverState.Untouched, ...value };
+  check(live.nullifierWriters.length === 0 && writers.some((writer) => same(writer, upv5.address)) && live.paymentMethods.length > 0 && routed === live.paymentMethods.length && same(selected, disputeVerifier.address), "Base UPV5 cutover is incomplete");
+  check(writers.length === 1, "UPV5 must be the only NullifierRegistryV3 writer");
+  const expectedFields: Array<[Contract, string, string]> = [
+    [registry, "predecessor", c.existing.NullifierRegistryV2.address], [registry, "owner", c.governance],
+    [upv5, "nullifierRegistry", registry.address], [upv5, "orchestratorRegistry", c.existing.OrchestratorRegistry.address], [upv5, "attestationVerifier", c.existing.MultiAttestationVerifier.address], [upv5, "owner", c.governance],
+    [disputeVerifier, "nullifierRegistry", registry.address], [disputeVerifier, "attestationVerifier", c.existing.MultiAttestationVerifier.address], [disputeVerifier, "owner", c.governance], [disputeVerifier, "pendingOwner", ZERO],
+  ];
+  for (const [contract, field, expected] of expectedFields) check(same(await contract[field](at), expected), `${contract.address} ${field} mismatch`);
+  check(equal(await upv5.getPaymentMethods(at), c.paymentMethods.map((method) => method.method)), "UPV5 method catalog mismatch");
+  return { state: Upv5CutoverState.Complete, ...value };
+}
+
+export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: TransactionJournal, active: boolean, baseWitnessChange?: unknown, baseUpv5Cutover?: unknown): Promise<void> {
   const m = journal.manifest, c = m.configuration;
   check(baseWitnessChange === undefined || (c.environment === "base" && active), "Witness governance verification requires active Base");
+  check(baseUpv5Cutover === undefined || (c.environment === "base" && active), "UPV5 cutover verification requires active Base");
   assertAcceptanceEnvironment(m);
   const snapshot = await inspect(hre, c);
   if (active || c.environment === "base") assertRegistryOwnership(snapshot);
   const witnessChange = baseWitnessChange === undefined ? undefined : await verifyBaseWitnessChange(hre.ethers.provider, c, snapshot, baseWitnessChange);
   const retirement = witnessChange ? await verifyBaseO3Retirement(hre.ethers.provider, c, snapshot, m.contracts.OrchestratorV4?.address ?? "") : undefined;
+  const upv5Cutover = baseUpv5Cutover === undefined ? undefined : await verifyBaseUpv5Cutover(hre, m, baseUpv5Cutover, snapshot);
+  const cutover = upv5Cutover?.state === Upv5CutoverState.Complete ? upv5Cutover : undefined;
   // Preserve the hashed deployment configuration and compare every other field unchanged.
-  const baselineSnapshot = retirement ? { ...snapshot, predecessor: { ...snapshot.predecessor, registered: true } } : snapshot;
+  const retiredSnapshot = retirement ? { ...snapshot, predecessor: { ...snapshot.predecessor, registered: true } } : snapshot;
+  // After the complete cutover UPV5 holds UPV4's routes and the retired writers' role. Map both back so the
+  // checks below still pin the catalog, its currency order and every other writer exactly.
+  const baselineSnapshot = cutover ? { ...retiredSnapshot, paymentMethods: snapshot.paymentMethods.map((route) => ({ ...route, verifier: releaseVerifier(c)! })), nullifierWriters: [...cutover.retiredNullifierWriters] } : retiredSnapshot;
   assertBaseline(witnessChange ? { ...c, attestationWitnesses: witnessChange.witnesses } : c, baselineSnapshot, m);
   const contracts = {} as Record<NewName, Contract>;
   for (const name of Object.keys(NEW_CONTRACTS) as NewName[]) {
@@ -636,7 +695,7 @@ export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: Trans
     [o, "escrowRegistry", c.existing.EscrowRegistry.address], [o, "paymentVerifierRegistry", c.existing.PaymentVerifierRegistry.address],
     [signal, "gatingService", c.gatingService], [signal, "whitelistPolicy", contracts.WhitelistPolicyV2.address],
     [o, "protocolFeeRecipient", c.protocolFeeRecipient], [vault, "stakeToken", c.stakeToken], [p, "stakeVault", vault.address],
-    [p, "disputeVerifier", c.existing.DisputeVerifier.address], [p, "disputeNullifierRegistry", c.existing.DisputeNullifierRegistry.address], [p, "orchestratorRegistry", c.existing.OrchestratorRegistry.address],
+    [p, "disputeVerifier", cutover ? cutover.disputeVerifierV2.address : c.existing.DisputeVerifier.address], [p, "disputeNullifierRegistry", c.existing.DisputeNullifierRegistry.address], [p, "orchestratorRegistry", c.existing.OrchestratorRegistry.address],
     [v, "orchestratorRegistry", c.existing.OrchestratorRegistry.address], [v, "nullifierRegistry", c.existing.NullifierRegistryV2.address], [v, "attestationVerifier", c.existing.MultiAttestationVerifier.address],
     [contracts.WhitelistPolicyV2, "groupRegistry", contracts.AddressGroupRegistryV4.address],
   ];
@@ -655,13 +714,15 @@ export async function verifySuite(hre: HardhatRuntimeEnvironment, journal: Trans
   if (active) {
     if (c.environment === "base_staging") await assertDrainEvidence(hre, c, m.activationDrainEvidence);
     await assertPrivateDepositsPreserved(hre, journal, { verifyRecordedAcceptance: true });
-    check(snapshot.paymentMethods.every((method) => same(method.verifier, v.address)), "Not all payment routes select UPV4");
+    const routeVerifier = cutover ? cutover.unifiedPaymentVerifierV5.address : v.address;
+    check(snapshot.paymentMethods.every((method) => same(method.verifier, routeVerifier)), `Not all payment routes select ${cutover ? "UPV5" : "UPV4"}`);
     if (c.environment === "base_staging") check(equal(snapshot.nullifierWriters, [v.address]), "UPV4 must be the only payment nullifier writer");
     check(equal(snapshot.disputeWriters, [...c.retainedDisputeWriters, p.address]), "Policy writer missing or predecessor writer changed");
   }
   m.verification = { ...m.verification, verifiedAtBlock: snapshot.blockNumber, active, bytecode: true, constructors: true, wiring: true, newContractOwnership: true, governance: snapshot.requiredOwnershipChanges.length === 0, pendingRegistryOwnership: snapshot.requiredOwnershipChanges, paymentCatalog: true, escrowCompatible: true, predecessorPreserved: !retirement };
   if (retirement) m.verification.predecessorRetirement = retirement;
   if (witnessChange) m.verification.witnessGovernance = witnessChange;
+  if (upv5Cutover) m.verification.upv5Cutover = upv5Cutover;
   journal.save();
 }
 
@@ -738,10 +799,12 @@ async function main(): Promise<void> {
     // Mandatory for the active Base read-only gate. Missing evidence never falls back to the old set.
     const baseWitnessChange = environment === "base" && (action === "verify" || (action === "verify-source" && manifest.verification.active === true))
       ? JSON.parse(readFileSync(resolve(BASE_GOVERNANCE_CHANGES), "utf8")) : undefined;
-    if (action === "verify") await verifySuite(hre, journal, true, baseWitnessChange);
+    // Wherever that evidence is mandatory, the UPV5 cutover is classified against its reviewed pins as well.
+    const baseUpv5Cutover = baseWitnessChange === undefined ? undefined : JSON.parse(readFileSync(resolve(BASE_UPV5_CUTOVER), "utf8"));
+    if (action === "verify") await verifySuite(hre, journal, true, baseWitnessChange, baseUpv5Cutover);
     if (action === "verify-source") {
       const apiKey = process.env.ETHERSCAN_API_KEY; check(apiKey, "ETHERSCAN_API_KEY is unavailable");
-      await verifySuite(hre, journal, manifest.verification.active === true, baseWitnessChange);
+      await verifySuite(hre, journal, manifest.verification.active === true, baseWitnessChange, baseUpv5Cutover);
       manifest.verification.sources = await verifySources(hre, manifest, apiKey); journal.save();
     }
     console.log(JSON.stringify({ manifest: journal.path, sourceCommit: manifest.sourceCommit, contracts: manifest.contracts, verification: manifest.verification }, null, 2));
