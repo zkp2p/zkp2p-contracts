@@ -23,11 +23,14 @@ interface IIntentCounter {
  * payment account, within that account's open-intent and daily limits, paying the service fee. No signature is
  * involved: `gatingServiceSignature` and `signatureExpiration` are ignored.
  * @dev Members of the integrator group signal for their own customers and skip the registration, the limits and the
- * fee. The deposit whitelist applies to every taker, as in IntentSignalPolicy.
- * @dev Limits count intents the escrow still holds unexpired. The policy runs before the orchestrator assigns the
+ * fee. Membership is whatever the group registry reports, so the group's curator, who can also open the group or
+ * give it a resolver, is trusted with that exemption. The deposit whitelist applies to every taker, as in
+ * IntentSignalPolicy.
+ * @dev The open-intent limit counts intents whose escrow lock has not expired: an expired lock is reclaimable by
+ * the escrow, so it no longer holds the deposit's liquidity. The policy runs before the orchestrator assigns the
  * intent hash, so it derives the hash the orchestrator is about to assign from its public counter and records it.
  * Configuration is fixed at deployment; governance changes it by selecting a new policy on the orchestrator.
- * Registrations live in the registry and outlive the policy.
+ * Registrations live in the registry and outlive the policy; the limits' counts do not.
  */
 contract RegistryIntentSignalPolicy is IIntentSignalPolicy {
 
@@ -35,8 +38,14 @@ contract RegistryIntentSignalPolicy is IIntentSignalPolicy {
 
     struct ServiceFee {
         uint64 fee;                    // Fee rate in preciseUnits (1e16 = 1%)
-        uint64 feeBelowThreshold;      // Fee rate on deposits priced below thresholdRate
-        uint128 thresholdRate;         // Deposit conversion rate below which feeBelowThreshold applies; zero = never
+        uint64 feeBelowThreshold;      // Fee rate on thresholdCurrency deposits priced below thresholdRate
+        uint128 thresholdRate;         // Deposit conversion rate in thresholdCurrency
+        bytes32 thresholdCurrency;     // Only currency the threshold applies to; zero = no threshold
+    }
+
+    struct MethodServiceFee {
+        bytes32 paymentMethod;
+        ServiceFee serviceFee;
     }
 
     struct Config {
@@ -51,8 +60,7 @@ contract RegistryIntentSignalPolicy is IIntentSignalPolicy {
         uint256 maxOpenIntents;                 // Open intents one identity may hold
         uint256 maxDailyIntents;                // Intents one identity may signal per UTC day
         ServiceFee defaultServiceFee;
-        bytes32[] serviceFeeMethods;            // Payment methods with their own service fee
-        ServiceFee[] serviceFees;               // Aligned with serviceFeeMethods
+        MethodServiceFee[] methodServiceFees;   // Payment methods with their own service fee
     }
 
     struct DailyCount {
@@ -60,23 +68,28 @@ contract RegistryIntentSignalPolicy is IIntentSignalPolicy {
         uint64 count;
     }
 
+    struct Stop {
+        uint64 since;
+        uint64 until;
+    }
+
     /* ============ Events ============ */
 
     event NewIntentsStopped(bytes32 indexed paymentMethod, uint256 until);
+    event NewIntentsResumed(bytes32 indexed paymentMethod);
 
     /* ============ Errors ============ */
 
     error ZeroAddress();
-    error ArrayLengthMismatch(uint256 methods, uint256 fees);
     error UnauthorizedCaller(address caller, address authorized);
+    error StopNotInFuture(uint256 until, uint256 currentTime);
     error StopExceedsMaximum(uint256 until, uint256 maximum);
+    error StopCoolingDown(bytes32 paymentMethod, uint256 until);
+    error NewIntentsNotStopped(bytes32 paymentMethod);
     error NewIntentsAreStopped(bytes32 paymentMethod, uint256 until);
     error PayerCommitmentNotSupported();
     error Sanctioned(address account);
     error TakerNotWhitelisted(address escrow, uint256 depositId, bytes32 paymentMethod, address taker);
-    error TakerNotRegistered(address taker, bytes32 paymentMethod);
-    error RegistrationExpired(uint256 validUntil, uint256 currentTime);
-    error IdentityIsRevoked(bytes32 identityId);
     error OpenIntentLimitReached(bytes32 identityId, uint256 limit);
     error DailyIntentLimitReached(bytes32 identityId, uint256 limit);
     error ServiceFeeTooLow(uint256 paid, uint256 required);
@@ -85,6 +98,7 @@ contract RegistryIntentSignalPolicy is IIntentSignalPolicy {
 
     uint256 internal constant CIRCOM_PRIME_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
     uint256 public constant MAX_STOP_DURATION = 3 days;
+    uint256 public constant STOP_COOLDOWN = 1 days;
     bytes32 public constant ALL_PAYMENT_METHODS = bytes32(0);
 
     /* ============ State Variables ============ */
@@ -92,6 +106,7 @@ contract RegistryIntentSignalPolicy is IIntentSignalPolicy {
     address public immutable orchestrator;
     ITakerRegistry public immutable registry;
     IWhitelistPolicyV2 public immutable whitelistPolicy;
+    IAddressGroupRegistry public immutable groupRegistry;
     ISanctionsList public immutable sanctionsList;
     bytes32 public immutable integratorGroupId;
     address public immutable guardian;
@@ -104,7 +119,7 @@ contract RegistryIntentSignalPolicy is IIntentSignalPolicy {
     mapping(bytes32 => ServiceFee) public serviceFees;                 // paymentMethod; set once at deployment
     mapping(bytes32 => bool) public hasServiceFee;                     // paymentMethod; false takes defaultServiceFee
 
-    mapping(bytes32 => uint256) public newIntentsStoppedUntil;         // paymentMethod, or ALL_PAYMENT_METHODS
+    mapping(bytes32 => Stop) public newIntentStops;                    // paymentMethod, or ALL_PAYMENT_METHODS
     mapping(bytes32 => bytes32[]) internal openIntents;                // identityId => intents not yet seen closed
     mapping(bytes32 => DailyCount) internal dailyCounts;               // identityId
 
@@ -116,13 +131,11 @@ contract RegistryIntentSignalPolicy is IIntentSignalPolicy {
                 || address(_config.whitelistPolicy) == address(0) || address(_config.sanctionsList) == address(0)
                 || _config.feeRecipient == address(0)
         ) revert ZeroAddress();
-        if (_config.serviceFeeMethods.length != _config.serviceFees.length) {
-            revert ArrayLengthMismatch(_config.serviceFeeMethods.length, _config.serviceFees.length);
-        }
 
         orchestrator = _config.orchestrator;
         registry = _config.registry;
         whitelistPolicy = _config.whitelistPolicy;
+        groupRegistry = _config.whitelistPolicy.groupRegistry();
         sanctionsList = _config.sanctionsList;
         integratorGroupId = _config.integratorGroupId;
         guardian = _config.guardian;
@@ -132,9 +145,9 @@ contract RegistryIntentSignalPolicy is IIntentSignalPolicy {
         maxDailyIntents = _config.maxDailyIntents;
 
         defaultServiceFee = _config.defaultServiceFee;
-        for (uint256 i = 0; i < _config.serviceFeeMethods.length; i++) {
-            serviceFees[_config.serviceFeeMethods[i]] = _config.serviceFees[i];
-            hasServiceFee[_config.serviceFeeMethods[i]] = true;
+        for (uint256 i = 0; i < _config.methodServiceFees.length; i++) {
+            serviceFees[_config.methodServiceFees[i].paymentMethod] = _config.methodServiceFees[i].serviceFee;
+            hasServiceFee[_config.methodServiceFees[i].paymentMethod] = true;
         }
     }
 
@@ -160,7 +173,6 @@ contract RegistryIntentSignalPolicy is IIntentSignalPolicy {
         if (sanctionsList.isSanctioned(_params.to)) revert Sanctioned(_params.to);
 
         // With the whitelist off, anyone may signal and groupId is ignored; a group taker gets its group's arbitrator.
-        IAddressGroupRegistry groupRegistry = whitelistPolicy.groupRegistry();
         if (whitelistPolicy.enabled(_params.escrow, _params.depositId)) {
             takerWhitelisted = whitelistPolicy.isWhitelisted(_params.escrow, _params.depositId, _taker, _params.groupId);
             if (!takerWhitelisted) {
@@ -171,35 +183,55 @@ contract RegistryIntentSignalPolicy is IIntentSignalPolicy {
 
         if (groupRegistry.isMember(integratorGroupId, _taker)) return (takerWhitelisted, arbitrator);
 
-        bytes32 identityId = _requireRegistered(_taker, _params.paymentMethod);
-        _recordIntent(identityId);
+        bytes32 identityId = registry.requireRegistered(_taker, _params.paymentMethod);
         _requireServiceFee(_params);
+        _recordIntent(identityId);
     }
 
     /* ============ Guardian Functions ============ */
 
     /**
      * @notice GUARDIAN ONLY: Stops new intents on one payment method, or on all with ALL_PAYMENT_METHODS, until a
-     * time at most MAX_STOP_DURATION away. The stop lapses on its own; a past time lifts it now. Open intents are
-     * unaffected.
+     * time at most MAX_STOP_DURATION after the stop began. The stop lapses on its own, and the same scope cannot
+     * be stopped again until STOP_COOLDOWN after it ended. Open intents are unaffected.
      * @param _paymentMethod   Payment method to stop, or ALL_PAYMENT_METHODS
      * @param _until           Time the stop ends
      */
-    function stopNewIntents(bytes32 _paymentMethod, uint256 _until) external {
+    function stopNewIntents(bytes32 _paymentMethod, uint64 _until) external {
         if (msg.sender != guardian) revert UnauthorizedCaller(msg.sender, guardian);
-        if (_until > block.timestamp + MAX_STOP_DURATION) {
-            revert StopExceedsMaximum(_until, block.timestamp + MAX_STOP_DURATION);
-        }
+        if (_until <= block.timestamp) revert StopNotInFuture(_until, block.timestamp);
 
-        newIntentsStoppedUntil[_paymentMethod] = _until;
+        Stop memory stop = newIntentStops[_paymentMethod];
+        if (block.timestamp >= stop.until) {
+            if (stop.until != 0 && block.timestamp < stop.until + STOP_COOLDOWN) {
+                revert StopCoolingDown(_paymentMethod, stop.until + STOP_COOLDOWN);
+            }
+            stop.since = uint64(block.timestamp);
+        }
+        if (_until > stop.since + MAX_STOP_DURATION) revert StopExceedsMaximum(_until, stop.since + MAX_STOP_DURATION);
+
+        stop.until = _until;
+        newIntentStops[_paymentMethod] = stop;
         emit NewIntentsStopped(_paymentMethod, _until);
+    }
+
+    /**
+     * @notice GUARDIAN ONLY: Ends a running stop now.
+     * @param _paymentMethod   Stopped payment method, or ALL_PAYMENT_METHODS
+     */
+    function resumeNewIntents(bytes32 _paymentMethod) external {
+        if (msg.sender != guardian) revert UnauthorizedCaller(msg.sender, guardian);
+        if (block.timestamp >= newIntentStops[_paymentMethod].until) revert NewIntentsNotStopped(_paymentMethod);
+
+        newIntentStops[_paymentMethod].until = uint64(block.timestamp);
+        emit NewIntentsResumed(_paymentMethod);
     }
 
     /* ============ View Functions ============ */
 
     /**
      * @notice Service fee rate an intent on the deposit must carry, before any referral share.
-     * @dev Reads the deposit's current rate, as the orchestrator does when it prices the intent.
+     * @dev A threshold reads the deposit's current rate, as the orchestrator does when it prices the intent.
      */
     function requiredServiceFee(address _escrow, uint256 _depositId, bytes32 _paymentMethod, bytes32 _fiatCurrency)
         public
@@ -207,6 +239,7 @@ contract RegistryIntentSignalPolicy is IIntentSignalPolicy {
         returns (uint256)
     {
         ServiceFee memory serviceFee = hasServiceFee[_paymentMethod] ? serviceFees[_paymentMethod] : defaultServiceFee;
+        if (_fiatCurrency != serviceFee.thresholdCurrency) return serviceFee.fee;
 
         uint256 depositRate = IEscrowV2(_escrow).getEffectiveRate(_depositId, _paymentMethod, _fiatCurrency);
         return depositRate < serviceFee.thresholdRate ? serviceFee.feeBelowThreshold : serviceFee.fee;
@@ -220,19 +253,8 @@ contract RegistryIntentSignalPolicy is IIntentSignalPolicy {
     /* ============ Internal Functions ============ */
 
     function _requireNotStopped(bytes32 _paymentMethod) internal view {
-        uint256 until = newIntentsStoppedUntil[_paymentMethod];
+        uint256 until = newIntentStops[_paymentMethod].until;
         if (block.timestamp < until) revert NewIntentsAreStopped(_paymentMethod, until);
-    }
-
-    function _requireRegistered(address _taker, bytes32 _paymentMethod) internal view returns (bytes32 identityId) {
-        ITakerRegistry.Registration memory registration = registry.getRegistration(_taker, _paymentMethod);
-        if (registration.validUntil == 0) revert TakerNotRegistered(_taker, _paymentMethod);
-        if (registration.validUntil <= block.timestamp) {
-            revert RegistrationExpired(registration.validUntil, block.timestamp);
-        }
-        if (registry.isRevoked(registration.identityId)) revert IdentityIsRevoked(registration.identityId);
-
-        return registration.identityId;
     }
 
     /**
@@ -270,7 +292,7 @@ contract RegistryIntentSignalPolicy is IIntentSignalPolicy {
         IOrchestratorV4.Intent memory intent = IOrchestratorV4(orchestrator).getIntent(_intentHash);
         if (intent.timestamp == 0) return false;
 
-        return IEscrow(intent.escrow).getDepositIntent(intent.depositId, _intentHash).expiryTime > block.timestamp;
+        return IEscrow(intent.escrow).getDepositIntent(intent.depositId, _intentHash).expiryTime >= block.timestamp;
     }
 
     /**

@@ -16,6 +16,8 @@ import { ITakerRegistry } from "../interfaces/ITakerRegistry.sol";
  * it alone holds, bound to this chain, this registry and the payment method, so nothing here or in the events lets
  * anyone recover the account or test a guess against it. Wallets registered to one account on one method share an
  * identity id; that is what lets a policy limit the account rather than the wallet.
+ * @dev The attestor proves control of the account, not of the wallet a statement names. Only that wallet may submit
+ * the statement, so nobody can bind another wallet to an account of their own.
  * @dev Swapping this registry rotates the EIP-712 domain (it binds this contract's address) and empties every
  * registration. Policies are replaced around the registry, not the other way round.
  */
@@ -30,7 +32,7 @@ contract TakerRegistry is ITakerRegistry, Ownable2Step, EIP712 {
 
     mapping(address => mapping(bytes32 => Registration)) internal registrations;   // wallet => method
     mapping(bytes32 => bool) public override isRevoked;                            // identityId
-    mapping(address => bool) public isAttestor;                                    // Signers whose statements register
+    mapping(address => AttestorStatus) public attestorStatus;                      // Signers of registration statements
     address public revoker;                                                        // May revoke identities
 
     /* ============ Constructor ============ */
@@ -45,31 +47,22 @@ contract TakerRegistry is ITakerRegistry, Ownable2Step, EIP712 {
 
     /**
      * @inheritdoc ITakerRegistry
-     * @dev A newer statement replaces the wallet's registration on that method, including a move to another account.
-     * Statements apply in the order the attestor issued them, so an older one cannot undo a newer registration or an
-     * unregistration.
+     * @dev Replaces the wallet's registration on that method, including a move to another account.
      */
     function register(TakerRegistration calldata _registration, bytes calldata _signature) external override {
+        if (msg.sender != _registration.wallet) revert UnauthorizedCaller(msg.sender, _registration.wallet);
         if (_registration.validUntil <= block.timestamp) {
             revert RegistrationExpired(_registration.validUntil, block.timestamp);
         }
         if (isRevoked[_registration.identityId]) revert IdentityIsRevoked(_registration.identityId);
 
-        Registration storage registration = registrations[_registration.wallet][_registration.method];
-        if (_registration.issuedAt <= registration.issuedAt) {
-            revert StaleRegistration(_registration.issuedAt, registration.issuedAt);
-        }
+        address attestor = ECDSA.recover(_hashTypedDataV4(_registrationStructHash(_registration)), _signature);
+        if (attestorStatus[attestor] != AttestorStatus.Accepted) revert InvalidAttestor(attestor);
 
-        address signer = ECDSA.recover(_hashTypedDataV4(_registrationStructHash(_registration)), _signature);
-        if (!isAttestor[signer]) revert InvalidAttestor(signer);
-
-        registration.identityId = _registration.identityId;
-        registration.issuedAt = _registration.issuedAt;
-        registration.validUntil = _registration.validUntil;
-
-        emit TakerRegistered(
-            _registration.wallet, _registration.method, _registration.identityId, _registration.validUntil
-        );
+        registrations[msg.sender][_registration.method] = Registration({
+            identityId: _registration.identityId, attestor: attestor, validUntil: _registration.validUntil
+        });
+        emit TakerRegistered(msg.sender, _registration.method, _registration.identityId, _registration.validUntil);
     }
 
     /// @inheritdoc ITakerRegistry
@@ -106,16 +99,16 @@ contract TakerRegistry is ITakerRegistry, Ownable2Step, EIP712 {
     }
 
     /**
-     * @notice GOVERNANCE ONLY: Accepts or stops accepting an attestor's registration statements. Registrations it
-     * already signed stay recorded.
+     * @notice GOVERNANCE ONLY: Sets whether an attestor's statements register and whether the registrations it
+     * signed still count. Retire a key that was rotated out; revoke one that can no longer be trusted.
      * @param _attestor   Signer of registration statements
-     * @param _accepted   Whether its statements register
+     * @param _status     Its new status
      */
-    function setAttestor(address _attestor, bool _accepted) external onlyOwner {
+    function setAttestorStatus(address _attestor, AttestorStatus _status) external onlyOwner {
         if (_attestor == address(0)) revert ZeroAddress();
 
-        isAttestor[_attestor] = _accepted;
-        emit AttestorUpdated(_attestor, _accepted);
+        attestorStatus[_attestor] = _status;
+        emit AttestorStatusUpdated(_attestor, _status);
     }
 
     /**
@@ -135,6 +128,21 @@ contract TakerRegistry is ITakerRegistry, Ownable2Step, EIP712 {
     }
 
     /* ============ View Functions ============ */
+
+    /// @inheritdoc ITakerRegistry
+    function requireRegistered(address _wallet, bytes32 _method) external view override returns (bytes32) {
+        Registration memory registration = registrations[_wallet][_method];
+        if (registration.validUntil == 0) revert NotRegistered(_wallet, _method);
+        if (registration.validUntil <= block.timestamp) {
+            revert RegistrationExpired(registration.validUntil, block.timestamp);
+        }
+        if (isRevoked[registration.identityId]) revert IdentityIsRevoked(registration.identityId);
+        if (attestorStatus[registration.attestor] == AttestorStatus.Revoked) {
+            revert AttestorIsRevoked(registration.attestor);
+        }
+
+        return registration.identityId;
+    }
 
     /// @inheritdoc ITakerRegistry
     function getRegistration(address _wallet, bytes32 _method) external view override returns (Registration memory) {

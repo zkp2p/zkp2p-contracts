@@ -42,6 +42,7 @@ contract RegistryIntentSignalPolicyTest is OrchestratorV4Fixture, TakerRegistrat
     RegistryIntentSignalPolicy internal policy;
 
     event NewIntentsStopped(bytes32 indexed paymentMethod, uint256 until);
+    event NewIntentsResumed(bytes32 indexed paymentMethod);
 
     function setUp() public override {
         super.setUp();
@@ -57,7 +58,7 @@ contract RegistryIntentSignalPolicyTest is OrchestratorV4Fixture, TakerRegistrat
         groupRegistry.addMembers(integratorGroupId, _addresses(integrator));
         sanctionsList = new SanctionsListMock();
         takerRegistry = new TakerRegistry(address(this), revoker);
-        takerRegistry.setAttestor(attestor, true);
+        takerRegistry.setAttestorStatus(attestor, ITakerRegistry.AttestorStatus.Accepted);
 
         policy = new RegistryIntentSignalPolicy(_config());
         orchestrator.setSignalPolicy(policy);
@@ -111,7 +112,7 @@ contract RegistryIntentSignalPolicyTest is OrchestratorV4Fixture, TakerRegistrat
 
     function test_RejectsUnregisteredTaker() public {
         vm.expectRevert(
-            abi.encodeWithSelector(RegistryIntentSignalPolicy.TakerNotRegistered.selector, other, METHOD)
+            abi.encodeWithSelector(ITakerRegistry.NotRegistered.selector, other, METHOD)
         );
         _signalRaw(other, _feeParams());
     }
@@ -120,7 +121,7 @@ contract RegistryIntentSignalPolicyTest is OrchestratorV4Fixture, TakerRegistrat
         _register(other, OTHER_METHOD, OTHER_IDENTITY);
 
         vm.expectRevert(
-            abi.encodeWithSelector(RegistryIntentSignalPolicy.TakerNotRegistered.selector, other, METHOD)
+            abi.encodeWithSelector(ITakerRegistry.NotRegistered.selector, other, METHOD)
         );
         _signalRaw(other, _feeParams());
     }
@@ -130,7 +131,7 @@ contract RegistryIntentSignalPolicyTest is OrchestratorV4Fixture, TakerRegistrat
         takerRegistry.unregister(METHOD);
 
         vm.expectRevert(
-            abi.encodeWithSelector(RegistryIntentSignalPolicy.TakerNotRegistered.selector, taker, METHOD)
+            abi.encodeWithSelector(ITakerRegistry.NotRegistered.selector, taker, METHOD)
         );
         _signalRaw(taker, _feeParams());
     }
@@ -142,7 +143,7 @@ contract RegistryIntentSignalPolicyTest is OrchestratorV4Fixture, TakerRegistrat
 
         vm.warp(validUntil);
         vm.expectRevert(
-            abi.encodeWithSelector(RegistryIntentSignalPolicy.RegistrationExpired.selector, validUntil, validUntil)
+            abi.encodeWithSelector(ITakerRegistry.RegistrationExpired.selector, validUntil, validUntil)
         );
         _signalRaw(taker, _feeParams());
     }
@@ -153,10 +154,17 @@ contract RegistryIntentSignalPolicyTest is OrchestratorV4Fixture, TakerRegistrat
         vm.prank(revoker);
         takerRegistry.revoke(identities);
 
-        vm.expectRevert(abi.encodeWithSelector(RegistryIntentSignalPolicy.IdentityIsRevoked.selector, IDENTITY));
+        vm.expectRevert(abi.encodeWithSelector(ITakerRegistry.IdentityIsRevoked.selector, IDENTITY));
         _signalRaw(taker, _feeParams());
 
         takerRegistry.reinstate(IDENTITY);
+        _signalRaw(taker, _feeParams());
+    }
+
+    function test_RejectsRegistrationFromRevokedAttestor() public {
+        takerRegistry.setAttestorStatus(attestor, ITakerRegistry.AttestorStatus.Revoked);
+
+        vm.expectRevert(abi.encodeWithSelector(ITakerRegistry.AttestorIsRevoked.selector, attestor));
         _signalRaw(taker, _feeParams());
     }
 
@@ -243,7 +251,7 @@ contract RegistryIntentSignalPolicyTest is OrchestratorV4Fixture, TakerRegistrat
         vm.warp(START + 30 minutes);
         bytes32 second = _signalFee(taker);
 
-        vm.warp(START + 1 hours - 1);
+        vm.warp(START + 1 hours);
         vm.expectRevert(
             abi.encodeWithSelector(
                 RegistryIntentSignalPolicy.OpenIntentLimitReached.selector, IDENTITY, MAX_OPEN_INTENTS
@@ -251,7 +259,7 @@ contract RegistryIntentSignalPolicyTest is OrchestratorV4Fixture, TakerRegistrat
         );
         _signalRaw(taker, _feeParams());
 
-        vm.warp(START + 1 hours);
+        vm.warp(START + 1 hours + 1);
         bytes32 third = _signalFee(taker);
         assertEq(orchestrator.getIntent(first).owner, taker);
         bytes32[] memory open = policy.getOpenIntents(IDENTITY);
@@ -264,9 +272,11 @@ contract RegistryIntentSignalPolicyTest is OrchestratorV4Fixture, TakerRegistrat
 
     function test_LimitsIntentsPerIdentityPerDay() public {
         vm.warp(40 days);
+        _register(other, METHOD, IDENTITY);
         for (uint256 i = 0; i < MAX_DAILY_INTENTS; i++) {
-            bytes32 intentHash = _signalFee(taker);
-            vm.prank(taker);
+            address wallet = i % 2 == 0 ? taker : other;
+            bytes32 intentHash = _signalFee(wallet);
+            vm.prank(wallet);
             orchestrator.cancelIntent(intentHash);
         }
 
@@ -294,10 +304,15 @@ contract RegistryIntentSignalPolicyTest is OrchestratorV4Fixture, TakerRegistrat
         assertEq(policy.requiredServiceFee(address(escrow), thresholdDepositId, METHOD, USD), VENMO_FEE);
     }
 
+    function test_ThresholdAppliesOnlyToItsCurrency() public {
+        uint256 cheapDepositId = _createDepositAtRate(VENMO_THRESHOLD_RATE - 1);
+
+        assertEq(policy.requiredServiceFee(address(escrow), cheapDepositId, METHOD, keccak256("EUR")), VENMO_FEE);
+    }
+
     function test_UnconfiguredMethodTakesDefaultFee() public {
         RegistryIntentSignalPolicy.Config memory config = _config();
-        config.serviceFeeMethods = new bytes32[](0);
-        config.serviceFees = new RegistryIntentSignalPolicy.ServiceFee[](0);
+        config.methodServiceFees = new RegistryIntentSignalPolicy.MethodServiceFee[](0);
         RegistryIntentSignalPolicy defaultOnly = new RegistryIntentSignalPolicy(config);
 
         assertEq(defaultOnly.requiredServiceFee(address(escrow), depositId, METHOD, USD), DEFAULT_FEE);
@@ -379,12 +394,19 @@ contract RegistryIntentSignalPolicyTest is OrchestratorV4Fixture, TakerRegistrat
 
         sanctionsList.setSanctioned(integrator, false);
         vm.prank(guardian);
-        policy.stopNewIntents(METHOD, block.timestamp + 1 hours);
+        policy.stopNewIntents(METHOD, START + 1 hours);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                RegistryIntentSignalPolicy.NewIntentsAreStopped.selector, METHOD, block.timestamp + 1 hours
-            )
+            abi.encodeWithSelector(RegistryIntentSignalPolicy.NewIntentsAreStopped.selector, METHOD, START + 1 hours)
         );
+        _signalRaw(integrator, _defaultParams());
+    }
+
+    function test_NoIntegratorGroupAdmitsNobodyUnregistered() public {
+        RegistryIntentSignalPolicy.Config memory config = _config();
+        config.integratorGroupId = bytes32(0);
+        orchestrator.setSignalPolicy(new RegistryIntentSignalPolicy(config));
+
+        vm.expectRevert(abi.encodeWithSelector(ITakerRegistry.NotRegistered.selector, integrator, METHOD));
         _signalRaw(integrator, _defaultParams());
     }
 
@@ -392,7 +414,7 @@ contract RegistryIntentSignalPolicyTest is OrchestratorV4Fixture, TakerRegistrat
         groupRegistry.removeMembers(integratorGroupId, _addresses(integrator));
 
         vm.expectRevert(
-            abi.encodeWithSelector(RegistryIntentSignalPolicy.TakerNotRegistered.selector, integrator, METHOD)
+            abi.encodeWithSelector(ITakerRegistry.NotRegistered.selector, integrator, METHOD)
         );
         _signalRaw(integrator, _defaultParams());
     }
@@ -418,7 +440,7 @@ contract RegistryIntentSignalPolicyTest is OrchestratorV4Fixture, TakerRegistrat
         _whitelist(other);
 
         vm.expectRevert(
-            abi.encodeWithSelector(RegistryIntentSignalPolicy.TakerNotRegistered.selector, other, METHOD)
+            abi.encodeWithSelector(ITakerRegistry.NotRegistered.selector, other, METHOD)
         );
         _signalRaw(other, _feeParams());
     }
@@ -447,7 +469,7 @@ contract RegistryIntentSignalPolicyTest is OrchestratorV4Fixture, TakerRegistrat
     /* ============ Stop ============ */
 
     function test_GuardianStopsOneMethodUntilItLapses() public {
-        uint256 until = block.timestamp + 1 hours;
+        uint64 until = START + 1 hours;
         vm.expectEmit(address(policy));
         emit NewIntentsStopped(METHOD, until);
         vm.prank(guardian);
@@ -463,17 +485,19 @@ contract RegistryIntentSignalPolicyTest is OrchestratorV4Fixture, TakerRegistrat
         _signalRaw(taker, _feeParams());
     }
 
-    function test_GuardianStopsEveryMethodAndLiftsEarly() public {
+    function test_GuardianStopsEveryMethodAndResumesEarly() public {
         bytes32 all = policy.ALL_PAYMENT_METHODS();
-        uint256 until = block.timestamp + policy.MAX_STOP_DURATION();
+        uint64 until = START + 3 days;
         vm.prank(guardian);
         policy.stopNewIntents(all, until);
 
         vm.expectRevert(abi.encodeWithSelector(RegistryIntentSignalPolicy.NewIntentsAreStopped.selector, all, until));
         _signalRaw(taker, _feeParams());
 
+        vm.expectEmit(address(policy));
+        emit NewIntentsResumed(all);
         vm.prank(guardian);
-        policy.stopNewIntents(all, 0);
+        policy.resumeNewIntents(all);
         _signalRaw(taker, _feeParams());
     }
 
@@ -481,29 +505,85 @@ contract RegistryIntentSignalPolicyTest is OrchestratorV4Fixture, TakerRegistrat
         bytes32 intentHash = _signalFee(taker);
         bytes32 all = policy.ALL_PAYMENT_METHODS();
         vm.prank(guardian);
-        policy.stopNewIntents(all, block.timestamp + 1 hours);
+        policy.stopNewIntents(all, START + 1 hours);
 
         _fulfill(intentHash, INTENT_AMOUNT, CONVERSION_RATE);
         assertEq(orchestrator.getIntent(intentHash).owner, address(0));
     }
 
-    function test_RejectsStopFromOthersOrBeyondMaximum() public {
+    function test_StopCannotOutlastMaximumByExtending() public {
+        vm.startPrank(guardian);
+        policy.stopNewIntents(METHOD, START + 1 days);
+
+        vm.warp(START + 1 days - 1);
+        policy.stopNewIntents(METHOD, START + 3 days);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                RegistryIntentSignalPolicy.StopExceedsMaximum.selector, START + 3 days + 1, START + 3 days
+            )
+        );
+        policy.stopNewIntents(METHOD, START + 3 days + 1);
+        vm.stopPrank();
+    }
+
+    function test_StopCannotRestartBeforeCooldown() public {
+        vm.startPrank(guardian);
+        policy.stopNewIntents(METHOD, START + 3 days);
+
+        vm.warp(START + 4 days - 1);
+        vm.expectRevert(
+            abi.encodeWithSelector(RegistryIntentSignalPolicy.StopCoolingDown.selector, METHOD, START + 4 days)
+        );
+        policy.stopNewIntents(METHOD, START + 5 days);
+
+        vm.warp(START + 4 days);
+        policy.stopNewIntents(METHOD, START + 7 days);
+        vm.stopPrank();
+    }
+
+    function test_ResumedStopStillCoolsDown() public {
+        vm.startPrank(guardian);
+        policy.stopNewIntents(METHOD, START + 3 days);
+        vm.warp(START + 1 hours);
+        policy.resumeNewIntents(METHOD);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                RegistryIntentSignalPolicy.StopCoolingDown.selector, METHOD, START + 1 hours + 1 days
+            )
+        );
+        policy.stopNewIntents(METHOD, START + 2 hours);
+
+        vm.expectRevert(abi.encodeWithSelector(RegistryIntentSignalPolicy.NewIntentsNotStopped.selector, METHOD));
+        policy.resumeNewIntents(METHOD);
+        vm.stopPrank();
+    }
+
+    function test_RejectsStopFromOthersInThePastOrBeyondMaximum() public {
         vm.expectRevert(
             abi.encodeWithSelector(RegistryIntentSignalPolicy.UnauthorizedCaller.selector, address(this), guardian)
         );
-        policy.stopNewIntents(METHOD, block.timestamp + 1 hours);
-
-        uint256 maximum = block.timestamp + policy.MAX_STOP_DURATION();
+        policy.stopNewIntents(METHOD, START + 1 hours);
         vm.expectRevert(
-            abi.encodeWithSelector(RegistryIntentSignalPolicy.StopExceedsMaximum.selector, maximum + 1, maximum)
+            abi.encodeWithSelector(RegistryIntentSignalPolicy.UnauthorizedCaller.selector, address(this), guardian)
         );
-        vm.prank(guardian);
-        policy.stopNewIntents(METHOD, maximum + 1);
+        policy.resumeNewIntents(METHOD);
+
+        vm.startPrank(guardian);
+        vm.expectRevert(abi.encodeWithSelector(RegistryIntentSignalPolicy.StopNotInFuture.selector, START, START));
+        policy.stopNewIntents(METHOD, START);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                RegistryIntentSignalPolicy.StopExceedsMaximum.selector, START + 3 days + 1, START + 3 days
+            )
+        );
+        policy.stopNewIntents(METHOD, START + 3 days + 1);
+        vm.stopPrank();
     }
 
     /* ============ Constructor ============ */
 
-    function test_ConstructorRejectsMissingDependenciesAndMismatchedFees() public {
+    function test_ConstructorRejectsMissingDependencies() public {
         RegistryIntentSignalPolicy.Config memory config = _config();
         config.orchestrator = address(0);
         vm.expectRevert(RegistryIntentSignalPolicy.ZeroAddress.selector);
@@ -528,11 +608,6 @@ contract RegistryIntentSignalPolicyTest is OrchestratorV4Fixture, TakerRegistrat
         config.feeRecipient = address(0);
         vm.expectRevert(RegistryIntentSignalPolicy.ZeroAddress.selector);
         new RegistryIntentSignalPolicy(config);
-
-        config = _config();
-        config.serviceFeeMethods = new bytes32[](0);
-        vm.expectRevert(abi.encodeWithSelector(RegistryIntentSignalPolicy.ArrayLengthMismatch.selector, 0, 1));
-        new RegistryIntentSignalPolicy(config);
     }
 
     /* ============ Helpers ============ */
@@ -549,15 +624,17 @@ contract RegistryIntentSignalPolicyTest is OrchestratorV4Fixture, TakerRegistrat
         config.maxOpenIntents = MAX_OPEN_INTENTS;
         config.maxDailyIntents = MAX_DAILY_INTENTS;
         config.defaultServiceFee = RegistryIntentSignalPolicy.ServiceFee({
-            fee: uint64(DEFAULT_FEE), feeBelowThreshold: uint64(DEFAULT_FEE), thresholdRate: 0
+            fee: uint64(DEFAULT_FEE), feeBelowThreshold: 0, thresholdRate: 0, thresholdCurrency: bytes32(0)
         });
-        config.serviceFeeMethods = new bytes32[](1);
-        config.serviceFeeMethods[0] = METHOD;
-        config.serviceFees = new RegistryIntentSignalPolicy.ServiceFee[](1);
-        config.serviceFees[0] = RegistryIntentSignalPolicy.ServiceFee({
-            fee: uint64(VENMO_FEE),
-            feeBelowThreshold: uint64(VENMO_FEE_BELOW_THRESHOLD),
-            thresholdRate: uint128(VENMO_THRESHOLD_RATE)
+        config.methodServiceFees = new RegistryIntentSignalPolicy.MethodServiceFee[](1);
+        config.methodServiceFees[0] = RegistryIntentSignalPolicy.MethodServiceFee({
+            paymentMethod: METHOD,
+            serviceFee: RegistryIntentSignalPolicy.ServiceFee({
+                fee: uint64(VENMO_FEE),
+                feeBelowThreshold: uint64(VENMO_FEE_BELOW_THRESHOLD),
+                thresholdRate: uint128(VENMO_THRESHOLD_RATE),
+                thresholdCurrency: USD
+            })
         });
     }
 
@@ -569,7 +646,9 @@ contract RegistryIntentSignalPolicyTest is OrchestratorV4Fixture, TakerRegistrat
             issuedAt: uint64(block.timestamp),
             validUntil: uint64(block.timestamp + 30 days)
         });
-        takerRegistry.register(statement, _signRegistration(attestorKey, takerRegistry, statement));
+        bytes memory signature = _signRegistration(attestorKey, takerRegistry, statement);
+        vm.prank(wallet);
+        takerRegistry.register(statement, signature);
     }
 
     function _feeParams() internal view returns (IOrchestratorV4.SignalIntentParams memory params) {

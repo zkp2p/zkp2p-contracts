@@ -24,7 +24,7 @@ contract TakerRegistryTest is TakerRegistrationSigner {
     event TakerUnregistered(address indexed wallet, bytes32 indexed method);
     event IdentityRevoked(bytes32 indexed identityId);
     event IdentityReinstated(bytes32 indexed identityId);
-    event AttestorUpdated(address indexed attestor, bool accepted);
+    event AttestorStatusUpdated(address indexed attestor, ITakerRegistry.AttestorStatus status);
     event RevokerUpdated(address indexed revoker);
 
     function setUp() public {
@@ -35,7 +35,7 @@ contract TakerRegistryTest is TakerRegistrationSigner {
 
         vm.warp(ISSUED_AT);
         registry = new TakerRegistry(address(this), revoker);
-        registry.setAttestor(attestor, true);
+        registry.setAttestorStatus(attestor, ITakerRegistry.AttestorStatus.Accepted);
     }
 
     /* ============ register ============ */
@@ -49,8 +49,9 @@ contract TakerRegistryTest is TakerRegistrationSigner {
 
         ITakerRegistry.Registration memory registration = registry.getRegistration(wallet, METHOD);
         assertEq(registration.identityId, IDENTITY);
-        assertEq(registration.issuedAt, ISSUED_AT);
+        assertEq(registration.attestor, attestor);
         assertEq(registration.validUntil, VALID_UNTIL);
+        assertEq(registry.requireRegistered(wallet, METHOD), IDENTITY);
         assertEq(registry.getRegistration(wallet, OTHER_METHOD).validUntil, 0);
         assertEq(registry.getRegistration(submitter, METHOD).validUntil, 0);
     }
@@ -67,8 +68,20 @@ contract TakerRegistryTest is TakerRegistrationSigner {
         (address stranger, uint256 strangerKey) = makeAddrAndKey("stranger");
         ITakerRegistry.TakerRegistration memory statement = _statement(wallet, IDENTITY, ISSUED_AT);
 
+        bytes memory signature = _signRegistration(strangerKey, registry, statement);
         vm.expectRevert(abi.encodeWithSelector(ITakerRegistry.InvalidAttestor.selector, stranger));
-        registry.register(statement, _signRegistration(strangerKey, registry, statement));
+        vm.prank(wallet);
+        registry.register(statement, signature);
+    }
+
+    function test_OnlyTheNamedWalletSubmitsItsStatement() public {
+        ITakerRegistry.TakerRegistration memory statement = _statement(wallet, IDENTITY, ISSUED_AT);
+        bytes memory signature = _signRegistration(attestorKey, registry, statement);
+
+        vm.expectRevert(abi.encodeWithSelector(ITakerRegistry.UnauthorizedCaller.selector, submitter, wallet));
+        vm.prank(submitter);
+        registry.register(statement, signature);
+        assertEq(registry.getRegistration(wallet, METHOD).validUntil, 0);
     }
 
     function test_RejectsStatementSignedForAnotherWallet() public {
@@ -77,17 +90,20 @@ contract TakerRegistryTest is TakerRegistrationSigner {
         statement.wallet = submitter;
 
         vm.expectRevert();
+        vm.prank(submitter);
         registry.register(statement, signature);
         assertEq(registry.getRegistration(submitter, METHOD).validUntil, 0);
     }
 
     function test_RejectsStatementSignedForAnotherRegistry() public {
         TakerRegistry otherRegistry = new TakerRegistry(address(this), revoker);
-        otherRegistry.setAttestor(attestor, true);
+        otherRegistry.setAttestorStatus(attestor, ITakerRegistry.AttestorStatus.Accepted);
         ITakerRegistry.TakerRegistration memory statement = _statement(wallet, IDENTITY, ISSUED_AT);
+        bytes memory signature = _signRegistration(attestorKey, registry, statement);
 
         vm.expectRevert();
-        otherRegistry.register(statement, _signRegistration(attestorKey, registry, statement));
+        vm.prank(wallet);
+        otherRegistry.register(statement, signature);
         assertEq(otherRegistry.getRegistration(wallet, METHOD).validUntil, 0);
     }
 
@@ -97,6 +113,7 @@ contract TakerRegistryTest is TakerRegistrationSigner {
         vm.chainId(block.chainid + 1);
 
         vm.expectRevert();
+        vm.prank(wallet);
         registry.register(statement, signature);
     }
 
@@ -108,24 +125,10 @@ contract TakerRegistryTest is TakerRegistrationSigner {
         _register(statement);
     }
 
-    function test_NewerStatementMovesWalletToAnotherIdentity() public {
+    function test_AnotherStatementMovesWalletToAnotherIdentity() public {
         _register(_statement(wallet, IDENTITY, ISSUED_AT));
         _register(_statement(wallet, OTHER_IDENTITY, ISSUED_AT + 1));
 
-        assertEq(registry.getRegistration(wallet, METHOD).identityId, OTHER_IDENTITY);
-    }
-
-    function test_RejectsOlderOrRepeatedStatement() public {
-        ITakerRegistry.TakerRegistration memory older = _statement(wallet, IDENTITY, ISSUED_AT);
-        ITakerRegistry.TakerRegistration memory newer = _statement(wallet, OTHER_IDENTITY, ISSUED_AT + 1);
-        _register(newer);
-
-        vm.expectRevert(abi.encodeWithSelector(ITakerRegistry.StaleRegistration.selector, ISSUED_AT, ISSUED_AT + 1));
-        _register(older);
-        vm.expectRevert(
-            abi.encodeWithSelector(ITakerRegistry.StaleRegistration.selector, ISSUED_AT + 1, ISSUED_AT + 1)
-        );
-        _register(newer);
         assertEq(registry.getRegistration(wallet, METHOD).identityId, OTHER_IDENTITY);
     }
 
@@ -142,17 +145,17 @@ contract TakerRegistryTest is TakerRegistrationSigner {
         assertEq(registry.getRegistration(wallet, METHOD).validUntil, 0);
     }
 
-    function test_UnregisteredStatementCannotBeReplayed() public {
+    function test_UnregisteredWalletNoLongerCountsAndMayRegisterAgain() public {
         ITakerRegistry.TakerRegistration memory statement = _statement(wallet, IDENTITY, ISSUED_AT);
         _register(statement);
         vm.prank(wallet);
         registry.unregister(METHOD);
 
-        vm.expectRevert(abi.encodeWithSelector(ITakerRegistry.StaleRegistration.selector, ISSUED_AT, ISSUED_AT));
-        _register(statement);
+        vm.expectRevert(abi.encodeWithSelector(ITakerRegistry.NotRegistered.selector, wallet, METHOD));
+        registry.requireRegistered(wallet, METHOD);
 
-        _register(_statement(wallet, IDENTITY, ISSUED_AT + 1));
-        assertEq(registry.getRegistration(wallet, METHOD).validUntil, VALID_UNTIL);
+        _register(statement);
+        assertEq(registry.requireRegistered(wallet, METHOD), IDENTITY);
     }
 
     function test_RejectsUnregisterWithoutRegistration() public {
@@ -193,12 +196,16 @@ contract TakerRegistryTest is TakerRegistrationSigner {
         assertEq(registry.getRegistration(wallet, METHOD).identityId, IDENTITY);
     }
 
-    function test_RevocationKeepsTheRegistrationRecord() public {
+    function test_RevokedIdentityStopsCountingOnEveryWallet() public {
         _register(_statement(wallet, IDENTITY, ISSUED_AT));
+        _register(_statement(submitter, IDENTITY, ISSUED_AT));
         _revoke(IDENTITY);
 
+        vm.expectRevert(abi.encodeWithSelector(ITakerRegistry.IdentityIsRevoked.selector, IDENTITY));
+        registry.requireRegistered(wallet, METHOD);
+        vm.expectRevert(abi.encodeWithSelector(ITakerRegistry.IdentityIsRevoked.selector, IDENTITY));
+        registry.requireRegistered(submitter, METHOD);
         assertEq(registry.getRegistration(wallet, METHOD).identityId, IDENTITY);
-        assertTrue(registry.isRevoked(IDENTITY));
     }
 
     function test_OnlyRevokerRevokes() public {
@@ -221,29 +228,58 @@ contract TakerRegistryTest is TakerRegistrationSigner {
 
     /* ============ Governance ============ */
 
-    function test_RemovedAttestorStopsRegisteringButKeepsRecords() public {
+    function test_RetiredAttestorStopsRegisteringButItsRegistrationsCount() public {
         _register(_statement(wallet, IDENTITY, ISSUED_AT));
 
         vm.expectEmit(address(registry));
-        emit AttestorUpdated(attestor, false);
-        registry.setAttestor(attestor, false);
+        emit AttestorStatusUpdated(attestor, ITakerRegistry.AttestorStatus.Retired);
+        registry.setAttestorStatus(attestor, ITakerRegistry.AttestorStatus.Retired);
 
         ITakerRegistry.TakerRegistration memory statement = _statement(submitter, IDENTITY, ISSUED_AT);
+        bytes memory signature = _signRegistration(attestorKey, registry, statement);
         vm.expectRevert(abi.encodeWithSelector(ITakerRegistry.InvalidAttestor.selector, attestor));
-        _register(statement);
-        assertEq(registry.getRegistration(wallet, METHOD).validUntil, VALID_UNTIL);
+        vm.prank(submitter);
+        registry.register(statement, signature);
+        assertEq(registry.requireRegistered(wallet, METHOD), IDENTITY);
     }
 
-    function test_OnlyOwnerSetsAttestorAndRevoker() public {
+    function test_RevokedAttestorsRegistrationsStopCounting() public {
+        _register(_statement(wallet, IDENTITY, ISSUED_AT));
+        registry.setAttestorStatus(attestor, ITakerRegistry.AttestorStatus.Revoked);
+
+        vm.expectRevert(abi.encodeWithSelector(ITakerRegistry.AttestorIsRevoked.selector, attestor));
+        registry.requireRegistered(wallet, METHOD);
+
+        (address successor, uint256 successorKey) = makeAddrAndKey("successor");
+        registry.setAttestorStatus(successor, ITakerRegistry.AttestorStatus.Accepted);
+        ITakerRegistry.TakerRegistration memory statement = _statement(wallet, IDENTITY, ISSUED_AT);
+        bytes memory signature = _signRegistration(successorKey, registry, statement);
+        vm.prank(wallet);
+        registry.register(statement, signature);
+        assertEq(registry.requireRegistered(wallet, METHOD), IDENTITY);
+    }
+
+    function test_RegistrationStopsCountingWhenItLapses() public {
+        _register(_statement(wallet, IDENTITY, ISSUED_AT));
+
+        vm.warp(VALID_UNTIL - 1);
+        assertEq(registry.requireRegistered(wallet, METHOD), IDENTITY);
+
+        vm.warp(VALID_UNTIL);
+        vm.expectRevert(abi.encodeWithSelector(ITakerRegistry.RegistrationExpired.selector, VALID_UNTIL, VALID_UNTIL));
+        registry.requireRegistered(wallet, METHOD);
+    }
+
+    function test_OnlyOwnerSetsAttestorStatusAndRevoker() public {
         vm.startPrank(revoker);
         vm.expectRevert("Ownable: caller is not the owner");
-        registry.setAttestor(revoker, true);
+        registry.setAttestorStatus(revoker, ITakerRegistry.AttestorStatus.Accepted);
         vm.expectRevert("Ownable: caller is not the owner");
         registry.setRevoker(revoker);
         vm.stopPrank();
 
         vm.expectRevert(ITakerRegistry.ZeroAddress.selector);
-        registry.setAttestor(address(0), true);
+        registry.setAttestorStatus(address(0), ITakerRegistry.AttestorStatus.Accepted);
 
         vm.expectEmit(address(registry));
         emit RevokerUpdated(submitter);
@@ -271,10 +307,9 @@ contract TakerRegistryTest is TakerRegistrationSigner {
         });
     }
 
-    /// @dev Submits as a third party: a statement binds the wallet it names, not its submitter.
     function _register(ITakerRegistry.TakerRegistration memory statement) internal {
         bytes memory signature = _signRegistration(attestorKey, registry, statement);
-        vm.prank(submitter);
+        vm.prank(statement.wallet);
         registry.register(statement, signature);
     }
 
