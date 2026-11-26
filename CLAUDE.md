@@ -82,6 +82,9 @@ Important ownership boundaries:
   admission to its `signalPolicy` (`contracts/hooks/IntentSignalPolicy.sol`,
   which raises `TakerNotWhitelisted`) and settlement to its `settlementPolicy`
   (`DisputeProtectionPolicyV2`). Neither O4 nor those policies has relayer logic.
+- `RegistryIntentSignalPolicy` (`contracts/hooks/`) with `TakerRegistry` (`contracts/registries/`) is a signal
+  policy that admits takers from attestor-signed registrations instead of a gating signature. It is source and
+  tests only: not deployed, not selected on any orchestrator. `IntentSignalPolicy` remains the live policy.
 - `OrchestratorV2` (archived) owned the V2 intent lifecycle and fee routing.
 - Retired `OrchestratorV3` retains V3 intent history and snapshots the
   governance-selected `IIntentLifecycleHook` for each intent.
