@@ -16,14 +16,6 @@ contract DeferredPayoutDepositClosureTest is DisputeProtectionStackV2Fixture {
         _fulfilFinalDeposit(DUST);
     }
 
-    function test_ProtectedManualReleaseClosesExhaustedDepositAndPaysRecipient() public {
-        _releaseFinalDeposit(0);
-    }
-
-    function test_ProtectedManualReleaseClosesDustDepositAndPaysRecipient() public {
-        _releaseFinalDeposit(DUST);
-    }
-
     function test_FailedSettlementPreservesFinalDepositAndRollsBackPayment() public {
         bytes32 id = _signalFinalDeposit(DUST);
         bytes memory invalidProof = _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, 180 days + 1);
@@ -87,21 +79,6 @@ contract DeferredPayoutDepositClosureTest is DisputeProtectionStackV2Fixture {
         assertEq(token.balanceOf(other), 0);
         assertEq(token.balanceOf(address(this)), dustRecipientBalance + dust);
         assertEq(nullifiers.nullifierByIntentHash(id), keccak256(abi.encodePacked(METHOD, _paymentId(id))));
-    }
-
-    function _releaseFinalDeposit(uint256 dust) internal {
-        bytes32 id = _signalFinalDeposit(dust);
-        uint256 dustRecipientBalance = token.balanceOf(address(this));
-        vm.prank(depositor);
-        orchestrator.releaseFundsToPayer(id, INTENT_AMOUNT);
-
-        _assertClosedDeposit(id);
-        assertEq(protection.getProtection(id).depositor, address(0));
-        assertEq(vault.totalAccounted(), 0);
-        assertEq(token.balanceOf(address(vault)), 0);
-        assertEq(token.balanceOf(other), NET);
-        assertEq(token.balanceOf(address(this)), dustRecipientBalance + dust);
-        assertEq(nullifiers.nullifierByIntentHash(id), bytes32(0));
     }
 
     function _assertClosedDeposit(bytes32 id) internal view {

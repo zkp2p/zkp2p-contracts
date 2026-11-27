@@ -127,10 +127,10 @@ contract OrchestratorV4ValidationTest is OrchestratorV4Fixture {
         orchestrator.cancelIntent(intentHash);
     }
 
-    function test_ManualReleaseRejectsCallerOtherThanDepositor() public {
+    function test_ReleaseRejectsDepositorWithoutArbitrator() public {
         bytes32 intentHash = _signalDefault();
-        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.UnauthorizedCaller.selector, other, depositor));
-        vm.prank(other);
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.UnauthorizedCaller.selector, depositor, address(0)));
+        vm.prank(depositor);
         orchestrator.releaseFundsToPayer(intentHash, INTENT_AMOUNT);
     }
 
@@ -141,7 +141,7 @@ contract OrchestratorV4ValidationTest is OrchestratorV4Fixture {
         orchestrator.cancelIntent(missing);
     }
 
-    function test_ManualReleaseRejectsMissingIntent() public {
+    function test_ReleaseRejectsMissingIntent() public {
         bytes32 missing = bytes32("missing");
         vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.IntentNotFound.selector, missing));
         vm.prank(depositor);

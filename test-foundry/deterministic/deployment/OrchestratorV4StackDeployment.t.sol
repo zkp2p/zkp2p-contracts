@@ -400,18 +400,6 @@ contract OrchestratorV4StackDeploymentTest is OrchestratorV3Fixture {
         assertEq(freshPolicy.getProtection(id).depositor, address(0));
     }
 
-    function test_O4ManualReleasePaysNowAfterCutover() public {
-        _activateRelease();
-        bytes32 id = _signalO4();
-        uint256 vaultBalance = token.balanceOf(address(freshVault));
-        vm.prank(depositor);
-        orchestratorV4.releaseFundsToPayer(id, INTENT_AMOUNT);
-        assertEq(token.balanceOf(other), INTENT_AMOUNT);
-        assertEq(token.balanceOf(address(freshVault)), vaultBalance);
-        assertEq(freshVault.lockedStake(other), 0);
-        assertEq(freshPolicy.getProtection(id).depositor, address(0));
-    }
-
     function test_O4ProtectionIgnoresAugustOptOut() public {
         vm.prank(depositor);
         predecessorPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, false);

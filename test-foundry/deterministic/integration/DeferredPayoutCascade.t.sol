@@ -80,15 +80,6 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         _assertFees();
     }
 
-    function test_RelayerManualReleaseCreatesNoRecord() public {
-        relayerRegistry.addRelayer(taker);
-        bytes32 id = _signalDefault();
-        vm.prank(depositor);
-        orchestrator.releaseFundsToPayer(id, INTENT_AMOUNT);
-        assertEq(token.balanceOf(other), NET);
-        assertFalse(_isOpen(id));
-    }
-
     function test_ZeroWindowPaysNormallyWithoutRecord() public {
         bytes32 id = _signalDefault();
         _settle(id, INTENT_AMOUNT, 0);
@@ -191,17 +182,6 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         groups.removeMembers(group, members);
         _settleWhitelistedWithoutRecord(id);
         assertEq(token.balanceOf(other), NET);
-        _assertFees();
-    }
-
-    function test_WhitelistedTakerManualReleaseCreatesNoRecord() public {
-        _whitelistTaker();
-        bytes32 id = _signalDefault();
-        vm.prank(depositor);
-        orchestrator.releaseFundsToPayer(id, INTENT_AMOUNT);
-        assertEq(token.balanceOf(other), NET);
-        _assertLock(id, address(0), 0);
-        assertFalse(_isOpen(id));
         _assertFees();
     }
 
@@ -317,19 +297,6 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         assertEq(postIntentHook.lastPostIntentHookData(), "");
         assertEq(token.balanceOf(address(postIntentHook)), 0);
         assertEq(token.allowance(address(orchestrator), address(postIntentHook)), 0);
-    }
-
-    function test_ManualReleasePaysOutImmediately() public {
-        bytes32 id = _signalDefault();
-        uint256 vaultBefore = token.balanceOf(address(vault));
-        vm.prank(depositor);
-        orchestrator.releaseFundsToPayer(id, INTENT_AMOUNT);
-        assertEq(token.balanceOf(other), NET);
-        _assertLock(id, address(0), 0);
-        assertEq(token.balanceOf(address(vault)), vaultBefore);
-        assertEq(vault.totalAccounted(), 0);
-        assertFalse(_isOpen(id));
-        _assertFees();
     }
 
     function test_OverpaymentIsCappedBeforeCascade() public {

@@ -85,16 +85,6 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
         assertEq(settlementData, hex"ff01");
     }
 
-    function test_ManualReleaseNeverDefers() public {
-        hook.setDeferralVault(address(hook));
-        bytes32 hash = _signalDefault();
-        vm.prank(depositor);
-        orchestrator.releaseFundsToPayer(hash, INTENT_AMOUNT);
-        assertEq(hook.settlementCalls(), 0);
-        assertEq(token.balanceOf(taker), INTENT_AMOUNT);
-        assertEq(token.balanceOf(address(hook)), 0);
-    }
-
     function test_RevertsAgainstThreeFieldVerifier() public {
         bytes32 hash = _signalDefault();
         PaymentVerifierMock oldVerifier = new PaymentVerifierMock();

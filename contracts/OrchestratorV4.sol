@@ -25,7 +25,7 @@ import { ReferralFeeLib } from "./lib/ReferralFeeLib.sol";
 /**
  * @title OrchestratorV4
  * @notice Standalone V4 orchestrator for the ZKP2P protocol. Owns the complete intent (order)
- * lifecycle — signal, cancel, fulfill, manual release, prune, orphan cleanup — and extends it
+ * lifecycle — signal, cancel, fulfill, arbitrator release, prune, orphan cleanup — and extends it
  * with governance-selected signal and settlement policies and deferred settlement.
  * @dev Intent keeps V3 field order with the intent hooks removed and the hook data replaced by payerCommitment,
  * then appends takerWhitelisted and arbitrator.
@@ -240,26 +240,21 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     }
 
     /**
-     * @notice Allows depositor or the intent's arbitrator to release funds to the payer in case of a failed fulfill intent, a
-     * dispute ruling, or some other arrangement between the two parties. Upon submission we check to make sure the msg.sender
-     * is the depositor or arbitrator, the intent is removed, and escrow state is updated. Manual release pays the recipient
-     * directly without calling the settlement policy.
+     * @notice Only callable by the intent's arbitrator. Releases funds to the payer on a dispute ruling. Upon submission
+     * the intent is removed and escrow state is updated. The release pays the recipient directly without calling the
+     * settlement policy.
      *
      * @param _intentHash        Hash of intent to resolve by releasing the funds
-     * @param _releaseAmount     Amount to release; the depositor must release the full intent amount, the arbitrator
-     *                           may release less and the rest returns to the deposit
+     * @param _releaseAmount     Amount to release; any amount up to the intent amount, the rest returns to the deposit
      */
     function releaseFundsToPayer(bytes32 _intentHash, uint256 _releaseAmount) external nonReentrant {
         // Checks
         Intent memory intent = intents[_intentHash];
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
 
+        if (intent.arbitrator != msg.sender) revert UnauthorizedCaller(msg.sender, intent.arbitrator);
+
         IEscrow.Deposit memory deposit = IEscrow(intent.escrow).getDeposit(intent.depositId);
-        if (msg.sender != intent.arbitrator) {
-            if (msg.sender != deposit.depositor) revert UnauthorizedCaller(msg.sender, deposit.depositor);
-            // Releasing less would end the intent early and cut off the taker's proof.
-            if (_releaseAmount < intent.amount) revert PartialReleaseRequiresArbitrator(_releaseAmount, intent.amount);
-        }
 
         // Snapshot manager fee terms before pruning (pruning deletes the mappings).
         address managerFeeRecipient = intentManagerFeeRecipient[_intentHash];
@@ -424,7 +419,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      *
      * Functionalities that remain unpaused to allow users to recover funds:
      * - Intent cancellation (cancelIntent)
-     * - Manual fund release by depositor or arbitrator (releaseFundsToPayer)
+     * - Fund release by arbitrator (releaseFundsToPayer)
      * - Intent extension by arbitrator (extendIntent)
      * - Intent pruning by escrow (pruneIntents)
      * - All governance functions

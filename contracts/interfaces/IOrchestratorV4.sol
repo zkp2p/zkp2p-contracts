@@ -83,7 +83,7 @@ interface IOrchestratorV4 {
         bytes32 indexed intentHash,
         address indexed fundsTransferredTo,
         uint256 amount,
-        address releasedBy                          // Depositor or arbitrator for a manual release; zero for a verified payment
+        address releasedBy                          // Arbitrator for an arbitrator release; zero for a verified payment
     );
 
     event IntentReferralFeeDistributed(
@@ -120,7 +120,6 @@ interface IOrchestratorV4 {
     // Amount and fee errors
     error FeeExceedsMaximum(uint256 fee, uint256 maximum);
     error RateBelowMinimum(uint256 rate, uint256 minRate);
-    error PartialReleaseRequiresArbitrator(uint256 releaseAmount, uint256 intentAmount);
 
     // Verification errors
     error PaymentVerificationFailed();
@@ -151,7 +150,7 @@ interface IOrchestratorV4 {
     /// @dev Forwards the signed settlement data to the current settlement policy.
     function fulfillIntent(FulfillIntentParams calldata params) external;
 
-    /// @notice Manually settles an intent: in full as its depositor, or any part as its arbitrator.
+    /// @notice Settles any part of an intent as its arbitrator.
     function releaseFundsToPayer(bytes32 intentHash, uint256 releaseAmount) external;
 
     /// @notice Extends an intent's expiry for free as its arbitrator; the escrow must let this orchestrator extend.
