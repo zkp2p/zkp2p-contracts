@@ -12,7 +12,7 @@ contract SettlementPolicyHandler is DisputeProtectionStackV2Fixture {
 
     constructor() { setUp(); }
 
-    function settle(bool enabledAtSignal, bool enableAfterSignal, bool staked, bool zeroWindow, bool manual, bool exempt) external {
+    function settle(bool enabledAtSignal, bool enableAfterSignal, bool staked, bool zeroWindow, bool exempt) external {
         if (escrow.getDeposit(depositId).remainingDeposits < INTENT_AMOUNT) return;
         vm.prank(depositor);
         whitelist.setEnabled(address(escrow), depositId, false);
@@ -22,14 +22,9 @@ contract SettlementPolicyHandler is DisputeProtectionStackV2Fixture {
         orchestrator.setSettlementPolicy(enableAfterSignal ? IIntentSettlementPolicy(address(protection)) : IIntentSettlementPolicy(address(0)));
         if (staked && vault.freeStake(taker) < INTENT_AMOUNT) _stake(vault, taker, INTENT_AMOUNT);
         uint256 recipientBefore = token.balanceOf(other);
-        bool protected = enableAfterSignal && !manual && !zeroWindow && !exempt;
+        bool protected = enableAfterSignal && !zeroWindow && !exempt;
         bool hasStake = vault.freeStake(taker) >= INTENT_AMOUNT;
-        if (manual) {
-            vm.prank(depositor);
-            orchestrator.releaseFundsToPayer(id, INTENT_AMOUNT);
-        } else {
-            _settle(id, INTENT_AMOUNT, zeroWindow ? 0 : RISK_WINDOW);
-        }
+        _settle(id, INTENT_AMOUNT, zeroWindow ? 0 : RISK_WINDOW);
         (address owner, uint256 amount,) = vault.locks(id);
         if (!protected) {
             assertEq(protection.getProtection(id).depositor, address(0));

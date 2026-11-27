@@ -105,7 +105,7 @@ contract OrchestratorV4ArbitratorTest is OrchestratorV4Fixture {
         assertEq(orchestrator.getIntent(second).arbitrator, other);
         assertEq(orchestrator.getIntent(third).arbitrator, address(0));
 
-        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.UnauthorizedCaller.selector, arbitrator, depositor));
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.UnauthorizedCaller.selector, arbitrator, other));
         vm.prank(arbitrator);
         orchestrator.releaseFundsToPayer(second, INTENT_AMOUNT);
 
@@ -199,11 +199,11 @@ contract OrchestratorV4ArbitratorTest is OrchestratorV4Fixture {
         assertEq(token.balanceOf(taker), 0);
     }
 
-    function test_ReleaseAndCancelRejectCallersOtherThanPartiesAndArbitrator() public {
+    function test_ReleaseAndCancelRejectCallersOtherThanOwnerAndArbitrator() public {
         _setArbitrator(arbitrator);
         bytes32 intentHash = _signalDefault();
 
-        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.UnauthorizedCaller.selector, other, depositor));
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.UnauthorizedCaller.selector, other, arbitrator));
         vm.prank(other);
         orchestrator.releaseFundsToPayer(intentHash, INTENT_AMOUNT);
 
@@ -247,25 +247,13 @@ contract OrchestratorV4ArbitratorTest is OrchestratorV4Fixture {
         orchestrator.releaseFundsToPayer(intentHash, INTENT_AMOUNT + 1);
     }
 
-    function test_DepositorMustReleaseTheFullIntentAmount() public {
+    function test_DepositorCannotRelease() public {
         _setArbitrator(arbitrator);
         bytes32 intentHash = _signalDefault();
 
-        vm.expectRevert(
-            abi.encodeWithSelector(IOrchestratorV4.PartialReleaseRequiresArbitrator.selector, 1, INTENT_AMOUNT)
-        );
-        vm.prank(depositor);
-        orchestrator.releaseFundsToPayer(intentHash, 1);
-
-        vm.expectRevert(
-            abi.encodeWithSelector(IEscrowV2.AmountExceedsAvailable.selector, INTENT_AMOUNT + 1, INTENT_AMOUNT)
-        );
-        vm.prank(depositor);
-        orchestrator.releaseFundsToPayer(intentHash, INTENT_AMOUNT + 1);
-
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.UnauthorizedCaller.selector, depositor, arbitrator));
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(intentHash, INTENT_AMOUNT);
-        assertEq(token.balanceOf(taker), INTENT_AMOUNT);
     }
 
     function test_ArbitratorReleaseWorksWhilePaused() public {

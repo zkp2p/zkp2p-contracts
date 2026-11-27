@@ -65,26 +65,6 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         _fulfill(intentHash, INTENT_AMOUNT, CONVERSION_RATE);
     }
 
-    function test_ManualReleaseSkipsPolicyAndPaysRecipient() public {
-        orchestrator.setSettlementPolicy(policyMock);
-        policyMock.setRevertOnCallback(true);
-        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
-        params.referralFees = _twoReferralFees();
-        params.to = delegate;
-        bytes32 intentHash = _signal(taker, params);
-        uint256 recipientBefore = token.balanceOf(taker);
-        uint256 hookRecipientBefore = token.balanceOf(delegate);
-        uint256 netAmount = INTENT_AMOUNT - 250_000;
-        vm.expectEmit(true, true, true, true);
-        emit IntentFulfilled(intentHash, delegate, netAmount, depositor);
-        vm.prank(depositor);
-        orchestrator.releaseFundsToPayer(intentHash, INTENT_AMOUNT);
-        assertEq(policyMock.settlementCalls(), 0);
-        assertEq(token.balanceOf(taker), recipientBefore);
-        assertEq(token.balanceOf(delegate) - hookRecipientBefore, netAmount);
-        assertEq(postIntentHook.lastPostIntentHookData(), "");
-    }
-
     function test_GovernancePolicySetterValidatesOwnerAndCode() public {
         vm.expectRevert("Ownable: caller is not the owner");
         vm.prank(other);
