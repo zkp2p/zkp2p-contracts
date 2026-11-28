@@ -1,0 +1,102 @@
+// SPDX-License-Identifier: MIT
+
+pragma solidity ^0.8.18;
+
+import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import { SignatureChecker } from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
+
+import { IIntentSignalPolicy } from "../interfaces/IIntentSignalPolicy.sol";
+import { IOrchestratorV4 } from "../interfaces/IOrchestratorV4.sol";
+import { IWhitelistPolicyV2 } from "../interfaces/IWhitelistPolicyV2.sol";
+import { ReferralFeeLib } from "../lib/ReferralFeeLib.sol";
+
+/**
+ * @title IntentSignalPolicyV2
+ * @notice OrchestratorV4 signal policy. Admits a taker through the deposit's whitelist with a single-use gating
+ * service signature, and names the arbitrator of the group the taker signals through, or the default arbitrator when
+ * no group arbitrator applies.
+ * @dev IntentSignalPolicy plus a default arbitrator for public intents (zero keeps IntentSignalPolicy's behaviour), and
+ * a record of admitted gating messages, so each signature opens one intent and the gating service's open-intent caps
+ * bound on-chain intents. The signature covers the payer commitment, so only the gating service can
+ * vouch that the committed payer belongs to the taker. Configuration is immutable; governance changes it by selecting
+ * a new policy on the orchestrator.
+ */
+contract IntentSignalPolicyV2 is IIntentSignalPolicy {
+    using ECDSA for bytes32;
+    using SignatureChecker for address;
+
+    /* ============ Errors ============ */
+
+    error TakerNotWhitelisted(address escrow, uint256 depositId, bytes32 paymentMethod, address taker);
+    error SignatureExpired(uint256 expiration, uint256 currentTime);
+    error InvalidSignature();
+    error SignatureAlreadyUsed(bytes32 messageHash);
+
+    /* ============ State Variables ============ */
+
+    address public immutable gatingService;                 // Signer whose signature every intent needs
+    IWhitelistPolicyV2 public immutable whitelistPolicy;    // Per-deposit taker whitelists and their groups
+    address public immutable defaultArbitrator;             // Arbitrator when no group arbitrator applies; zero = none
+
+    mapping(bytes32 => bool) public usedMessageHashes;      // Gating messages that already admitted an intent
+
+    /* ============ Constructor ============ */
+
+    constructor(address _gatingService, IWhitelistPolicyV2 _whitelistPolicy, address _defaultArbitrator) {
+        gatingService = _gatingService;
+        whitelistPolicy = _whitelistPolicy;
+        defaultArbitrator = _defaultArbitrator;
+    }
+
+    /* ============ External Functions ============ */
+
+    /**
+     * @inheritdoc IIntentSignalPolicy
+     * @dev Verifies O3's gating message for the calling orchestrator, with the payer commitment appended, and spends
+     * it. The message binds the calling orchestrator and the taker, so only that taker's signal can spend it.
+     */
+    function validateSignalIntent(address _taker, IOrchestratorV4.SignalIntentParams calldata _params)
+        external
+        override
+        returns (bool takerWhitelisted, address arbitrator)
+    {
+        // With the whitelist off, anyone may signal and groupId is ignored; a group taker gets its group's arbitrator.
+        // Any intent left without a group arbitrator gets the default arbitrator.
+        if (whitelistPolicy.enabled(_params.escrow, _params.depositId)) {
+            takerWhitelisted = whitelistPolicy.isWhitelisted(_params.escrow, _params.depositId, _taker, _params.groupId);
+            if (!takerWhitelisted) {
+                revert TakerNotWhitelisted(_params.escrow, _params.depositId, _params.paymentMethod, _taker);
+            }
+            if (_params.groupId != bytes32(0)) arbitrator = whitelistPolicy.groupRegistry().groupArbitrator(_params.groupId);
+        }
+        if (arbitrator == address(0)) arbitrator = defaultArbitrator;
+
+        if (block.timestamp > _params.signatureExpiration) {
+            revert SignatureExpired(_params.signatureExpiration, block.timestamp);
+        }
+
+        bytes memory message = abi.encodePacked(
+            msg.sender,
+            _params.escrow,
+            _params.depositId,
+            _params.amount,
+            _taker,
+            _params.to,
+            _params.paymentMethod,
+            _params.fiatCurrency,
+            _params.conversionRate,
+            ReferralFeeLib.hashReferralFees(_params.referralFees),
+            _params.signatureExpiration,
+            block.chainid,
+            _params.payerCommitment
+        );
+
+        bytes32 messageHash = keccak256(message);
+        if (usedMessageHashes[messageHash]) revert SignatureAlreadyUsed(messageHash);
+        usedMessageHashes[messageHash] = true;
+
+        if (!gatingService.isValidSignatureNow(messageHash.toEthSignedMessageHash(), _params.gatingServiceSignature)) {
+            revert InvalidSignature();
+        }
+    }
+}
